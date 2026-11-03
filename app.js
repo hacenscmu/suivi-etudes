@@ -17,7 +17,11 @@ const fdate=n=>{const d=new Date(n*864e5);return d.toLocaleDateString('fr-FR',{t
 const MOIS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
-const CONN=()=>({url:lsGet('suivi.url')||'',tok:lsGet('suivi.tok')||''});
+const sGet=k=>{try{return sessionStorage.getItem(k)||''}catch(e){return ''}};
+const sSet=(k,v)=>{try{v?sessionStorage.setItem(k,v):sessionStorage.removeItem(k)}catch(e){}};
+const CONN=()=>({url:lsGet('suivi.url')||'',pass:sGet('suivi.pw')});
+const UNLOCKED=()=>!!(lsGet('suivi.h')&&sGet('suivi.pw'));
+async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('suivi:'+t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
 
 /* ---------- configuration par défaut (réglages, pas de données) ---------- */
 const DEFAULT_CFG={
@@ -234,21 +238,50 @@ function renderStatus(){
   let h='';
   if(timeoutNote)h+='<div class="msg">Les données sont encore en cours de chargement : si ce message reste, vérifiez la connexion.</div>';
   if(dbErr)h+='<div class="msg err">'+esc(dbErr)+'</div>';
-  if(CONN().url)h+='<div class="small" style="margin:4px 0"><button class="b ghost" data-reconnect="1" style="padding:4px 10px;font-size:12.5px">Changer la connexion</button></div>';
+  if(UNLOCKED())h+='<div class="small" style="margin:4px 0"><button class="b ghost" data-reconnect="1" style="padding:4px 10px;font-size:12.5px">Se déconnecter</button></div>';
   if(db&&!canWrite)h+='<div class="msg">Lecture seule : vous ne pouvez pas modifier ces données.</div>';
   $('#status').innerHTML=h;
 }
-function renderConnect(){
-  $('#view').innerHTML=`<div class="card" style="max-width:520px"><h2>Connexion à vos données</h2><div class="small" style="margin-bottom:10px">À faire une seule fois sur cet appareil. L’adresse et le code secret viennent de votre script Google (voir les étapes).</div>
-  <label class="small" for="cu">Adresse du script (URL de l’application Web)</label><input id="cu" style="width:100%;margin:4px 0 10px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off">
-  <label class="small" for="ct">Code secret</label><input id="ct" type="password" style="width:100%;margin:4px 0 12px" autocomplete="off">
-  <button class="b" data-connect="1">Se connecter</button></div>`;
+function renderLock(msg){
+  document.body.classList.add('login');
+  const first=!lsGet('suivi.h');
+  $('#view').innerHTML=`<form class="login" id="lf" autocomplete="on"><img class="hac" src="splash-logo.png" alt="HAC Chimie Mulhouse">
+  ${first?'<div class="small" style="text-align:center;margin-bottom:6px">Première ouverture : choisissez un mot de passe pour protéger l’application. Utilisez le même dans votre script Google pour la synchronisation.</div>':''}
+  <label for="cp">${first?'Choisir un mot de passe':'Mot de passe'}</label><div class="pw"><input id="cp" name="password" type="password" autocomplete="${first?'new-password':'current-password'}" autofocus><button type="button" class="eye" data-eye="1" aria-label="Afficher le mot de passe" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M3 3l18 18"/></svg></button></div>
+  <div class="msg err" id="lerr" ${msg?'':'hidden'}>${esc(msg||'')}</div>
+  <button class="b" type="submit" id="lgo">${first?'Créer et entrer':'Se connecter'}</button></form>`;
+}
+async function doLogin(){
+  const p=$('#cp').value||'',err=t=>{const e=$('#lerr');e.textContent=t;e.hidden=false};
+  if(!p)return err('Saisissez le mot de passe.');
+  const h=await sha(p),first=!lsGet('suivi.h');
+  if(first){if(p.length<4)return err('Au moins 4 caractères.');lsSet('suivi.h',h)}
+  else if(h!==lsGet('suivi.h'))return err('Mot de passe incorrect.');
+  sSet('suivi.pw',p);location.reload();
+}
+async function doSync(){
+  const u=($('#syu').value||'').trim(),m=$('#sym'),c=CONN();
+  const say=(t,bad)=>{m.textContent=t;m.className='msg'+(bad?' err':'');m.hidden=false};
+  if(!/^https:\/\/script\.google\.com\//.test(u))return say('L’adresse doit commencer par https://script.google.com/…',1);
+  say('Connexion…');
+  try{
+    const post=b=>fetch(u,{method:'POST',body:JSON.stringify(Object.assign({pass:c.pass},b)),redirect:'follow'}).then(r=>r.json());
+    const srv=await post({action:'loadAll'});
+    if(srv&&srv.error)return say(srv.error==='auth'?'Le script refuse le mot de passe : mettez le même mot de passe dans le script Google (MOT_DE_PASSE), puis redéployez.':'Erreur du script : '+srv.error,1);
+    const has=Object.values(srv||{}).some(o=>o&&Object.keys(o).length);
+    if(!has){
+      let loc={};try{loc=JSON.parse(lsGet('suivi.cache')||'{}')||{}}catch(e){}
+      for(const col of Object.keys(loc))for(const id of Object.keys(loc[col]||{})){const r=await post({action:'save',col,id,json:JSON.stringify(loc[col][id])});if(r&&r.error)return say('Erreur du script : '+r.error,1)}
+    }else{lsSet('suivi.cache',JSON.stringify(srv))}
+    lsSet('suivi.url',u);location.reload();
+  }catch(e){say('Connexion impossible : vérifiez l’adresse et le réseau.',1)}
 }
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
 function render(){
   renderNav();renderStatus();$('#today').textContent='Mis à jour le '+fdate(TODAY);
   const v=$('#view');
-  if(!db&&!CONN().url){renderConnect();if(window.hideSplash)window.hideSplash();return}
+  if(!UNLOCKED()){renderLock();return}
+  document.body.classList.remove('login');
   const ready=Object.values(loaded).every(Boolean);
   if(!ready){v.innerHTML='<div class="card">Chargement des données…</div>';return}
   const active=document.activeElement,fk=active&&active.dataset&&active.dataset.c?active.dataset.c+'|'+active.dataset.id+'|'+active.dataset.f:null,scrollY=window.scrollY;
@@ -256,7 +289,7 @@ function render(){
   const views={dash:vDash,etudes:vEtudes,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams,legende:vLegende};
   const scrolls=[...document.querySelectorAll('.tw')].map(e=>e.scrollLeft);
   v.innerHTML=views[tab](D);
-  if(window.hideSplash)window.hideSplash();
+  
   document.querySelectorAll('.tw').forEach((e,i)=>{if(scrolls[i])e.scrollLeft=scrolls[i]});
   if(fk){const [c,id,f]=fk.split('|');const el=v.querySelector(`[data-c="${c}"][data-id="${id}"][data-f="${f}"]`);if(el){el.focus({preventScroll:true});try{if(el.setSelectionRange&&el.type!=='number'&&el.type!=='date')el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}
   window.scrollTo(0,scrollY);
@@ -358,11 +391,17 @@ function vFormation(D){
   <div class="tw"><table class="mx"><thead><tr><th>Intervenant</th><th>Niveau moyen</th>${head}</tr></thead><tbody>${body||'<tr><td class="small" style="padding:14px">Ajoutez d’abord du temps de travail pour faire apparaître les intervenants.</td></tr>'}</tbody></table></div>`;
 }
 function cf(label,path,val,pct){return `<label>${label}</label><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}">`}
+function syncCard(){
+  const u=lsGet('suivi.url')||'';
+  return `<div class="card" style="margin-top:12px"><h3>Synchronisation Google Drive</h3>`+(u
+   ?`<div class="small" style="margin-bottom:8px">Active : vos données sont enregistrées sur cet appareil et dans votre Drive, et partagées entre vos appareils.</div><div class="small" style="word-break:break-all;margin-bottom:8px">${esc(u)}</div><button class="b ghost" data-syncoff="1">Désactiver sur cet appareil</button>`
+   :`<div class="small" style="margin-bottom:8px">À faire une seule fois : collez l’adresse de l’application Web de votre script Google. Vos données actuelles seront envoyées dans votre Drive.</div><input id="syu" type="url" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="b" data-syncon="1">Enregistrer et synchroniser</button>`)+`</div>`;
+}
 function vParams(D){
   const c=D.c;const sumP=o=>Object.values(o).reduce((a,v)=>a+num(v),0);
   const mand=c.mandats.map((m,i)=>`<div class="row" style="margin-bottom:6px"><input data-mand="${i}" data-k="nom" value="${esc(m.nom)}" style="flex:1 1 140px" placeholder="Nom du mandat"><input type="date" data-mand="${i}" data-k="debut" value="${esc(m.debut)}"><input type="date" data-mand="${i}" data-k="fin" value="${esc(m.fin)}"><button class="x" data-delmand="${i}" aria-label="Supprimer le mandat">✕</button></div>`).join('');
   return `<h2>Paramètres</h2><div class="small">Modifiez les valeurs : tout se recalcule aussitôt. Les listes se saisissent à raison d’une valeur par ligne.</div>
-  <div class="two" style="margin-top:12px">
+  ${syncCard()}<div class="two" style="margin-top:12px">
    <div class="card"><h3>Statut des études</h3><textarea data-list="statuts" rows="10" style="width:100%">${esc(c.statuts.join('\n'))}</textarea><div class="small">Les calculs reconnaissent les noms par défaut (Faisabilité, Devis signé, Archivée…).</div></div>
    <div class="card"><h3>Statut de la facture</h3><textarea data-list="factures" rows="10" style="width:100%">${esc(c.factures.join('\n'))}</textarea></div>
    <div class="card"><h3>Mandats</h3>${mand||'<div class="small">Aucun mandat : ajoutez-en un pour rattacher les dates.</div>'}<div class="plus"><button class="b ghost" data-addmand="1">+ Ajouter un mandat</button></div></div>
@@ -435,10 +474,13 @@ document.addEventListener('change',e=>{
     const c=ensureCfg();c.mandats[+t.dataset.mand][t.dataset.k]=t.value;saveCfg();render();
   }
 });
+document.addEventListener('submit',e=>{if(e.target.id==='lf'){e.preventDefault();doLogin()}});
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
-  if(b.dataset.connect){const u=($('#cu').value||'').trim(),t=($('#ct').value||'').trim();if(u&&t){lsSet('suivi.url',u);lsSet('suivi.tok',t);location.reload()}return}
-  if(b.dataset.reconnect){if(b.dataset.arm){try{localStorage.removeItem('suivi.url');localStorage.removeItem('suivi.tok');localStorage.removeItem('suivi.cache')}catch(x){}location.reload()}else{b.dataset.arm='1';b.textContent='Sûr ?';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='Changer la connexion'}},3000)}return}
+  if(b.dataset.eye){const i=$('#cp'),show=i.type==='password';i.type=show?'text':'password';b.setAttribute('aria-pressed',show);b.classList.toggle('on',show);b.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');return}
+  if(b.dataset.reconnect){sSet('suivi.pw','');location.reload();return}
+  if(b.dataset.syncon){doSync();return}
+  if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
   if(b.dataset.tab){tab=b.dataset.tab;lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.add){
     const a=b.dataset.add;
@@ -457,29 +499,31 @@ document.addEventListener('click',e=>{
 /* ---------- démarrage ---------- */
 async function api(body){
   const c=CONN();
-  const r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.tok},body)),redirect:'follow'});
+  const r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({pass:c.pass},body)),redirect:'follow'});
   const j=await r.json();
   if(j&&j.error)throw new Error(j.error);
   return j;
 }
 function makeDb(){
-  const c=CONN();if(!c.url||!c.tok)return null;
+  const c=CONN();const local=!c.url;
   const subs=[];let cache=null,pending=0,loading=false;
   try{cache=JSON.parse(lsGet('suivi.cache')||'null')}catch(e){cache=null}
+  if(local&&!cache)cache={};
   const colSnap=col=>({docs:Object.keys(cache[col]||{}).map(id=>({id,exists:true,data:()=>cache[col][id]}))});
   const emit=()=>subs.forEach(s=>{try{s.fire()}catch(e){}});
   const keep=()=>{try{lsSet('suivi.cache',JSON.stringify(cache))}catch(e){}};
   async function load(first){
+    if(local)return;
     if(loading||pending>0||outbox.length)return;loading=true;
     try{cache=await api({action:'loadAll'});keep();if(dbErr){dbErr='';renderStatus()}emit()}
     catch(e){
-      if(String(e.message)==='auth'){dbErr='Adresse ou code secret incorrect.';renderStatus();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
+      if(String(e.message)==='auth'){dbErr='Le script Google refuse le mot de passe : il doit être identique à celui de l’appli (MOT_DE_PASSE dans le script).';renderStatus();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
       else if(cache){dbErr='Hors connexion : dernière version enregistrée affichée, les modifications ne sont pas possibles pour le moment.';renderStatus()}
       else if(first)subs.forEach(s=>s.err&&s.err({code:'unavailable'}));
     }
     loading=false;
   }
-  setInterval(()=>{if(!document.hidden){outbox.length?flush():load(false)}},8000);
+  if(!local)setInterval(()=>{if(!document.hidden){outbox.length?flush():load(false)}},8000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden){outbox.length?flush():load(false)}});
   window.addEventListener('online',()=>{outbox.length?flush():load(false)});
   setTimeout(()=>load(true),0);
@@ -493,7 +537,7 @@ function makeDb(){
     catch(e){dbErr='Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.';renderStatus()}
     pending--;flushing=false;
   }
-  const write=(body)=>{keep();outbox.push(body);saveOut();flush();return Promise.resolve()};
+  const write=(body)=>{keep();if(local)return Promise.resolve();outbox.push(body);saveOut();flush();return Promise.resolve()};
   if(outbox.length)setTimeout(flush,0);
   return {
     collection(col){return {onSnapshot(next,err){const s={err,fire:()=>cache&&next(colSnap(col))};subs.push(s);if(cache)setTimeout(s.fire,0);return()=>{const i=subs.indexOf(s);if(i>=0)subs.splice(i,1)}}}},
@@ -508,6 +552,7 @@ function afterSnap(){if(dirty){pendingRender=true;return}render()}
 document.addEventListener('focusout',()=>{if(pendingRender&&!dirty){pendingRender=false;setTimeout(render,0)}});
 render();
 (async function(){
+  if(!UNLOCKED())return;
   db=makeDb();
   if(userCap){try{const w=userCap.can&&userCap.can('data.write');if(w===false)canWrite=false}catch(e){}}
   if(!db){return}

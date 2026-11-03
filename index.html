@@ -7,15 +7,12 @@
 <link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="style.css"><meta name="application-name" content="Chimie Mulhouse"><meta name="apple-mobile-web-app-title" content="Chimie Mulhouse"></head>
 <body>
-<div id="splash"><img src="splash-logo.png" alt="HAC Chimie Mulhouse"></div>
 <div class="wrap">
 <header><div class="brand"><img src="logo.png" alt="Chimie Mulhouse" width="56" height="56"><div><h1>Suivi des études</h1><div class="sub" id="sub">Études, paiements et rémunérations</div></div></div><div class="sub" id="today"></div></header>
 <nav id="nav"></nav>
 <div id="status"></div>
 <main id="view"></main>
 </div>
-<script>const t0=Date.now();window.hideSplash=()=>{const s=document.getElementById('splash');if(!s)return;const w=Math.max(0,900-(Date.now()-t0));setTimeout(()=>{s.classList.add('out');setTimeout(()=>s.remove(),500)},w)};setTimeout(()=>window.hideSplash&&window.hideSplash(),6000);
-</script>
 <script src="app.js"></script>
 <script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
 

@@ -24,7 +24,7 @@ body{background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-syste
 header{padding:18px 0 6px;display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:8px 16px}
 h1{font-size:24px;margin:0;letter-spacing:-.01em;font-weight:800}
 .brand{display:flex;align-items:center;gap:12px}
-.brand img{width:56px;height:56px;border-radius:12px;border:1px solid var(--line);background:#fff}
+.brand img{width:56px;height:56px;object-fit:contain}
 .sub b{color:var(--acc);letter-spacing:.06em}
 .sub{color:var(--mute);font-size:13px}
 nav{display:flex;gap:6px;overflow-x:auto;padding:10px 0 12px;position:sticky;top:0;background:var(--bg);z-index:5;scrollbar-width:none;margin:0 -2px}
@@ -94,6 +94,18 @@ ul.al b{color:var(--acc)}
 .chartbox text{fill:var(--mute);font-size:10.5px}
 .plus{margin:10px 0}
 @media (max-width:520px){.kpi .val{font-size:30px}h1{font-size:21px}}
-#splash{position:fixed;inset:0;z-index:99;background:#fff;display:flex;align-items:center;justify-content:center;transition:opacity .45s ease}
-#splash img{width:min(78vw,520px);height:auto}
-#splash.out{opacity:0;pointer-events:none}
+
+body.login header,body.login nav,body.login #status{display:none}
+body.login .wrap{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding-top:0;padding-bottom:0}
+body.login main{width:100%}
+.login{max-width:360px;margin:0 auto;display:flex;flex-direction:column;gap:6px}
+.login .hac{width:min(78%,280px);height:auto;align-self:center;margin-bottom:22px}
+.login label{font-size:13px;color:var(--mute);margin-top:6px}
+.login input{width:100%;padding:11px 12px;font-size:16px}
+.login .pw{position:relative}
+.login .pw input{padding-right:46px}
+.login .eye{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:42px;height:42px;display:flex;align-items:center;justify-content:center;background:none;border:0;color:var(--mute);cursor:pointer;border-radius:10px}
+.login .eye .slash{display:none}.login .eye.on .slash{display:block}.login .eye.on{color:var(--acc)}
+.login .msg{margin:6px 0 0}
+.login button.b{margin-top:12px;padding:12px;font-size:16px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .brand img{background:#fff;border-radius:12px;padding:3px}:root:not([data-theme="light"]) .login .hac{background:#fff;border-radius:16px;padding:10px}}
