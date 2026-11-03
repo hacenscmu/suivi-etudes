@@ -246,18 +246,20 @@ function renderLock(msg){
   document.body.classList.add('login');
   const first=!lsGet('suivi.h');
   $('#view').innerHTML=`<form class="login" id="lf" autocomplete="on"><img class="hac" src="splash-logo.png" alt="HAC Chimie Mulhouse">
-  ${first?'<div class="small" style="text-align:center;margin-bottom:6px">Première ouverture : choisissez un mot de passe pour protéger l’application. Utilisez le même dans votre script Google pour la synchronisation.</div>':''}
-  <label for="cp">${first?'Choisir un mot de passe':'Mot de passe'}</label><div class="pw"><input id="cp" name="password" type="password" autocomplete="${first?'new-password':'current-password'}" autofocus><button type="button" class="eye" data-eye="1" aria-label="Afficher le mot de passe" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M3 3l18 18"/></svg></button></div>
+  <label for="cp">Mot de passe</label><div class="pw"><input id="cp" name="password" type="password" autocomplete="${first?'new-password':'current-password'}" autofocus><button type="button" class="eye" data-eye="1" aria-label="Afficher le mot de passe" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M3 3l18 18"/></svg></button></div>
   <div class="msg err" id="lerr" ${msg?'':'hidden'}>${esc(msg||'')}</div>
-  <button class="b" type="submit" id="lgo">${first?'Créer et entrer':'Se connecter'}</button></form>`;
+  <button class="b" type="submit" id="lgo">Se connecter</button></form>`;
 }
 async function doLogin(){
   const p=$('#cp').value||'',err=t=>{const e=$('#lerr');e.textContent=t;e.hidden=false};
   if(!p)return err('Saisissez le mot de passe.');
-  const h=await sha(p),first=!lsGet('suivi.h');
-  if(first){if(p.length<4)return err('Au moins 4 caractères.');lsSet('suivi.h',h)}
-  else if(h!==lsGet('suivi.h'))return err('Mot de passe incorrect.');
-  sSet('suivi.pw',p);location.reload();
+  const h=await sha(p),first=!lsGet('suivi.h'),u=lsGet('suivi.url')||'';
+  const go=$('#lgo');go.disabled=true;go.textContent='Connexion…';
+  let ok=null;
+  if(u){try{const r=await fetch(u,{method:'POST',body:JSON.stringify({pass:p,action:'ping'}),redirect:'follow'});const j=await r.json();ok=!(j&&j.error)}catch(e){ok=null}}
+  if(ok===null)ok=first||h===lsGet('suivi.h');
+  if(!ok){go.disabled=false;go.textContent='Se connecter';return err('Mot de passe incorrect.')}
+  lsSet('suivi.h',h);sSet('suivi.pw',p);location.reload();
 }
 async function doSync(){
   const u=($('#syu').value||'').trim(),m=$('#sym'),c=CONN();
@@ -395,7 +397,7 @@ function syncCard(){
   const u=lsGet('suivi.url')||'';
   return `<div class="card" style="margin-top:12px"><h3>Synchronisation Google Drive</h3>`+(u
    ?`<div class="small" style="margin-bottom:8px">Active : vos données sont enregistrées sur cet appareil et dans votre Drive, et partagées entre vos appareils.</div><div class="small" style="word-break:break-all;margin-bottom:8px">${esc(u)}</div><button class="b ghost" data-syncoff="1">Désactiver sur cet appareil</button>`
-   :`<div class="small" style="margin-bottom:8px">À faire une seule fois : collez l’adresse de l’application Web de votre script Google. Vos données actuelles seront envoyées dans votre Drive.</div><input id="syu" type="url" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="b" data-syncon="1">Enregistrer et synchroniser</button>`)+`</div>`;
+   :`<div class="small" style="margin-bottom:8px">À faire une seule fois : collez l’adresse de l’application Web de votre script Google. Vos données actuelles seront envoyées dans votre Drive.</div><input id="syu" type="url" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="b" data-syncon="1">Enregistrer et synchroniser</button>`)+`<div style="margin-top:10px"><button class="b ghost" data-resetpw="1" style="padding:4px 10px;font-size:12.5px">Retaper le mot de passe de l’appli</button></div></div>`;
 }
 function vParams(D){
   const c=D.c;const sumP=o=>Object.values(o).reduce((a,v)=>a+num(v),0);
@@ -480,6 +482,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.eye){const i=$('#cp'),show=i.type==='password';i.type=show?'text':'password';b.setAttribute('aria-pressed',show);b.classList.toggle('on',show);b.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');return}
   if(b.dataset.reconnect){sSet('suivi.pw','');location.reload();return}
   if(b.dataset.syncon){doSync();return}
+  if(b.dataset.resetpw){lsSet('suivi.h','');sSet('suivi.pw','');location.reload();return}
   if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
   if(b.dataset.tab){tab=b.dataset.tab;lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.add){
