@@ -233,7 +233,17 @@ const delBtn=(c,id)=>`<button class="x" data-del="${c}:${id}" title="Supprimer l
 
 /* ---------- vues ---------- */
 const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['factures','Factures'],['temps','Temps de travail'],['remun','Rémunérations'],['formation','Qualité formation'],['params','Paramètres'],['legende','Légende']];
-function renderNav(){$('#nav').innerHTML=TABS.map(([k,l])=>`<button data-tab="${k}" aria-current="${k===tab}">${l}</button>`).join('')}
+const TAB_SHORT={dash:'Tableau',etudes:'Études',factures:'Factures',temps:'Temps',remun:'Paie',formation:'Formation',params:'Réglages',legende:'Légende'};
+const TAB_ICON={
+ dash:'<path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/>',
+ etudes:'<path d="M9 3h6M10 3v6l-5.5 9.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3"/><path d="M7.5 15h9"/>',
+ factures:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+ temps:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ remun:'<circle cx="12" cy="12" r="9"/><path d="M15 9.2a3.6 3.6 0 1 0 0 5.6M8 11h5.5M8 13h5.5"/>',
+ formation:'<path d="M2 9l10-5 10 5-10 5z"/><path d="M6 11.5V16c0 1.4 2.7 3 6 3s6-1.6 6-3v-4.5"/>',
+ params:'<path d="M3 6h9M16 6h5M3 12h3M10 12h11M3 18h11M18 18h3"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>',
+ legende:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'};
+function renderNav(){$('#nav').innerHTML=TABS.map(([k,l])=>`<button data-tab="${k}" aria-current="${k===tab}" aria-label="${l}"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_ICON[k]}</svg><span>${TAB_SHORT[k]}</span></button>`).join('')}
 function renderStatus(){
   let h='';
   if(timeoutNote)h+='<div class="msg">Les données sont encore en cours de chargement : si ce message reste, vérifiez la connexion.</div>';
@@ -246,19 +256,19 @@ function renderLock(msg){
   document.body.classList.add('login');
   const first=!lsGet('suivi.h');
   $('#view').innerHTML=`<form class="login" id="lf" autocomplete="on"><img class="hac" src="splash-logo.png" alt="HAC Chimie Mulhouse">
-  <label for="cp">Mot de passe</label><div class="pw"><input id="cp" name="password" type="password" autocomplete="${first?'new-password':'current-password'}" autofocus><button type="button" class="eye" data-eye="1" aria-label="Afficher le mot de passe" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M3 3l18 18"/></svg></button></div>
+  <label for="cp">Mot de passe</label><div class="pw"><input id="cp" name="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus><button type="button" class="eye" data-eye="1" aria-label="Afficher le mot de passe" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M3 3l18 18"/></svg></button></div>
   <div class="msg err" id="lerr" ${msg?'':'hidden'}>${esc(msg||'')}</div>
   <button class="b" type="submit" id="lgo">Se connecter</button></form>`;
 }
 async function doLogin(){
-  const p=$('#cp').value||'',err=t=>{const e=$('#lerr');e.textContent=t;e.hidden=false};
+  const p=($('#cp').value||'').trim(),err=t=>{const e=$('#lerr');e.textContent=t;e.hidden=false};
   if(!p)return err('Saisissez le mot de passe.');
   const h=await sha(p),first=!lsGet('suivi.h'),u=lsGet('suivi.url')||'';
   const go=$('#lgo');go.disabled=true;go.textContent='Connexion…';
   let ok=null;
   if(u){try{const r=await fetch(u,{method:'POST',body:JSON.stringify({pass:p,action:'ping'}),redirect:'follow'});const j=await r.json();ok=!(j&&j.error)}catch(e){ok=null}}
   if(ok===null)ok=first||h===lsGet('suivi.h');
-  if(!ok){go.disabled=false;go.textContent='Se connecter';return err('Mot de passe incorrect.')}
+  if(!ok){go.disabled=false;go.textContent='Se connecter';return err(u?'Mot de passe refusé. Il doit être identique à MOT_DE_PASSE dans votre script Google (nouvelle version déployée).':'Mot de passe incorrect.')}
   lsSet('suivi.h',h);sSet('suivi.pw',p);location.reload();
 }
 async function doSync(){
@@ -393,17 +403,11 @@ function vFormation(D){
   <div class="tw"><table class="mx"><thead><tr><th>Intervenant</th><th>Niveau moyen</th>${head}</tr></thead><tbody>${body||'<tr><td class="small" style="padding:14px">Ajoutez d’abord du temps de travail pour faire apparaître les intervenants.</td></tr>'}</tbody></table></div>`;
 }
 function cf(label,path,val,pct){return `<label>${label}</label><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}">`}
-function syncCard(){
-  const u=lsGet('suivi.url')||'';
-  return `<div class="card" style="margin-top:12px"><h3>Synchronisation Google Drive</h3>`+(u
-   ?`<div class="small" style="margin-bottom:8px">Active : vos données sont enregistrées sur cet appareil et dans votre Drive, et partagées entre vos appareils.</div><div class="small" style="word-break:break-all;margin-bottom:8px">${esc(u)}</div><button class="b ghost" data-syncoff="1">Désactiver sur cet appareil</button>`
-   :`<div class="small" style="margin-bottom:8px">À faire une seule fois : collez l’adresse de l’application Web de votre script Google. Vos données actuelles seront envoyées dans votre Drive.</div><input id="syu" type="url" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="b" data-syncon="1">Enregistrer et synchroniser</button>`)+`<div style="margin-top:10px"><button class="b ghost" data-resetpw="1" style="padding:4px 10px;font-size:12.5px">Retaper le mot de passe de l’appli</button></div></div>`;
-}
 function vParams(D){
   const c=D.c;const sumP=o=>Object.values(o).reduce((a,v)=>a+num(v),0);
   const mand=c.mandats.map((m,i)=>`<div class="row" style="margin-bottom:6px"><input data-mand="${i}" data-k="nom" value="${esc(m.nom)}" style="flex:1 1 140px" placeholder="Nom du mandat"><input type="date" data-mand="${i}" data-k="debut" value="${esc(m.debut)}"><input type="date" data-mand="${i}" data-k="fin" value="${esc(m.fin)}"><button class="x" data-delmand="${i}" aria-label="Supprimer le mandat">✕</button></div>`).join('');
   return `<h2>Paramètres</h2><div class="small">Modifiez les valeurs : tout se recalcule aussitôt. Les listes se saisissent à raison d’une valeur par ligne.</div>
-  ${syncCard()}<div class="two" style="margin-top:12px">
+  ${devCard()}<div class="two" style="margin-top:12px">
    <div class="card"><h3>Statut des études</h3><textarea data-list="statuts" rows="10" style="width:100%">${esc(c.statuts.join('\n'))}</textarea><div class="small">Les calculs reconnaissent les noms par défaut (Faisabilité, Devis signé, Archivée…).</div></div>
    <div class="card"><h3>Statut de la facture</h3><textarea data-list="factures" rows="10" style="width:100%">${esc(c.factures.join('\n'))}</textarea></div>
    <div class="card"><h3>Mandats</h3>${mand||'<div class="small">Aucun mandat : ajoutez-en un pour rattacher les dates.</div>'}<div class="plus"><button class="b ghost" data-addmand="1">+ Ajouter un mandat</button></div></div>
@@ -518,7 +522,7 @@ function makeDb(){
   async function load(first){
     if(local)return;
     if(loading||pending>0||outbox.length)return;loading=true;
-    try{cache=await api({action:'loadAll'});keep();if(dbErr){dbErr='';renderStatus()}emit()}
+    try{cache=await api({action:'loadAll'});keep();stamp();if(dbErr){dbErr='';renderStatus()}emit()}
     catch(e){
       if(String(e.message)==='auth'){dbErr='Le script Google refuse le mot de passe : il doit être identique à celui de l’appli (MOT_DE_PASSE dans le script).';renderStatus();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
       else if(cache){dbErr='Hors connexion : dernière version enregistrée affichée, les modifications ne sont pas possibles pour le moment.';renderStatus()}
@@ -535,14 +539,15 @@ function makeDb(){
   let flushing=false;
   async function flush(){
     if(flushing)return;flushing=true;pending++;
-    try{while(outbox.length){await api(outbox[0]);outbox.shift();saveOut()}
+    try{while(outbox.length){await api(outbox[0]);outbox.shift();saveOut()}stamp();
       if(dbErr&&/Enregistrement|Hors connexion/.test(dbErr)){dbErr='';renderStatus()}}
     catch(e){dbErr='Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.';renderStatus()}
     pending--;flushing=false;
   }
-  const write=(body)=>{keep();if(local)return Promise.resolve();outbox.push(body);saveOut();flush();return Promise.resolve()};
+  const write=(body)=>{keep();if(local){stamp();return Promise.resolve()}outbox.push(body);saveOut();flush();return Promise.resolve()};
   if(outbox.length)setTimeout(flush,0);
   return {
+    sync:async()=>{if(local)return;await flush();await load(false)},
     collection(col){return {onSnapshot(next,err){const s={err,fire:()=>cache&&next(colSnap(col))};subs.push(s);if(cache)setTimeout(s.fire,0);return()=>{const i=subs.indexOf(s);if(i>=0)subs.splice(i,1)}}}},
     doc(path){const [c,i]=path.split('/');return {
       set:d=>{cache=cache||{};(cache[c]=cache[c]||{})[i]=JSON.parse(JSON.stringify(d));return write({action:'save',col:c,id:i,json:JSON.stringify(d)})},
@@ -550,6 +555,235 @@ function makeDb(){
       onSnapshot(next,err){const s={err,fire:()=>cache&&next({exists:!!(cache[c]&&cache[c][i]),data:()=>cache[c]&&cache[c][i]})};subs.push(s);if(cache)setTimeout(s.fire,0);return()=>{const k=subs.indexOf(s);if(k>=0)subs.splice(k,1)}}}}
   };
 }
+
+
+/* ---------- appareils connectés ---------- */
+const devId=()=>{let d=lsGet('suivi.dev');if(!d){d=newId('d');lsSet('suivi.dev',d)}return d};
+const guessDev=()=>{const u=navigator.userAgent||'';const m=u.match(/Android[^;]*;\s*([^)]+?)\s*(?:Build|\))/);let n=m?m[1]:/Android/.test(u)?'Android':/iPhone|iPad/.test(u)?'iPhone / iPad':'Ordinateur';return (/Mobile/.test(u)?'Téléphone':/Android/.test(u)?'Tablette':'')+(m?' ('+n+')':'')||n};
+const devName=()=>lsGet('suivi.devname')||guessDev()||'Appareil';
+let lastBeat=0;
+function heartbeat(force){
+  if(!db||!lsGet('suivi.url'))return;
+  if(!force&&Date.now()-lastBeat<4*60000)return;lastBeat=Date.now();
+  const o={nom:devName(),last:new Date().toISOString(),v:VERSION};
+  S.devs=S.devs||{};S.devs[devId()]=o;db.doc('appareils/'+devId()).set(o).catch(()=>{});
+}
+const ago=t=>{const m=Math.round((Date.now()-new Date(t))/60000);return m<2?'à l’instant':m<60?'il y a '+m+' min':m<1440?'il y a '+Math.round(m/60)+' h':'il y a '+Math.round(m/1440)+' j'};
+function devCard(){
+  const u=lsGet('suivi.url');
+  if(!u)return `<div class="card" style="margin-top:12px"><h3>Appareils connectés</h3><div class="small">Activez la synchronisation (Menu → Synchroniser avec mon Drive) pour voir ici vos autres appareils.</div></div>`;
+  const me=devId(),devs=Object.entries(S.devs||{}).sort((a,b)=>(b[1].last||'').localeCompare(a[1].last||''));
+  const rows=devs.map(([id,d])=>{const on=Date.now()-new Date(d.last)<12*60000;return `<div class="dev"><span class="dot${on?' on':''}"></span><div class="nm"><b>${esc(d.nom||'Appareil')}</b>${id===me?' <span class="small">(cet appareil)</span>':''}<div class="small">${on?'Actif':'Vu'} ${esc(ago(d.last))}</div></div>${id===me?'':`<button class="x" data-deldev="${esc(id)}" aria-label="Retirer cet appareil" title="Retirer de la liste">✕</button>`}</div>`}).join('');
+  return `<div class="card" style="margin-top:12px"><h3>Appareils connectés</h3><div class="small" style="margin-bottom:6px">Les appareils qui ont ouvert l’appli avec cette synchronisation. « Actif » = vu depuis moins de 12 minutes.</div>${rows||'<div class="small">Aucun appareil pour le moment.</div>'}<label class="small" for="devn" style="display:block;margin-top:10px">Nom de cet appareil</label><input id="devn" value="${esc(devName())}" style="width:100%;margin-top:4px"></div>`;
+}
+
+/* ---------- menu : synchro, import, export, sauvegardes ---------- */
+const VERSION=11;
+const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
+const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
+const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,config:S.cfg||null}));
+const countData=d=>`${Object.keys(d.etudes||{}).length} études · ${Object.keys(d.factures||{}).length} factures · ${Object.keys(d.temps||{}).length} lignes de temps`;
+const hasData=d=>['etudes','factures','temps','formation'].some(c=>Object.keys(d[c]||{}).length);
+function getBk(){try{return JSON.parse(lsGet('suivi.bk')||'[]')}catch(e){return []}}
+function snap(force){
+  const d=snapData();if(!hasData(d))return;
+  const bk=getBk(),js=JSON.stringify(d);
+  if(bk.length&&JSON.stringify(bk[0].d)===js)return;
+  if(!force&&bk.length&&Date.now()-new Date(bk[0].t)<12*3600*1000)return;
+  bk.unshift({t:new Date().toISOString(),d});
+  while(bk.length>6)bk.pop();
+  try{lsSet('suivi.bk',JSON.stringify(bk))}catch(e){bk.pop();try{lsSet('suivi.bk',JSON.stringify(bk.slice(0,3)))}catch(x){}}
+}
+function replaceAll(d){
+  ['etudes','factures','temps','formation'].forEach(col=>{
+    Object.keys(S[col]).forEach(id=>{if(!(d[col]&&d[col][id]))del(col,id)});
+    Object.keys(d[col]||{}).forEach(id=>{S[col][id]=JSON.parse(JSON.stringify(d[col][id]));saveRow(col,id)});
+  });
+  if(d.config){S.cfg=JSON.parse(JSON.stringify(d.config));saveCfg()}
+  render();setTimeout(()=>snap(true),400);
+}
+const nrm=t=>String(t==null?'':t).normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
+const colIdx=r=>{let n=0;for(const ch of r.replace(/[0-9]/g,''))n=n*26+ch.charCodeAt(0)-64;return n-1};
+async function unzip(buf){
+  const u=new Uint8Array(buf),dv=new DataView(buf);let e=u.length-22;
+  while(e>=0&&dv.getUint32(e,true)!==0x06054b50)e--;
+  if(e<0)throw new Error('zip');
+  const n=dv.getUint16(e+10,true);let p=dv.getUint32(e+16,true);const out={};
+  for(let i=0;i<n;i++){
+    const m=dv.getUint16(p+10,true),cs=dv.getUint32(p+20,true),nl=dv.getUint16(p+28,true),xl=dv.getUint16(p+30,true),cl=dv.getUint16(p+32,true),lo=dv.getUint32(p+42,true);
+    const name=new TextDecoder().decode(u.subarray(p+46,p+46+nl));
+    const ls=lo+30+dv.getUint16(lo+26,true)+dv.getUint16(lo+28,true),raw=u.subarray(ls,ls+cs);
+    if(/\.(xml|rels)$/.test(name)){
+      let bytes=raw;
+      if(m===8){const ds=new DecompressionStream('deflate-raw');const w=ds.writable.getWriter();w.write(raw);w.close();bytes=new Uint8Array(await new Response(ds.readable).arrayBuffer())}
+      out[name]=new TextDecoder().decode(bytes);
+    }
+    p+=46+nl+xl+cl;
+  }
+  return out;
+}
+async function readXlsx(buf){
+  const f=await unzip(buf),X=t=>new DOMParser().parseFromString(t,'application/xml');
+  const wb=X(f['xl/workbook.xml']),rels=X(f['xl/_rels/workbook.xml.rels']);
+  const relT={};[...rels.getElementsByTagName('Relationship')].forEach(r=>{let t=r.getAttribute('Target');t=t.startsWith('/')?t.slice(1):'xl/'+t;relT[r.getAttribute('Id')]=t});
+  const sst=[];if(f['xl/sharedStrings.xml'])[...X(f['xl/sharedStrings.xml']).getElementsByTagName('si')].forEach(si=>sst.push([...si.getElementsByTagName('t')].map(t=>t.textContent).join('')));
+  const dateXf=[];
+  if(f['xl/styles.xml']){
+    const st=X(f['xl/styles.xml']),cust={};[...st.getElementsByTagName('numFmt')].forEach(n=>cust[n.getAttribute('numFmtId')]=n.getAttribute('formatCode'));
+    const xfs=st.getElementsByTagName('cellXfs')[0];
+    if(xfs)[...xfs.getElementsByTagName('xf')].forEach(x=>{const id=x.getAttribute('numFmtId');dateXf.push((+id>=14&&+id<=22)||(cust[id]&&/[dmy]/i.test(cust[id].replace(/"[^"]*"|\[[^\]]*\]|\\./g,''))&&!/0\.0|#/.test(cust[id])))});
+  }
+  const out={};
+  for(const sh of wb.getElementsByTagName('sheet')){
+    const rid=sh.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id')||sh.getAttribute('r:id');
+    const xml=f[relT[rid]];if(!xml)continue;
+    const rows=[];
+    [...X(xml).getElementsByTagName('row')].forEach(r=>{
+      const arr=[];
+      [...r.getElementsByTagName('c')].forEach(c=>{
+        const t=c.getAttribute('t'),v=c.getElementsByTagName('v')[0],i=c.getElementsByTagName('is')[0];let val='';
+        if(t==='s'&&v)val=sst[+v.textContent]||'';
+        else if(t==='inlineStr'&&i)val=[...i.getElementsByTagName('t')].map(x=>x.textContent).join('');
+        else if(v){if(t==='str'||t==='e')val=v.textContent;else if(t==='b')val=v.textContent==='1';else{const num=Number(v.textContent);val=dateXf[+c.getAttribute('s')]&&num>0?new Date(Date.UTC(1899,11,30)+Math.round(num*86400000)).toISOString().slice(0,10):num}}
+        const ref=c.getAttribute('r');arr[ref?colIdx(ref):arr.length]=val;
+      });
+      rows[+r.getAttribute('r')-1]=arr;
+    });
+    out[sh.getAttribute('name')]=Array.from(rows,r=>r||[]);
+  }
+  return out;
+}
+function readCsv(t){
+  t=t.replace(/^﻿/,'');const first=t.split(/\r?\n/)[0]||'',sep=(first.match(/;/g)||[]).length>=(first.match(/,/g)||[]).length?';':',';
+  const rows=[];let row=[],cur='',q=false;
+  for(let i=0;i<t.length;i++){const ch=t[i];
+    if(q){if(ch==='"'){if(t[i+1]==='"'){cur+='"';i++}else q=false}else cur+=ch}
+    else if(ch==='"')q=true;else if(ch===sep){row.push(cur);cur=''}
+    else if(ch==='\n'||ch==='\r'){if(ch==='\r'&&t[i+1]==='\n')i++;row.push(cur);rows.push(row);row=[];cur=''}
+    else cur+=ch}
+  if(cur!==''||row.length){row.push(cur);rows.push(row)}
+  return {Feuille:rows};
+}
+const toISO=v=>{if(v===''||v==null)return '';v=String(v).trim();let m=v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');m=v.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);if(m)return (m[3].length===2?'20'+m[3]:m[3])+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');return v};
+const toNum=v=>{if(v===''||v==null)return null;if(typeof v==='number')return v;const n=Number(String(v).replace(/[\s €]/g,'').replace(',','.'));return isNaN(n)?null:n};
+const SPEC={
+ etudes:{p:'e',key:['client','num'],f:{date:['date','dateouverture'],client:['client'],num:['netude','numetude','num','numero','etude'],resume:['resume','objet','description'],statut:['statut','statutetude'],facture:['facture','statutfacture','statutdelafacture'],jeh:['jeh','nbjeh'],montant:['montant','montantht'],echeance:['echeance']},d:['date','echeance'],n:['jeh','montant']},
+ factures:{p:'f',key:['etude','montant'],f:{date:['date'],etude:['netude','numetude','etude','num'],montant:['montant','montantht','montantttc'],note:['note','commentaire','statut']},d:['date'],n:['montant']},
+ temps:{p:'t',key:['prenom','etude'],f:{date:['date'],prenom:['prenom','nom','etudiant','intervenant'],etude:['netude','numetude','etude','num'],note:['note','commentaire','tache'],min:['minutes','min','duree'],nb:['nombre','nb','nbdepersonnes','nbpersonnes'],jeh:['jeh','jehdeletude','jehetude'],statut:['statut','statutdupaiement','paiement']},d:['date'],n:['min','nb','jeh']},
+ mandats:{key:['nom'],f:{nom:['nom','mandat'],debut:['debut','datededebut','datedebut'],fin:['fin','datedefin','datefin']},d:['debut','fin'],n:[]}
+};
+function mapSheet(kind,rows){
+  const sp=SPEC[kind];let hi=rows.findIndex(r=>r&&r.filter(x=>x!==''&&x!=null).length>=2);if(hi<0)return [];
+  const H=rows[hi].map(nrm),idx={};
+  for(const k in sp.f){const j=H.findIndex(h=>h&&sp.f[k].includes(h));if(j>=0)idx[k]=j}
+  const out=[];
+  rows.slice(hi+1).forEach(r=>{
+    if(!r||!r.some(x=>x!==''&&x!=null))return;
+    const o={};
+    for(const k in sp.f){let v=idx[k]!==undefined?r[idx[k]]:'';if(v==null)v='';
+      if(sp.d.includes(k))v=toISO(v);else if(sp.n.includes(k))v=toNum(v);else v=String(v).trim();o[k]=v}
+    if(sp.key.every(k=>o[k]===''||o[k]==null))return;
+    out.push(o);
+  });
+  return out;
+}
+const guessKind=rows=>{const h=new Set((rows.find(r=>r&&r.filter(Boolean).length>=2)||[]).map(nrm));return h.has('client')?'etudes':h.has('prenom')||h.has('minutes')?'temps':h.has('debut')?'mandats':h.has('montant')&&(h.has('etude')||h.has('netude'))?'factures':null};
+async function parseFile(file){
+  const name=file.name.toLowerCase();
+  if(name.endsWith('.json')){
+    const j=JSON.parse(await file.text());const d=j.data||j;
+    if(!d||typeof d!=='object'||!('etudes' in d||'temps' in d||'config' in d))throw new Error('Ce fichier .json n’est pas une sauvegarde de cette appli.');
+    return {kind:'json',d};
+  }
+  let sheets;
+  if(name.endsWith('.csv')||name.endsWith('.txt'))sheets=readCsv(await file.text());
+  else if(name.endsWith('.xlsx'))sheets=await readXlsx(await file.arrayBuffer());
+  else throw new Error('Format non reconnu : utilisez un fichier .xlsx, .csv ou .json.');
+  const res={etudes:[],factures:[],temps:[],mandats:[]};
+  for(const sn of Object.keys(sheets)){
+    const n=nrm(sn);let kind=n.startsWith('etude')?'etudes':n.startsWith('facture')?'factures':n.startsWith('temps')?'temps':n.startsWith('mandat')?'mandats':guessKind(sheets[sn]);
+    if(kind)res[kind]=res[kind].concat(mapSheet(kind,sheets[sn]));
+  }
+  if(!res.etudes.length&&!res.factures.length&&!res.temps.length&&!res.mandats.length)throw new Error('Aucune donnée reconnue : utilisez le fichier modèle (feuilles Études, Factures, Temps, Mandats).');
+  return {kind:'rows',rows:res};
+}
+function applyRows(R,replace){
+  snap(true);
+  [['etudes','e'],['factures','f'],['temps','t']].forEach(([col,p])=>{
+    if(!R[col].length)return;
+    if(replace)Object.keys(S[col]).forEach(id=>del(col,id));
+    let base=replace?0:Math.max(0,...Object.values(S[col]).map(o=>o.ord||0));
+    R[col].forEach((o,i)=>{const id=newId(p)+i;S[col][id]=Object.assign({ord:base+i+1},o);saveRow(col,id)});
+  });
+  if(R.mandats.length){const c=ensureCfg();if(replace)c.mandats=[];R.mandats.forEach(m=>{if(!c.mandats.some(x=>x.nom===m.nom))c.mandats.push({nom:m.nom,debut:m.debut,fin:m.fin})});saveCfg()}
+  render();setTimeout(()=>snap(true),400);
+}
+function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
+let sheetView=null,imp=null;
+function sheetHTML(){
+  const u=lsGet('suivi.url'),last=fmtLast(),bk=getBk();
+  const back='<button class="mb ghost" data-mn="home">‹ Retour</button>';
+  if(sheetView==='addr')return `<h2>Adresse du script Google</h2><div class="small" style="margin-bottom:10px">À saisir une seule fois : adresse de l’application Web de votre script (elle finit par /exec). Vos données actuelles seront envoyées dans votre Drive si celui-ci est vide.</div><input id="syu" type="url" value="${esc(u||'')}" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="mb solid" data-mn="syncon">Enregistrer et synchroniser</button>${u?'<button class="mb" data-mn="syncoff">Désactiver sur cet appareil</button>':''}<button class="mb" data-mn="resetpw">Retaper le mot de passe de l’appli</button>${back}`;
+  if(sheetView==='import')return `<h2>Importer un fichier</h2><div class="small" style="margin-bottom:10px">Fichier modèle Excel (.xlsx), tableau .csv, ou sauvegarde .json exportée depuis l’appli.</div><input type="file" id="imf" accept=".xlsx,.csv,.txt,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="width:100%"><div class="msg" id="imm" hidden></div><div id="imb"></div>${back}`;
+  if(sheetView==='restore')return `<h2>Restaurer une sauvegarde</h2><div class="small" style="margin-bottom:10px">Les 6 dernières sauvegardes automatiques de cet appareil. Restaurer remplace toutes les données actuelles (une sauvegarde de l’état actuel est faite avant).</div>${bk.length?bk.map((b,i)=>`<button class="mb" data-mn="rest" data-i="${i}"><span class="t">${esc(new Date(b.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+' à '+new Date(b.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))}</span><span class="s">${esc(countData(b.d))}</span></button>`).join(''):'<div class="small">Aucune sauvegarde pour le moment : elles se créent toutes seules.</div>'}${back}`;
+  return `<div class="shead"><h2>Menu</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
+  <div class="mrow"><button class="mb" data-mn="sync"><span class="t">Synchroniser avec mon Drive</span><span class="s">${u?(last?'Dernière sauvegarde : '+esc(last):'Pas encore synchronisé'):'Non configuré : appuyez sur le crayon'}</span></button><button class="mb sq" data-mn="addr" aria-label="Modifier l’adresse du script"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5l4 4L8 20l-5 1 1-5z"/><path d="M13 21h8"/></svg></button></div>
+  <div class="msg" id="mm" hidden></div>
+  <button class="mb" data-mn="import"><span class="t">Importer un fichier</span><span class="s">Tableur (Excel, CSV) ou sauvegarde (.json)</span></button>
+  <button class="mb" data-mn="export"><span class="t">Exporter mes données (format .json)</span></button>
+  <button class="mb" data-mn="restore"><span class="t">Restaurer une ancienne sauvegarde (${bk.length})</span></button>
+  <div class="small" style="text-align:center;margin-top:10px">Version ${VERSION}</div>`;
+}
+function drawSheet(){const el=$('#sheet');if(!el)return;if(!sheetView){el.hidden=true;el.innerHTML='';return}el.hidden=false;el.innerHTML=`<div class="sbg" data-mn="close"></div><div class="sc" role="dialog" aria-modal="true">${sheetHTML()}</div>`}
+window.sheetRefresh=()=>{if(sheetView==='home')drawSheet()};
+function openSheet(v){sheetView=v;imp=null;drawSheet()}
+const mmsg=(t,bad)=>{const m=$('#mm');if(m){m.textContent=t;m.className='msg'+(bad?' err':'');m.hidden=false}};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-deldev]');if(!b)return;if(!b.dataset.arm){b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000);return}const id=b.dataset.deldev;if(S.devs)delete S.devs[id];if(db)db.doc('appareils/'+id).delete().catch(()=>{});render()});
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('[data-mn]');if(!b)return;
+  const a=b.dataset.mn;
+  if(a==='close'){sheetView=null;drawSheet();return}
+  if(['home','addr','import','restore'].includes(a)){openSheet(a);return}
+  if(a==='sync'){
+    if(!lsGet('suivi.url')){openSheet('addr');return}
+    mmsg('Synchronisation…');
+    try{await db.sync();stamp();drawSheet();mmsg('Synchronisé.')}catch(x){mmsg('Synchronisation impossible pour le moment.',1)}
+    return}
+  if(a==='syncon'){doSync();return}
+  if(a==='syncoff'){lsSet('suivi.url','');location.reload();return}
+  if(a==='resetpw'){lsSet('suivi.h','');sSet('suivi.pw','');location.reload();return}
+  if(a==='export'){
+    const d=new Date().toISOString().slice(0,10);
+    download('suivi-etudes-'+d+'.json',JSON.stringify({format:'suivi-etudes',version:1,date:new Date().toISOString(),data:snapData()},null,1),'application/json');
+    mmsg('Fichier exporté : cherchez-le dans vos Téléchargements.');return}
+  if(a==='rest'){
+    if(!b.dataset.arm){b.dataset.arm='1';const t=b.querySelector('.t');b.dataset.old=t.textContent;t.textContent='Appuyez encore pour restaurer';setTimeout(()=>{if(b.isConnected&&b.dataset.arm){delete b.dataset.arm;t.textContent=b.dataset.old}},3500);return}
+    const bk=getBk()[+b.dataset.i];if(!bk)return;
+    snap(true);replaceAll(bk.d);sheetView=null;drawSheet();return}
+  if(a==='impadd'||a==='imprep'){
+    if(a==='imprep'&&!b.dataset.arm){b.dataset.arm='1';b.textContent='Appuyez encore : tout sera remplacé';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='Remplacer mes données par celles du fichier'}},3500);return}
+    if(imp.kind==='json'){snap(true);replaceAll(imp.d)}else applyRows(imp.rows,a==='imprep');
+    sheetView=null;drawSheet();return}
+});
+document.addEventListener('change',async e=>{
+  if(e.target.id==='devn'){lsSet('suivi.devname',e.target.value.trim());heartbeat(true);return}
+  if(e.target.id!=='imf')return;
+  const f=e.target.files[0],m=$('#imm'),box=$('#imb');if(!f)return;
+  const say=(t,bad)=>{m.textContent=t;m.className='msg'+(bad?' err':'');m.hidden=false};
+  say('Lecture du fichier…');box.innerHTML='';
+  try{
+    imp=await parseFile(f);
+    if(imp.kind==='json'){
+      say('Sauvegarde reconnue : '+countData(imp.d)+'.');
+      box.innerHTML='<button class="mb solid" data-mn="imprep">Remplacer mes données par celles du fichier</button>';
+    }else{
+      const R=imp.rows;
+      say('Fichier reconnu : '+R.etudes.length+' études · '+R.factures.length+' factures · '+R.temps.length+' lignes de temps · '+R.mandats.length+' mandats.');
+      box.innerHTML='<button class="mb solid" data-mn="impadd">Ajouter à mes données</button><button class="mb" data-mn="imprep">Remplacer mes données par celles du fichier</button>';
+    }
+  }catch(x){imp=null;say(x.message||'Lecture impossible.',1)}
+});
+$('#menubtn')&&$('#menubtn').addEventListener('click',()=>openSheet('home'));
 
 function afterSnap(){if(dirty){pendingRender=true;return}render()}
 document.addEventListener('focusout',()=>{if(pendingRender&&!dirty){pendingRender=false;setTimeout(render,0)}});
@@ -565,6 +799,8 @@ render();
   ['etudes','factures','temps','formation'].forEach(col=>{
     db.collection(col).onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{o[d.id]=Object.assign({},d.data())});S[col]=o;loaded[col]=true;clear();afterSnap()},fail);
   });
-  db.doc('config/main').onSnapshot(s=>{S.cfg=s.exists?Object.assign({},s.data()):null;loaded.cfg=true;clear();afterSnap()},fail);
+  db.collection('appareils').onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{o[d.id]=Object.assign({},d.data())});S.devs=o;if(tab==='params')afterSnap()},()=>{});
+  setInterval(()=>{if(!document.hidden)heartbeat(false)},60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)heartbeat(false)});setTimeout(()=>heartbeat(true),2500);
+  db.doc('config/main').onSnapshot(s=>{S.cfg=s.exists?Object.assign({},s.data()):null;loaded.cfg=true;clear();afterSnap();if(Object.values(loaded).every(Boolean)&&!window.__snapped){window.__snapped=1;setTimeout(()=>snap(false),1500)}},fail);
 })();
 })();

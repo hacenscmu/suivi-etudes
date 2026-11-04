@@ -8,10 +8,11 @@
 <link rel="stylesheet" href="style.css"><meta name="application-name" content="Chimie Mulhouse"><meta name="apple-mobile-web-app-title" content="Chimie Mulhouse"></head>
 <body>
 <div class="wrap">
-<header><div class="brand"><img src="logo.png" alt="Chimie Mulhouse" width="56" height="56"><div><h1>Suivi des études</h1><div class="sub" id="sub">Études, paiements et rémunérations</div></div></div><div class="sub" id="today"></div></header>
+<header><div class="brand"><img src="logo.png" alt="Chimie Mulhouse" width="56" height="56"><div><h1>Suivi des études</h1><div class="sub" id="sub">Études, paiements et rémunérations</div></div></div><div class="sub" id="today"></div><button id="menubtn" class="b" type="button" aria-label="Menu">☰</button></header>
 <nav id="nav"></nav>
 <div id="status"></div>
 <main id="view"></main>
+<div id="sheet" hidden></div>
 </div>
 <script src="app.js"></script>
 <script>if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));</script>
