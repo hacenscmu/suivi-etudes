@@ -46,7 +46,9 @@ const S={etudes:{},factures:{},temps:{},formation:{},cfg:null};
 let loaded={etudes:false,factures:false,temps:false,formation:false,cfg:false};
 let db=null,userCap=null,canWrite=true,tab=(['dash','etudes','factures','temps','remun','formation','params'].includes(lsGet('suivi.tab'))?lsGet('suivi.tab'):'dash'),mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
 let dirty=false,pendingRender=false,timeoutNote=false,dbErr='';
-const cfg=()=>{const c=S.cfg||{};const d=DEFAULT_CFG;return Object.assign({},d,c,{cot:Object.assign({},d.cot,c.cot),patr:Object.assign({},d.patr,c.patr),cnje:Object.assign({},d.cnje,c.cnje)})};
+// un mandat finit la veille du début du suivant ; le dernier n'a pas de fin
+function withEnds(ms){const st=ms.map(m=>dnum(m.debut));return ms.map((m,i)=>{const a=st[i];if(a===null)return Object.assign({},m,{fin:''});const nx=st.filter(x=>x!==null&&x>a);return Object.assign({},m,{fin:nx.length?dstr(Math.min(...nx)-1):'2999-12-31',ouvert:!nx.length})})}
+const cfg=()=>{const c=S.cfg||{};const d=DEFAULT_CFG;const o=Object.assign({},d,c,{cot:Object.assign({},d.cot,c.cot),patr:Object.assign({},d.patr,c.patr),cnje:Object.assign({},d.cnje,c.cnje)});o.mandats=withEnds(o.mandats||[]);return o};
 const sorted=col=>Object.keys(S[col]).map(id=>Object.assign({id},S[col][id])).sort((a,b)=>(a.ord||0)-(b.ord||0));
 
 /* ---------- persistance ---------- */
@@ -321,8 +323,9 @@ async function doSync(){
   }catch(e){say('Connexion impossible : vérifiez l’adresse et le réseau.',1)}
 }
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
+let HSEL='';
 function render(){
-  renderNav();renderStatus();$('#today').textContent='Mis à jour le '+fdate(TODAY);
+  renderNav();renderStatus();
   const v=$('#view');
   document.body.classList.remove('login');
   const ready=Object.values(loaded).every(Boolean);
@@ -332,15 +335,23 @@ function render(){
   const views={dash:vDash,etudes:vEtudes,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams};
   const scrolls=[...document.querySelectorAll('.tw')].map(e=>e.scrollLeft);
   v.innerHTML=views[tab](D);
+  const hs=$('#hsel');if(hs)hs.innerHTML=tab==='dash'?HSEL+'<button class="pen" type="button" data-dashed="1" aria-label="Modifier le tableau de bord"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>':'';
   
   document.querySelectorAll('.tw').forEach((e,i)=>{if(scrolls[i])e.scrollLeft=scrolls[i]});
   if(fk){const [c,id,f]=fk.split('|');const el=v.querySelector(`[data-c="${c}"][data-id="${id}"][data-f="${f}"]`);if(el){el.focus({preventScroll:true});try{if(el.setSelectionRange&&el.type!=='number'&&el.type!=='date')el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}
   window.scrollTo(0,scrollY);
 }
+const DASH_BLOCKS=[['banner','Bandeau des alertes'],['kpis','Recette, CA signé, à encaisser'],['vue','Où en sont les études ?'],['det','Détail des études en cours'],['alert','Alertes à traiter'],['jeh','Temps de travail (JEH)'],['remun','Rémunérations'],['enc','Encaissé et dépenses'],['cli','Clients totaux et fidèles']];
+// disposition propre à chaque appareil (non synchronisée)
+function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(e){return {}}}
+function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
+function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{}}}
+function dashSec(){const L=dashLayout(),lab=Object.fromEntries(DASH_BLOCKS);
+  return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
 function vDash(D){
   const c=D.c;const M=['Tous les mandats'].concat(c.mandats.map(m=>m.nom));if(!M.includes(mandatSel))mandatSel='Tous les mandats';
   const d=dash(D,mandatSel);
-  const sel=`<div class="row" style="margin:4px 0 12px"><label for="msel" class="small">Mandat affiché</label><select id="msel">${M.map(m=>`<option${m===mandatSel?' selected':''}>${esc(m)}</option>`).join('')}</select></div>`;
+  HSEL=`<select id="msel" aria-label="Mandat">${M.map(m=>`<option${m===mandatSel?' selected':''}>${esc(m)}</option>`).join('')}</select>`;
   const n=d.withAlert.length;
   const banner=n===0?`<div class="banner ok">${ic('ok',16)}<span>Tout est à jour : aucune alerte à traiter</span></div>`:`<div class="banner">${ic('warn',16)}<span>${n} étude(s) à traiter · ${d.nbAlerts} alerte(s)</span></div>`;
   const kpi=(l,v,note,k)=>`<div class="kpi"><div class="lab">${ic(k,15)}<span>${l}</span></div><div class="val">${v}</div>${note?`<div class="note">${note}</div>`:''}</div>`;
@@ -350,34 +361,32 @@ function vDash(D){
   const R=remun(D);
   const alHtml=al.length?`<ul class="al">${al.map(e=>`<li><b>${esc(e.num||'(sans n°)')}</b> · ${esc(e.alerts.join(' · '))}</li>`).join('')}</ul>`:'<div class="small">Rien à signaler.</div>';
   const mf=v=>nf0.format(v);
-  return sel+banner+`
-  <div class="card kpis">
+  const jmx=Math.max(d.jehF,d.jehR),jgap=d.jehR-d.jehF;
+  const pe=d.ca>0?Math.min(100,Math.round(d.enc/d.ca*100)):0;
+  const B={banner:banner,kpis:`<div class="card kpis">
     ${kpi('RECETTE',eur0(d.recette),d.all?'encaissé − dépenses':'','trend')}
     ${kpi('CA SIGNÉ HT',eur0(d.ca),d.all?'dont archivé : '+nf0.format(Math.round(d.archive))+' €':'','sign')}
     ${kpi('À ENCAISSER HT',eur0(d.reste),d.all?'dont retard '+nf0.format(Math.round(d.retard))+' €':'','hour')}
-  </div>
-  <div class="grid">
-    <div class="card"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>
-    <div class="card"><h3>${ic('list')}Détail des études en cours</h3><div class="hint">Nombre d’études par statut</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>
-    <div class="card"><h3>${ic('bell')}Alertes à traiter</h3><div class="hint">${n>6?'6 premières sur '+n+' · ':''}Détail : onglet Suivi des études</div>${alHtml}</div>
-  </div>
-  <div class="grid">
-    <div class="card"><h3>${ic('clock')}Temps de travail (JEH)</h3><div class="hint">d’après le suivi</div>
-      <div class="stat big"><span>JEH facturées</span><span>${nf3.format(Math.round(d.jehF*1000)/1000)}</span></div>
-      <div class="stat big"><span>JEH rémunérées</span><span>${nf3.format(Math.round(d.jehR*1000)/1000)}</span></div>
-      <div class="stat"><span>Études signées</span><span>${d.nbSigned}</span></div></div>
-    <div class="card"><h3>${ic('euro')}Rémunérations</h3><div class="hint">JEH non payées, regroupées par personne</div>
+    <div class="sve"><div class="svh"><span><b>${eur0(d.enc)}</b> encaissés sur <b>${eur0(d.ca)}</b> signés</span><b class="pct">${d.ca>0?Math.round(d.enc/d.ca*100):0} %</b></div><div class="svt"><i style="width:${pe}%"></i></div></div>
+  </div>`,
+   vue:`<div class="card"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>`,
+   det:`<div class="card"><h3>${ic('list')}Détail des études en cours</h3><div class="hint">Nombre d’études par statut</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>`,
+   alert:`<div class="card"><h3>${ic('bell')}Alertes à traiter</h3><div class="hint">${n>6?'6 premières sur '+n+' · ':''}Détail : onglet Suivi des études</div>${alHtml}</div>`,
+   jeh:`<div class="card"><h3>${ic('clock')}Temps de travail (JEH)</h3><div class="hint">${d.nbSigned} étude${d.nbSigned>1?'s':''} signée${d.nbSigned>1?'s':''}</div>
+      <div class="hb hf"><div class="hbl"><span>Facturées</span><b>${nf3.format(Math.round(d.jehF*1000)/1000)}</b></div><div class="hbt"><i style="width:${jmx?Math.round(d.jehF/jmx*100):0}%"></i></div></div>
+      <div class="hb"><div class="hbl"><span>Rémunérées</span><b>${nf3.format(Math.round(d.jehR*1000)/1000)}</b></div><div class="hbt alt"><i style="width:${jmx?Math.round(d.jehR/jmx*100):0}%"></i></div></div>
+      <div class="jgap ${Math.abs(jgap)<0.005?'ok':'warn'}">${Math.abs(jgap)<0.005?ic('ok',15)+' Facturées = rémunérées':ic('warn',15)+' Écart : '+(jgap>0?'+':'')+nf3.format(Math.round(jgap*1000)/1000)+' JEH '+(jgap>0?'rémunérées en plus':'non rémunérées')}</div></div>`,
+   remun:`<div class="card"><h3>${ic('euro')}Rémunérations</h3><div class="hint">JEH non payées, regroupées par personne</div>
       <div class="stat"><span>Brut à payer</span><span>${eur(R.T.brut)}</span></div>
       <div class="stat"><span>Cotisations salariales (retenues)</span><span>${eur(R.T.brut-R.T.net)}</span></div>
       <div class="stat big"><span>Net à virer aux élèves</span><span>${eur(R.T.net)}</span></div>
       <div class="stat"><span>Charges patronales (estim.)</span><span>${eur(R.T.cout-R.T.brut)}</span></div>
       <div class="stat big"><span>Coût total pour la Junior</span><span>${eur(R.T.cout)}</span></div>
-      <div class="small" style="margin-top:6px">Estimations : taux dans Paramètres, 1 JEH minimum.</div></div>
-  </div>
-  <div class="two">
-    <div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>
-    <div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>
-  </div>`;
+      <div class="small" style="margin-top:6px">Estimations : taux dans Paramètres, 1 JEH minimum.</div></div>`,
+   enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
+   cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
+  const L=dashLayout();
+  return `<div class="dgrid">${L.order.filter(k=>!L.hide[k]).map(k=>k==='banner'||k==='kpis'?`<div class="full">${B[k]}</div>`:B[k]).join('')}</div>`;
 }
 /* ---------- listes en cartes ---------- */
 const FLT={etudes:{q:'',s:'all'},factures:{q:''},temps:{q:'',s:'all'}};
@@ -485,7 +494,7 @@ function closeEdit(){
   ED=null;const el=$('#edit');el.hidden=true;el.innerHTML='';render();
 }
 function cf(label,path,val,pct,unit){return `<div class="pr"><label>${label}</label><div class="pin"><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}"><span>${pct?'%':(unit||'')}</span></div></div>`}
-function listEd(k,arr,ph){return `<div class="led">${arr.map((v,i)=>`<div class="li"><input data-li="${k}" data-i="${i}" value="${esc(v)}"><button class="x" data-lidel="${k}:${i}" aria-label="Supprimer">✕</button></div>`).join('')}</div><button class="b ghost addl" data-liadd="${k}">+ ${ph}</button>`}
+function listEd(k,arr,ph){return `<div class="led">${arr.map((v,i)=>`<div class="li"><span class="hdl" data-k="${k}" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><input data-li="${k}" data-i="${i}" value="${esc(v)}"><button class="x" data-lidel="${k}:${i}" aria-label="Supprimer">✕</button></div>`).join('')}</div><button class="b ghost addl" data-liadd="${k}">+ ${ph}</button>`}
 const PIC={
  sync:'<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>',
  imp:'<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/>',
@@ -504,7 +513,7 @@ function paramSecs(D){
   const c=D.c;const sumP=o=>Object.values(o).reduce((a,v)=>a+num(v),0);
   const tot=(l,v)=>`<div class="pr tot"><label>${l}</label><b>${nf2.format(v*100)} %</b></div>`;
   const cur=c.mandats.find(m=>{const a=dnum(m.debut),b=dnum(m.fin);return a!==null&&b!==null&&TODAY>=a&&TODAY<=b});
-  const mand=c.mandats.map((m,i)=>`<div class="mand"><div class="li"><input data-mand="${i}" data-k="nom" value="${esc(m.nom)}" placeholder="Nom du mandat"><button class="x" data-delmand="${i}" aria-label="Supprimer le mandat">✕</button></div><div class="f2">${fld('Début',`<input type="date" data-mand="${i}" data-k="debut" value="${esc(m.debut)}">`)}${fld('Fin',`<input type="date" data-mand="${i}" data-k="fin" value="${esc(m.fin)}">`)}</div></div>`).join('');
+  const mand=c.mandats.map((m,i)=>[m,i]).sort((x,y)=>(dnum(x[0].debut)??1e9)-(dnum(y[0].debut)??1e9)).map(([m,i])=>`<div class="mand"><div class="li"><input data-mand="${i}" data-k="nom" value="${esc(m.nom)}" placeholder="Nom du mandat"><button class="x" data-delmand="${i}" aria-label="Supprimer le mandat">✕</button></div><div class="mrw">${fld('Début',`<input type="date" data-mand="${i}" data-k="debut" value="${esc(m.debut)}">`)}<div class="mfin">${!m.debut?'Date de début à saisir':m.ouvert?'En cours, sans fin':'Jusqu’au '+fdate(dnum(m.fin))}</div></div></div>`).join('');
   const nd=Object.keys(S.devs||{}).length;
   return [
    {k:'mand',t:'Mandats',s:c.mandats.length+' mandat'+(c.mandats.length>1?'s':'')+(cur?' · actuel : '+cur.nom:''),b:()=>`${mand||'<div class="small">Aucun mandat.</div>'}<button class="b ghost addl" data-addmand="1">+ Ajouter un mandat</button>`},
@@ -524,10 +533,14 @@ function vParams(D){
   const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
   return `<h2>Paramètres</h2>${top}<div class="sh" style="margin:16px 2px 6px">Réglages des calculs</div><div class="card slist">${paramSecs(D).map(x=>`<button class="srow" data-param="${x.k}"><span class="sic">${pic(x.k)}</span><span class="stx"><b>${x.t}</b><small>${esc(x.s)}</small></span><span class="chev">›</span></button>`).join('')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
 }
-let PSEC=null;
+let PSEC=null,DRAG=null;
+document.addEventListener('pointerdown',e=>{const h=e.target.closest('.hdl');if(!h)return;e.preventDefault();const row=h.closest('.li'),rows=[...row.parentElement.children],i=rows.indexOf(row);DRAG={k:h.dataset.k,from:i,to:i,row,rows,y0:e.clientY};row.classList.add('drg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
+document.addEventListener('pointermove',e=>{if(!DRAG)return;const dy=e.clientY-DRAG.y0,H=DRAG.row.offsetHeight+6,n=DRAG.rows.length,f=DRAG.from;DRAG.row.style.transform=`translateY(${dy}px)`;const to=Math.max(0,Math.min(n-1,f+Math.round(dy/H)));DRAG.to=to;DRAG.rows.forEach((r,i)=>{if(r===DRAG.row)return;const sh=(f<to&&i>f&&i<=to)?-H:(f>to&&i<f&&i>=to)?H:0;r.style.transform=sh?`translateY(${sh}px)`:''})});
+const endDrag=()=>{if(!DRAG)return;const {k,from,to}=DRAG;DRAG=null;if(from!==to){const c=ensureCfg();if(k==='dash'){const L=dashLayout();const [x]=L.order.splice(from,1);L.order.splice(to,0,x);dashSave(L);render()}else{const [x]=c[k].splice(from,1);c[k].splice(to,0,x);saveCfg();render()}}if(PSEC)drawParam()};
+document.addEventListener('pointerup',endDrag);document.addEventListener('pointercancel',endDrag);
 function openParam(k){PSEC=k;ED=null;drawParam()}
 function drawParam(){
-  const x=paramSecs(compute()).find(z=>z.k===PSEC);if(!x)return;const el=$('#edit'),sc=el.querySelector('.sc'),y=sc?sc.scrollTop:0;
+  const x=PSEC==='dash'?dashSec():paramSecs(compute()).find(z=>z.k===PSEC);if(!x)return;const el=$('#edit'),sc=el.querySelector('.sc'),y=sc?sc.scrollTop:0;
   el.innerHTML=`<div class="sbg" data-ed="close"></div><div class="sc prm"><div class="grip"></div><div class="shead"><h2>${x.t}</h2><button class="mx" type="button" data-ed="close" aria-label="Fermer">✕</button></div>${x.b()}<button class="mb solid" type="button" data-ed="close" style="margin-top:16px">Terminé</button></div>`;
   el.hidden=false;const n=el.querySelector('.sc');if(n)n.scrollTop=y;
 }
@@ -547,6 +560,8 @@ document.addEventListener('change',e=>{
     const doc=S.formation[k]||(S.formation[k]={nom:n,niveaux:{}});doc.nom=n;doc.niveaux=doc.niveaux||{};
     if(t.value==='')delete doc.niveaux[t.dataset.etude];else doc.niveaux[t.dataset.etude]=Number(t.value);
     save('formation/'+k,doc);render();
+  }else if(t.dataset.dshow){
+    const L=dashLayout();if(t.checked)delete L.hide[t.dataset.dshow];else L.hide[t.dataset.dshow]=true;dashSave(L);render();
   }else if(t.dataset.alall||t.dataset.alk){
     const c=ensureCfg();if(t.dataset.alall)c.alertesOn=t.checked;else{c.alertesOff=c.alertesOff||{};if(t.checked)delete c.alertesOff[t.dataset.alk];else c.alertesOff[t.dataset.alk]=true}saveCfg();render();if(PSEC)drawParam();
   }else if(t.dataset.cfg){
@@ -572,6 +587,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.syncon){doSync();return}
   if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
   if(b.dataset.param){openParam(b.dataset.param);return}
+  if(b.dataset.dashed){openParam('dash');return}
   if(b.dataset.edit){const [c,i]=b.dataset.edit.split(':');openEdit(c,i,false);return}
   if(b.dataset.chip){const [k,v]=b.dataset.chip.split(':');FLT[k].s=v;render();return}
   if(b.dataset.eddel){if(b.dataset.arm){const {col,id}=ED;ED.isNew=false;del(col,id);closeEdit()}else{b.dataset.arm='1';b.textContent='Sûr ? Appuyez encore pour supprimer';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='Supprimer'}},3000)}return}
@@ -586,7 +602,7 @@ document.addEventListener('click',e=>{
     return}
   if(b.dataset.liadd){const c=ensureCfg();c[b.dataset.liadd].push('Nouveau statut');saveCfg();render();if(PSEC)drawParam();const l=document.querySelectorAll(`[data-li="${b.dataset.liadd}"]`);const x=l[l.length-1];if(x){x.focus();x.select()}return}
   if(b.dataset.lidel){const [k,i]=b.dataset.lidel.split(':');if(b.dataset.arm){const c=ensureCfg();c[k].splice(+i,1);saveCfg();render();if(PSEC)drawParam()}else{b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000)}return}
-  if(b.dataset.addmand){const c=ensureCfg();c.mandats.push({nom:'Nouveau mandat',debut:'',fin:''});saveCfg();render();if(PSEC)drawParam();return}
+  if(b.dataset.addmand){const c=ensureCfg();c.mandats.push({nom:'Mandat '+(new Date().getFullYear()),debut:dstr(TODAY)});saveCfg();render();if(PSEC)drawParam();return}
   if(b.dataset.delmand!==undefined){if(b.dataset.arm){const c=ensureCfg();c.mandats.splice(+b.dataset.delmand,1);saveCfg();render();if(PSEC)drawParam()}else{b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000)}return}
   if(b.dataset.del){
     if(b.dataset.arm){const [col,id]=b.dataset.del.split(':');del(col,id);render()}
