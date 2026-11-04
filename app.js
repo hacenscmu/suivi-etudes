@@ -20,8 +20,7 @@ const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const sGet=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
 const sSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
 const CONN=()=>({url:lsGet('suivi.url')||'',pass:sGet('suivi.pw')});
-const UNLOCKED=()=>!!(lsGet('suivi.h')&&sGet('suivi.pw'));
-async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('suivi:'+t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+const UNLOCKED=()=>true; // plus de mot de passe dans l’appli
 
 /* ---------- configuration par défaut (réglages, pas de données) ---------- */
 const DEFAULT_CFG={
@@ -278,25 +277,6 @@ function renderStatus(){
   if(db&&!canWrite)h+='<div class="msg">Lecture seule : vous ne pouvez pas modifier ces données.</div>';
   $('#status').innerHTML=h;
 }
-function renderLock(msg){
-  document.body.classList.add('login');
-  const first=!lsGet('suivi.h');
-  $('#view').innerHTML=`<form class="login" id="lf" autocomplete="on"><img class="hac" src="splash-logo.png" alt="HAC Chimie Mulhouse">
-  <label for="cp">Mot de passe</label><div class="pw"><input id="cp" name="password" type="password" autocomplete="current-password" autocapitalize="off" autocorrect="off" spellcheck="false" autofocus><button type="button" class="eye" data-eye="1" aria-label="Afficher le mot de passe" aria-pressed="false"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 12S5.5 5 12 5s10.5 7 10.5 7-4 7-10.5 7S1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M3 3l18 18"/></svg></button></div>
-  <div class="msg err" id="lerr" ${msg?'':'hidden'}>${esc(msg||'')}</div>
-  <button class="b" type="submit" id="lgo">Se connecter</button></form>`;
-}
-async function doLogin(){
-  const p=($('#cp').value||'').trim(),err=t=>{const e=$('#lerr');e.textContent=t;e.hidden=false};
-  if(!p)return err('Saisissez le mot de passe.');
-  const h=await sha(p),first=!lsGet('suivi.h'),u=lsGet('suivi.url')||'';
-  const go=$('#lgo');go.disabled=true;go.textContent='Connexion…';
-  let ok=null;
-  if(u){try{const r=await fetch(u,{method:'POST',body:JSON.stringify({pass:p,action:'ping'}),redirect:'follow'});const j=await r.json();ok=!(j&&j.error)}catch(e){ok=null}}
-  if(ok===null)ok=first||h===lsGet('suivi.h');
-  if(!ok){go.disabled=false;go.textContent='Se connecter';return err(u?'Mot de passe refusé. Il doit être identique à MOT_DE_PASSE dans votre script Google (nouvelle version déployée).':'Mot de passe incorrect.')}
-  lsSet('suivi.h',h);sSet('suivi.pw',p);location.reload();
-}
 async function doSync(){
   const u=($('#syu').value||'').trim(),m=$('#sym'),c=CONN();
   const say=(t,bad)=>{m.textContent=t;m.className='msg'+(bad?' err':'');m.hidden=false};
@@ -305,7 +285,7 @@ async function doSync(){
   try{
     const post=b=>fetch(u,{method:'POST',body:JSON.stringify(Object.assign({pass:c.pass},b)),redirect:'follow'}).then(r=>r.json());
     const srv=await post({action:'loadAll'});
-    if(srv&&srv.error)return say(srv.error==='auth'?'Le script refuse le mot de passe : mettez le même mot de passe dans le script Google (MOT_DE_PASSE), puis redéployez.':'Erreur du script : '+srv.error,1);
+    if(srv&&srv.error)return say(srv.error==='auth'?'Le script Google demande encore un mot de passe : recollez la dernière version de Code.gs (sans mot de passe) puis redéployez une nouvelle version.':'Erreur du script : '+srv.error,1);
     const has=Object.values(srv||{}).some(o=>o&&Object.keys(o).length);
     if(!has){
       let loc={};try{loc=JSON.parse(lsGet('suivi.cache')||'{}')||{}}catch(e){}
@@ -318,7 +298,6 @@ function addBtn(label,act){return `<div class="plus"><button class="b" data-add=
 function render(){
   renderNav();renderStatus();$('#today').textContent='Mis à jour le '+fdate(TODAY);
   const v=$('#view');
-  if(!UNLOCKED()){renderLock();return}
   document.body.classList.remove('login');
   const ready=Object.values(loaded).every(Boolean);
   if(!ready){v.innerHTML='<div class="card">Chargement des données…</div>';return}
@@ -503,13 +482,11 @@ document.addEventListener('change',e=>{
     const c=ensureCfg();c.mandats[+t.dataset.mand][t.dataset.k]=t.value;saveCfg();render();
   }
 });
-document.addEventListener('submit',e=>{if(e.target.id==='lf'){e.preventDefault();doLogin()}});
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.eye){const i=$('#cp'),show=i.type==='password';i.type=show?'text':'password';b.setAttribute('aria-pressed',show);b.classList.toggle('on',show);b.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');return}
   if(b.dataset.reconnect){sSet('suivi.pw','');location.reload();return}
   if(b.dataset.syncon){doSync();return}
-  if(b.dataset.resetpw){lsSet('suivi.h','');sSet('suivi.pw','');location.reload();return}
   if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
   if(b.dataset.tab){tab=b.dataset.tab;lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.add){
@@ -547,7 +524,7 @@ function makeDb(){
     if(loading||pending>0||outbox.length)return;loading=true;
     try{cache=await api({action:'loadAll'});keep();stamp();if(dbErr){dbErr='';renderStatus()}emit()}
     catch(e){
-      if(String(e.message)==='auth'){dbErr='Le script Google refuse le mot de passe : il doit être identique à celui de l’appli (MOT_DE_PASSE dans le script).';renderStatus();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
+      if(String(e.message)==='auth'){dbErr='Le script Google demande encore un mot de passe : recollez la dernière version de Code.gs (sans mot de passe) et redéployez une nouvelle version.';renderStatus();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
       else if(cache){dbErr='Hors connexion : dernière version enregistrée affichée, les modifications ne sont pas possibles pour le moment.';renderStatus()}
       else if(first)subs.forEach(s=>s.err&&s.err({code:'unavailable'}));
     }
@@ -752,7 +729,7 @@ let sheetView=null,imp=null;
 function sheetHTML(){
   const u=lsGet('suivi.url'),last=fmtLast(),bk=getBk();
   const back='<button class="mb ghost" data-mn="home">‹ Retour</button>';
-  if(sheetView==='addr')return `<h2>Adresse du script Google</h2><div class="small" style="margin-bottom:10px">À saisir une seule fois : adresse de l’application Web de votre script (elle finit par /exec). Vos données actuelles seront envoyées dans votre Drive si celui-ci est vide.</div><input id="syu" type="url" value="${esc(u||'')}" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="mb solid" data-mn="syncon">Enregistrer et synchroniser</button>${u?'<button class="mb" data-mn="syncoff">Désactiver sur cet appareil</button>':''}<button class="mb" data-mn="resetpw">Retaper le mot de passe de l’appli</button>${back}`;
+  if(sheetView==='addr')return `<h2>Adresse du script Google</h2><div class="small" style="margin-bottom:10px">À saisir une seule fois : adresse de l’application Web de votre script (elle finit par /exec). Vos données actuelles seront envoyées dans votre Drive si celui-ci est vide.</div><input id="syu" type="url" value="${esc(u||'')}" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="mb solid" data-mn="syncon">Enregistrer et synchroniser</button>${u?'<button class="mb" data-mn="syncoff">Désactiver sur cet appareil</button>':''}${back}`;
   if(sheetView==='import')return `<h2>Importer un fichier</h2><div class="small" style="margin-bottom:10px">Fichier modèle Excel (.xlsx), tableau .csv, ou sauvegarde .json exportée depuis l’appli.</div><input type="file" id="imf" accept=".xlsx,.csv,.txt,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="width:100%"><div class="msg" id="imm" hidden></div><div id="imb"></div>${back}`;
   if(sheetView==='restore')return `<h2>Restaurer une sauvegarde</h2><div class="small" style="margin-bottom:10px">Les 6 dernières sauvegardes automatiques de cet appareil. Restaurer remplace toutes les données actuelles (une sauvegarde de l’état actuel est faite avant).</div>${bk.length?bk.map((b,i)=>`<button class="mb" data-mn="rest" data-i="${i}"><span class="t">${esc(new Date(b.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+' à '+new Date(b.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))}</span><span class="s">${esc(countData(b.d))}</span></button>`).join(''):'<div class="small">Aucune sauvegarde pour le moment : elles se créent toutes seules.</div>'}${back}`;
   return `<div class="shead"><h2>Menu</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
@@ -762,7 +739,6 @@ function sheetHTML(){
   <button class="mb" data-mn="export"><span class="t">Exporter mes données (format .json)</span></button>
   <button class="mb" data-mn="restore"><span class="t">Restaurer une ancienne sauvegarde (${bk.length})</span></button>
   <div class="thm" role="group" aria-label="Affichage"><span class="small">Affichage</span>${[['auto','Selon le système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div>
-  <button class="mb" data-mn="logout"><span class="t">Se déconnecter</span><span class="s">Le mot de passe sera redemandé</span></button>
   <div class="small" style="text-align:center;margin-top:10px">Version ${VERSION}</div>`;
 }
 function drawSheet(){const el=$('#sheet');if(!el)return;if(!sheetView){el.hidden=true;el.innerHTML='';return}el.hidden=false;el.innerHTML=`<div class="sbg" data-mn="close"></div><div class="sc" role="dialog" aria-modal="true">${sheetHTML()}</div>`}
@@ -784,7 +760,6 @@ document.addEventListener('click',async e=>{
   if(a==='theme'){lsSet('suivi.theme',b.dataset.v);applyTheme();drawSheet();return}
   if(a==='syncon'){doSync();return}
   if(a==='syncoff'){lsSet('suivi.url','');location.reload();return}
-  if(a==='resetpw'){lsSet('suivi.h','');sSet('suivi.pw','');location.reload();return}
   if(a==='export'){
     const d=new Date().toISOString().slice(0,10);
     download('suivi-etudes-'+d+'.json',JSON.stringify({format:'suivi-etudes',version:1,date:new Date().toISOString(),data:snapData()},null,1),'application/json');
