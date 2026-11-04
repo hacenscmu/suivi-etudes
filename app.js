@@ -17,8 +17,8 @@ const fdate=n=>{const d=new Date(n*864e5);return d.toLocaleDateString('fr-FR',{t
 const MOIS=['janv.','févr.','mars','avr.','mai','juin','juil.','août','sept.','oct.','nov.','déc.'];
 const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
-const sGet=k=>{try{return sessionStorage.getItem(k)||''}catch(e){return ''}};
-const sSet=(k,v)=>{try{v?sessionStorage.setItem(k,v):sessionStorage.removeItem(k)}catch(e){}};
+const sGet=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
+const sSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
 const CONN=()=>({url:lsGet('suivi.url')||'',pass:sGet('suivi.pw')});
 const UNLOCKED=()=>!!(lsGet('suivi.h')&&sGet('suivi.pw'));
 async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('suivi:'+t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
@@ -182,8 +182,16 @@ function dash(D,sel){
   const fideles=all?cli.filter(x=>x.nb>=2).length:cmList.filter(x=>x.mandat===sel&&x.prev>0).length;
   // séries temporelles (50 points)
   let t0,t1;
-  if(all){const ds=D.fact.map(f=>f.d).filter(d=>d!==null);if(ds.length){const m=new Date(Math.min(...ds)*864e5);t0=Date.UTC(m.getUTCFullYear(),m.getUTCMonth(),1)/864e5}else t0=TODAY;t1=TODAY}
-  else{const m=mand.find(m=>m.nom===sel);t0=m&&m.a!==null?m.a:TODAY;t1=m&&m.b!==null?m.b:TODAY}
+  if(all){
+    const ds=D.fact.map(f=>f.d).filter(d=>d!==null),st=mand.map(m=>m.a).filter(x=>x!==null),en=mand.map(m=>m.b).filter(x=>x!==null);
+    const first=[...ds,...st];t0=first.length?Math.min(...first):TODAY;
+    t1=en.length?Math.min(TODAY,Math.max(...en)):TODAY;
+  }else{
+    const m=mand.find(m=>m.nom===sel);
+    t0=m&&m.a!==null?m.a:TODAY;
+    t1=m&&m.b!==null?Math.min(TODAY,m.b):TODAY;
+  }
+  if(t1<=t0)t1=t0+1;
   const pts=[];for(let k=0;k<50;k++)pts.push(t0+Math.round(k*(t1-t0)/49));
   const ser={enc:[],dep:[],tot:[],fid:[]};
   pts.forEach(T=>{
@@ -195,7 +203,7 @@ function dash(D,sel){
     else{ser.tot.push(cmList.filter(x=>x.mandat===sel&&x.first<=T).length);ser.fid.push(cmList.filter(x=>x.mandat===sel&&x.prev>0&&x.first<=T).length)}
   });
   const withAlert=D.etudes.filter(e=>e.alerts.length);
-  return {all,enc,dep,recette:enc-dep,ca,reste,archive,retard,jehF,jehR,nbSigned,groups,enCours,archivees:cnt('Archivée'),refusees:cnt('Refusé / sans suite'),nouveaux,fideles,pts,ser,withAlert,nbAlerts:withAlert.reduce((a,e)=>a+e.alerts.length,0)};
+  return {all,total:E.length,enc,dep,recette:enc-dep,ca,reste,archive,retard,jehF,jehR,nbSigned,groups,enCours,archivees:cnt('Archivée'),refusees:cnt('Refusé / sans suite'),nouveaux,fideles,pts,t0,t1,ser,withAlert,nbAlerts:withAlert.reduce((a,e)=>a+e.alerts.length,0)};
 }
 
 /* ---------- graphiques SVG ---------- */
@@ -204,10 +212,11 @@ function donut(parts,center,sub){
   const tot=parts.reduce((a,p)=>a+p.v,0),R=62,C=2*Math.PI*R;let off=0,segs='';
   if(tot>0)parts.forEach(p=>{if(p.v<=0)return;const len=C*p.v/tot;segs+=`<circle cx="90" cy="90" r="${R}" fill="none" stroke="${p.c}" stroke-width="30" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 90 90)"/>`;off+=len});
   else segs=`<circle cx="90" cy="90" r="${R}" fill="none" stroke="var(--line)" stroke-width="30"/>`;
-  return `<svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="${esc(sub)}">${segs}<text class="ctr" x="90" y="92" text-anchor="middle" dominant-baseline="middle" style="font-size:36px">${center}</text></svg>`;
+  return `<svg viewBox="0 0 180 180" role="img" aria-label="${esc(sub)}">${segs}<text class="ctr" x="90" y="92" text-anchor="middle" dominant-baseline="middle" style="font-size:36px">${center}</text></svg>`;
 }
 function legendHtml(parts){return '<div class="legend">'+parts.map(p=>`<span><i style="background:${p.c}"></i>${esc(p.l)} · ${p.v}</span>`).join('')+'</div>'}
 function smooth(a){const f=(x,i)=>x[i]===null?null:((x[i-1]==null?x[i]:x[i-1])+2*x[i]+(x[i+1]==null?x[i]:x[i+1]))/4;const o=a.map((_,i)=>f(a,i));return o}
+let GRAD=0;
 function lineChart(pts,series,fmt,int){
   const W=560,H=230,pl=44,pr=10,pt=12,pb=26;
   const sm=series.map(s=>({c:s.c,l:s.l,a:smooth(smooth(s.v)),area:s.area}));
@@ -216,11 +225,15 @@ function lineChart(pts,series,fmt,int){
   const X=i=>pl+(W-pl-pr)*i/(pts.length-1),Y=v=>pt+(H-pt-pb)*(1-v/nice);
   let g='';for(let k=0;k<=4;k++){const v=nice*k/4,y=Y(v);g+=`<line x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${pl-6}" y="${y+3}" text-anchor="end">${fmt(v)}</text>`}
   let lastLab=-99;pts.forEach((T,i)=>{const d=new Date(T*864e5),prev=i?new Date(pts[i-1]*864e5):null;if((!prev||prev.getUTCMonth()!==d.getUTCMonth())&&i-lastLab>=7&&i<=pts.length-4){lastLab=i;g+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${MOIS[d.getUTCMonth()]}${d.getUTCMonth()===0||i===0?' '+String(d.getUTCFullYear()).slice(2):''}</text>`}});
-  sm.forEach(s=>{let d='',started=false,lastI=0;s.a.forEach((v,i)=>{if(v===null)return;d+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);started=true;lastI=i});
+  let defs='',fills='',lines='';
+  sm.forEach((s,k)=>{let d='',started=false,lastI=0;s.a.forEach((v,i)=>{if(v===null)return;d+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);started=true;lastI=i});
     if(!d)return;
-    if(s.area)g+=`<path d="${d}L${X(lastI)} ${Y(0)}L${X(s.a.findIndex(v=>v!==null))} ${Y(0)}Z" fill="${s.c}" opacity=".22"/>`;
-    g+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`});
-  return `<div class="chartbox"><svg viewBox="0 0 ${W} ${H}" role="img">${g}</svg></div><div class="legend">${sm.map(s=>`<span><i style="background:${s.c}"></i>${esc(s.l)}</span>`).join('')}</div>`;
+    const id='gr'+(++GRAD),fc=s.c==='var(--c3)'?'var(--c5)':s.c;
+    defs+=`<linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:${fc};stop-opacity:.6"/><stop offset="1" style="stop-color:${fc};stop-opacity:.14"/></linearGradient>`;
+    fills+=`<path d="${d}L${X(lastI)} ${Y(0)}L${X(s.a.findIndex(v=>v!==null))} ${Y(0)}Z" fill="url(#${id})"/>`;
+    lines+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`});
+  g+=fills+lines;
+  return `<div class="chartbox"><svg viewBox="0 0 ${W} ${H}" role="img"><defs>${defs}</defs>${g}</svg></div><div class="legend">${sm.map(s=>`<span><i style="background:${s.c}"></i>${esc(s.l)}</span>`).join('')}</div>`;
 }
 
 /* ---------- champs de saisie ---------- */
@@ -233,6 +246,20 @@ const delBtn=(c,id)=>`<button class="x" data-del="${c}:${id}" title="Supprimer l
 
 /* ---------- vues ---------- */
 const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['factures','Factures'],['temps','Temps de travail'],['remun','Rémunérations'],['formation','Qualité formation'],['params','Paramètres'],['legende','Légende']];
+const ICO={
+ trend:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
+ sign:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>',
+ hour:'<path d="M6 3h12M6 21h12"/><path d="M7 3v3a5 5 0 0 0 2 4l3 2-3 2a5 5 0 0 0-2 4v3M17 3v3a5 5 0 0 1-2 4l-3 2 3 2a5 5 0 0 1 2 4v3"/>',
+ pie:'<path d="M12 3v9h9"/><path d="M20.5 15A9 9 0 1 1 9 3.5"/>',
+ list:'<path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
+ bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>',
+ clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+ chart:'<path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/>',
+ euro:'<circle cx="12" cy="12" r="9"/><path d="M15 9.2a3.6 3.6 0 1 0 0 5.6M8 11h5.5M8 13h5.5"/>',
+ users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3c2 .8 3.5 2.6 3.5 5.7"/>',
+ ok:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
+ warn:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>'};
+const ic=(k,sz)=>`<svg class="ico" viewBox="0 0 24 24" width="${sz||16}" height="${sz||16}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k]}</svg>`;
 const TAB_SHORT={dash:'Tableau',etudes:'Études',factures:'Factures',temps:'Temps',remun:'Paie',formation:'Formation',params:'Réglages',legende:'Légende'};
 const TAB_ICON={
  dash:'<path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/>',
@@ -248,7 +275,6 @@ function renderStatus(){
   let h='';
   if(timeoutNote)h+='<div class="msg">Les données sont encore en cours de chargement : si ce message reste, vérifiez la connexion.</div>';
   if(dbErr)h+='<div class="msg err">'+esc(dbErr)+'</div>';
-  if(UNLOCKED())h+='<div class="small" style="margin:4px 0"><button class="b ghost" data-reconnect="1" style="padding:4px 10px;font-size:12.5px">Se déconnecter</button></div>';
   if(db&&!canWrite)h+='<div class="msg">Lecture seule : vous ne pouvez pas modifier ces données.</div>';
   $('#status').innerHTML=h;
 }
@@ -311,9 +337,9 @@ function vDash(D){
   const d=dash(D,mandatSel);
   const sel=`<div class="row" style="margin:4px 0 12px"><label for="msel" class="small">Mandat affiché</label><select id="msel">${M.map(m=>`<option${m===mandatSel?' selected':''}>${esc(m)}</option>`).join('')}</select></div>`;
   const n=d.withAlert.length;
-  const banner=n===0?'<div class="banner ok">Tout est à jour : aucune alerte à traiter</div>':`<div class="banner">${n} étude(s) à traiter · ${d.nbAlerts} alerte(s)</div>`;
-  const kpi=(l,v,note)=>`<div class="card kpi"><div class="lab">${l}</div><div class="val">${v}</div><div class="note">${note}</div></div>`;
-  const vue=[{l:'En cours',v:d.enCours,c:PAL[0]},{l:'Archivées',v:d.archivees,c:PAL[2]},{l:'Refusées',v:d.refusees,c:PAL[3]}];
+  const banner=n===0?`<div class="banner ok">${ic('ok',16)}<span>Tout est à jour : aucune alerte à traiter</span></div>`:`<div class="banner">${ic('warn',16)}<span>${n} étude(s) à traiter · ${d.nbAlerts} alerte(s)</span></div>`;
+  const kpi=(l,v,note,k)=>`<div class="card kpi"><div class="lab">${ic(k,15)}<span>${l}</span></div><div class="val">${v}</div><div class="note">${note}</div></div>`;
+  const vue=[{l:'En cours',v:d.enCours,c:PAL[0]},{l:'Archivées',v:d.archivees,c:'var(--arch)'},{l:'Refusées',v:d.refusees,c:PAL[2]}];
   const det=Object.keys(d.groups).map((k,i)=>({l:k,v:d.groups[k],c:PAL[i%6]}));
   const al=d.withAlert.slice(0,6);
   const R=remun(D);
@@ -321,28 +347,25 @@ function vDash(D){
   const mf=v=>nf0.format(v);
   return sel+banner+`
   <div class="grid k3">
-    ${kpi('RECETTE',eur0(d.recette),d.all?'encaissé − dépenses':esc(mandatSel))}
-    ${kpi('CA SIGNÉ HT',eur0(d.ca),d.all?'dont archivé : '+nf0.format(Math.round(d.archive))+' €':esc(mandatSel))}
-    ${kpi('RESTE À ENCAISSER HT',eur0(d.reste),d.all?'dont en retard : '+nf0.format(Math.round(d.retard))+' €':esc(mandatSel))}
+    ${kpi('RECETTE',eur0(d.recette),d.all?'encaissé − dépenses':esc(mandatSel),'trend')}
+    ${kpi('CA SIGNÉ HT',eur0(d.ca),d.all?'dont archivé : '+nf0.format(Math.round(d.archive))+' €':esc(mandatSel),'sign')}
+    ${kpi('À ENCAISSER',eur0(d.reste),d.all?'HT · dont retard '+nf0.format(Math.round(d.retard))+' €':'HT · '+esc(mandatSel),'hour')}
   </div>
   <div class="grid">
-    <div class="card"><h3>Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.enCours,'Études en cours')}</div>${legendHtml(vue)}</div>
-    <div class="card"><h3>Détail des études en cours</h3><div class="hint">Nombre d’études par statut</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>
-    <div class="card"><h3>Alertes à traiter</h3><div class="hint">${n>6?'6 premières sur '+n+' · ':''}Détail : onglet Suivi des études</div>${alHtml}</div>
+    <div class="card"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>
+    <div class="card"><h3>${ic('list')}Détail des études en cours</h3><div class="hint">Nombre d’études par statut</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>
+    <div class="card"><h3>${ic('bell')}Alertes à traiter</h3><div class="hint">${n>6?'6 premières sur '+n+' · ':''}Détail : onglet Suivi des études</div>${alHtml}</div>
   </div>
   <div class="grid">
-    <div class="card"><h3>Temps de travail (JEH)</h3><div class="hint">d’après le suivi</div>
+    <div class="card"><h3>${ic('clock')}Temps de travail (JEH)</h3><div class="hint">d’après le suivi</div>
       <div class="stat big"><span>JEH facturées</span><span>${nf3.format(Math.round(d.jehF*1000)/1000)}</span></div>
       <div class="stat big"><span>JEH rémunérées</span><span>${nf3.format(Math.round(d.jehR*1000)/1000)}</span></div>
       <div class="stat"><span>Études signées</span><span>${d.nbSigned}</span></div></div>
-    <div class="card"><h3>Chiffre d’affaires net et dépenses</h3><div class="hint">&nbsp;</div>
+    <div class="card"><h3>${ic('chart')}Chiffre d’affaires net et dépenses</h3><div class="hint">&nbsp;</div>
       <div class="stat big"><span>Encaissé HT</span><span>${eur0(d.enc)}</span></div>
       <div class="stat big"><span>Dépenses (coût total des embauches)</span><span>${eur0(d.dep)}</span></div>
       <div class="small" style="margin-top:6px">${d.enc===0?'Aucun CA encaissé':Math.round(d.dep/d.enc*100)+' % du CA encaissé en dépenses salariales'}</div></div>
-    <div class="card"><h3>Clients</h3><div class="hint">Nouveaux et fidèles</div>
-      <div class="stat big"><span>Nouveaux clients</span><span>${d.nouveaux}</span></div>
-      <div class="stat big"><span>Clients fidèles</span><span>${d.fideles}</span></div></div>
-    <div class="card"><h3>Rémunérations</h3><div class="hint">JEH non payées, regroupées par personne</div>
+    <div class="card"><h3>${ic('euro')}Rémunérations</h3><div class="hint">JEH non payées, regroupées par personne</div>
       <div class="stat"><span>Brut à payer</span><span>${eur(R.T.brut)}</span></div>
       <div class="stat"><span>Cotisations salariales (retenues)</span><span>${eur(R.T.brut-R.T.net)}</span></div>
       <div class="stat big"><span>Net à virer aux élèves</span><span>${eur(R.T.net)}</span></div>
@@ -351,8 +374,8 @@ function vDash(D){
       <div class="small" style="margin-top:6px">Estimations : taux dans Paramètres, 1 JEH minimum.</div></div>
   </div>
   <div class="two">
-    <div class="card"><h3>Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}</div>
-    <div class="card"><h3>Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}</div>
+    <div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}</div>
+    <div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>
   </div>`;
 }
 function vEtudes(D){
@@ -577,6 +600,12 @@ function devCard(){
   return `<div class="card" style="margin-top:12px"><h3>Appareils connectés</h3><div class="small" style="margin-bottom:6px">Les appareils qui ont ouvert l’appli avec cette synchronisation. « Actif » = vu depuis moins de 12 minutes.</div>${rows||'<div class="small">Aucun appareil pour le moment.</div>'}<label class="small" for="devn" style="display:block;margin-top:10px">Nom de cet appareil</label><input id="devn" value="${esc(devName())}" style="width:100%;margin-top:4px"></div>`;
 }
 
+/* ---------- thème ---------- */
+const THEME=()=>lsGet('suivi.theme')||'auto';
+function applyTheme(){const t=THEME(),r=document.documentElement;if(t==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',t);
+  const dark=t==='dark'||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches);
+  const m=document.querySelector('meta[name=theme-color]');if(m)m.content=dark?'#121014':'#FBF6F9'}
+applyTheme();
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
 const VERSION=11;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
@@ -732,6 +761,8 @@ function sheetHTML(){
   <button class="mb" data-mn="import"><span class="t">Importer un fichier</span><span class="s">Tableur (Excel, CSV) ou sauvegarde (.json)</span></button>
   <button class="mb" data-mn="export"><span class="t">Exporter mes données (format .json)</span></button>
   <button class="mb" data-mn="restore"><span class="t">Restaurer une ancienne sauvegarde (${bk.length})</span></button>
+  <div class="thm" role="group" aria-label="Affichage"><span class="small">Affichage</span>${[['auto','Selon le système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div>
+  <button class="mb" data-mn="logout"><span class="t">Se déconnecter</span><span class="s">Le mot de passe sera redemandé</span></button>
   <div class="small" style="text-align:center;margin-top:10px">Version ${VERSION}</div>`;
 }
 function drawSheet(){const el=$('#sheet');if(!el)return;if(!sheetView){el.hidden=true;el.innerHTML='';return}el.hidden=false;el.innerHTML=`<div class="sbg" data-mn="close"></div><div class="sc" role="dialog" aria-modal="true">${sheetHTML()}</div>`}
@@ -749,6 +780,8 @@ document.addEventListener('click',async e=>{
     mmsg('Synchronisation…');
     try{await db.sync();stamp();drawSheet();mmsg('Synchronisé.')}catch(x){mmsg('Synchronisation impossible pour le moment.',1)}
     return}
+  if(a==='logout'){sSet('suivi.pw','');location.reload();return}
+  if(a==='theme'){lsSet('suivi.theme',b.dataset.v);applyTheme();drawSheet();return}
   if(a==='syncon'){doSync();return}
   if(a==='syncoff'){lsSet('suivi.url','');location.reload();return}
   if(a==='resetpw'){lsSet('suivi.h','');sSet('suivi.pw','');location.reload();return}
