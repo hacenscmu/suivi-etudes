@@ -2,14 +2,15 @@
 <html lang="fr"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Chimie Mulhouse</title>
-<meta name="theme-color" content="#FBF6F9">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F6F7"><meta name="theme-color" media="(prefers-color-scheme: dark)" content="#111113"><meta name="color-scheme" content="light dark">
+<style>html{background:#F6F6F7}@media (prefers-color-scheme:dark){html:not([data-theme="light"]){background:#111113}}html[data-theme="dark"]{background:#111113}</style>
 <script>try{var t=localStorage.getItem("suivi.theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
 <link rel="stylesheet" href="style.css"><meta name="application-name" content="Chimie Mulhouse"><meta name="apple-mobile-web-app-title" content="Chimie Mulhouse"></head>
 <body>
 <div class="wrap">
-<header><div class="brand"><img src="logo.png" alt="Chimie Mulhouse" width="40" height="40"><div><h1>Suivi des études</h1><div class="sub" id="today"></div></div></div><button id="menubtn" class="b" type="button" aria-label="Menu">☰</button></header>
+<header><div class="brand"><img src="logo.png" alt="Chimie Mulhouse" width="40" height="40"><div><h1>Suivi des études</h1><div class="sub" id="today"></div></div></div></header>
 <nav id="nav"></nav>
 <div id="status"></div>
 <main id="view"></main>

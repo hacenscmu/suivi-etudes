@@ -44,7 +44,7 @@ const BV_STAT=['Pas payé','Payé','A venir','Non effectué'];
 /* ---------- état ---------- */
 const S={etudes:{},factures:{},temps:{},formation:{},cfg:null};
 let loaded={etudes:false,factures:false,temps:false,formation:false,cfg:false};
-let db=null,userCap=null,canWrite=true,tab=lsGet('suivi.tab')||'dash',mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
+let db=null,userCap=null,canWrite=true,tab=(['dash','etudes','factures','temps','remun','formation','params'].includes(lsGet('suivi.tab'))?lsGet('suivi.tab'):'dash'),mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
 let dirty=false,pendingRender=false,timeoutNote=false,dbErr='';
 const cfg=()=>{const c=S.cfg||{};const d=DEFAULT_CFG;return Object.assign({},d,c,{cot:Object.assign({},d.cot,c.cot),patr:Object.assign({},d.patr,c.patr),cnje:Object.assign({},d.cnje,c.cnje)})};
 const sorted=col=>Object.keys(S[col]).map(id=>Object.assign({id},S[col][id])).sort((a,b)=>(a.ord||0)-(b.ord||0));
@@ -92,10 +92,34 @@ function compute(){
     e.S=ls.length?Math.max(...ls.map(t=>num(t.jeh))):null;
     const cost=ls.reduce((a,t)=>(['A venir','Non effectué'].includes(t.stat)||t.I===null)?a:a+num(t.J)*(1+chom)+t.I*baseJEH*patrTot,0);
     e.P=num(e.montant)?cost/(num(e.montant)/(1+tva)):null;
-    e.alerts=alertsOf(e,c,ls,nums,personEtude,fact);
+    e.alerts=alertsOf(e,c,ls,nums,personEtude,fact).filter(a=>alertOn(a,c));
   });
   return {c,etudes,fact,temps,tva,chom,patrTot,cotTot,baseJEH,personEtude};
 }
+const ALERTS=[
+['retard',/^Retard de/,'Retard de paiement (+ relances)','Facture émise et échéance dépassée.'],
+['arch_reste',/^Archivée mais reste/,'Archivée mais reste à encaisser','Le client doit encore payer.'],
+['arch_solde',/^Archivée sans solde/,'Archivée sans solde encaissé','Le solde n’est pas marqué encaissé.'],
+['arch_bv',/^Archivée mais BV/,'Archivée mais BV non payés','Un intervenant est encore « À payer ».'],
+['enc_sup',/^Encaissé supérieur/,'Encaissé supérieur au montant','Erreur de saisie ou trop-perçu.'],
+['acompte',/^Facturer l’acompte/,'Facturer l’acompte','Convention signée ou en réalisation sans facture.'],
+['echeance',/^Renseigner l’échéance/,'Renseigner l’échéance','Facture émise sans date d’échéance.'],
+['temps',/^Renseigner le temps/,'Renseigner le temps de travail','En réalisation sans ligne de temps.'],
+['jeh_manq',/^Prix de la JEH manquant/,'Prix de la JEH manquant','Lignes de temps mais JEH client vide.'],
+['rem_sup',/^Rémunérations supérieures/,'Rémunérations > montant HT','Les rémunérations dépassent le montant.'],
+['payer_bv',/^Payer les BV/,'Payer les BV','Solde encaissé, intervenants « À payer ».'],
+['archiver',/^Tout est soldé/,'Tout est soldé : archiver','Rien à encaisser, BV payés.'],
+['refusee',/^Étude refusée/,'Étude refusée mais facturée','Refusée avec facture ou encaissement.'],
+['solde_reste',/^Solde encaissé mais/,'Solde encaissé mais reste à encaisser','Montant ou encaissé à corriger.'],
+['solde_fact',/^Solde encaissé \(Factures\)/,'Statut facture à mettre à jour','Paiement « Solde encaissé » dans Factures.'],
+['date',/^Renseigner la date/,'Renseigner la date de création','Étude rattachée à aucun mandat.'],
+['double',/^N° d’étude en double/,'N° d’étude en double','Deux études avec le même numéro.'],
+['cnje_cli',/^CNJE : JEH client/,'CNJE : JEH client hors fourchette','JEH client hors min–max.'],
+['cnje_int',/^CNJE : JEH intervenant/,'CNJE : JEH intervenant trop élevée','Au-dessus du plafond intervenant.'],
+['cnje_fact',/^CNJE : nb de JEH/,'CNJE : JEH facturées non entières','Montant ÷ TVA ÷ JEH non entier.'],
+['cnje_rem',/^CNJE : JEH rémunérées/,'CNJE : JEH rémunérées non entières','Par intervenant sur une étude.'],
+['cnje_diff',/^CNJE : JEH facturées \(/,'CNJE : facturées ≠ rémunérées','Les deux totaux diffèrent.']];
+function alertOn(a,c){if(c.alertesOn===false)return false;const off=c.alertesOff||{};const k=ALERTS.find(x=>x[1].test(a));return !(k&&off[k[0]])}
 function alertsOf(e,c,ls,nums,pe,fact){
   const A=[],st=e.statut,fa=e.facture,ech=dnum(e.echeance),tva=c.tva;
   const L=num(e.L),K=num(e.K),I=num(e.montant);
@@ -244,13 +268,15 @@ const sel=(c,r,f,opts,blank)=>{const v=r[f]||'';const o=opts.slice();if(v&&!o.in
 const delBtn=(c,id)=>`<button class="x" data-del="${c}:${id}" title="Supprimer la ligne" aria-label="Supprimer la ligne">✕</button>`;
 
 /* ---------- vues ---------- */
-const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['factures','Factures'],['temps','Temps de travail'],['remun','Rémunérations'],['formation','Qualité formation'],['params','Paramètres'],['legende','Légende']];
+const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['factures','Factures'],['temps','Temps de travail'],['remun','Rémunérations'],['formation','Qualité formation'],['params','Paramètres']];
 const ICO={
  trend:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
  sign:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>',
  hour:'<path d="M6 3h12M6 21h12"/><path d="M7 3v3a5 5 0 0 0 2 4l3 2-3 2a5 5 0 0 0-2 4v3M17 3v3a5 5 0 0 1-2 4l-3 2 3 2a5 5 0 0 1 2 4v3"/>',
  pie:'<path d="M12 3v9h9"/><path d="M20.5 15A9 9 0 1 1 9 3.5"/>',
  list:'<path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
+ alert:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
+ help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.7M12 17h.01"/>',
  bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>',
  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
  chart:'<path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/>',
@@ -303,7 +329,7 @@ function render(){
   if(!ready){v.innerHTML='<div class="card">Chargement des données…</div>';return}
   const active=document.activeElement,fk=active&&active.dataset&&active.dataset.c?active.dataset.c+'|'+active.dataset.id+'|'+active.dataset.f:null,scrollY=window.scrollY;
   const D=compute();
-  const views={dash:vDash,etudes:vEtudes,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams,legende:vLegende};
+  const views={dash:vDash,etudes:vEtudes,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams};
   const scrolls=[...document.querySelectorAll('.tw')].map(e=>e.scrollLeft);
   v.innerHTML=views[tab](D);
   
@@ -317,7 +343,7 @@ function vDash(D){
   const sel=`<div class="row" style="margin:4px 0 12px"><label for="msel" class="small">Mandat affiché</label><select id="msel">${M.map(m=>`<option${m===mandatSel?' selected':''}>${esc(m)}</option>`).join('')}</select></div>`;
   const n=d.withAlert.length;
   const banner=n===0?`<div class="banner ok">${ic('ok',16)}<span>Tout est à jour : aucune alerte à traiter</span></div>`:`<div class="banner">${ic('warn',16)}<span>${n} étude(s) à traiter · ${d.nbAlerts} alerte(s)</span></div>`;
-  const kpi=(l,v,note,k)=>`<div class="card kpi"><div class="lab">${ic(k,15)}<span>${l}</span></div><div class="val">${v}</div><div class="note">${note}</div></div>`;
+  const kpi=(l,v,note,k)=>`<div class="kpi"><div class="lab">${ic(k,15)}<span>${l}</span></div><div class="val">${v}</div>${note?`<div class="note">${note}</div>`:''}</div>`;
   const vue=[{l:'En cours',v:d.enCours,c:PAL[0]},{l:'Archivées',v:d.archivees,c:'var(--arch)'},{l:'Refusées',v:d.refusees,c:PAL[2]}];
   const det=Object.keys(d.groups).map((k,i)=>({l:k,v:d.groups[k],c:PAL[i%6]}));
   const al=d.withAlert.slice(0,6);
@@ -325,10 +351,10 @@ function vDash(D){
   const alHtml=al.length?`<ul class="al">${al.map(e=>`<li><b>${esc(e.num||'(sans n°)')}</b> · ${esc(e.alerts.join(' · '))}</li>`).join('')}</ul>`:'<div class="small">Rien à signaler.</div>';
   const mf=v=>nf0.format(v);
   return sel+banner+`
-  <div class="grid k3">
-    ${kpi('RECETTE',eur0(d.recette),d.all?'encaissé − dépenses':esc(mandatSel),'trend')}
-    ${kpi('CA SIGNÉ HT',eur0(d.ca),d.all?'dont archivé : '+nf0.format(Math.round(d.archive))+' €':esc(mandatSel),'sign')}
-    ${kpi('À ENCAISSER',eur0(d.reste),d.all?'HT · dont retard '+nf0.format(Math.round(d.retard))+' €':'HT · '+esc(mandatSel),'hour')}
+  <div class="card kpis">
+    ${kpi('RECETTE',eur0(d.recette),d.all?'encaissé − dépenses':'','trend')}
+    ${kpi('CA SIGNÉ HT',eur0(d.ca),d.all?'dont archivé : '+nf0.format(Math.round(d.archive))+' €':'','sign')}
+    ${kpi('À ENCAISSER HT',eur0(d.reste),d.all?'dont retard '+nf0.format(Math.round(d.retard))+' €':'','hour')}
   </div>
   <div class="grid">
     <div class="card"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>
@@ -340,10 +366,6 @@ function vDash(D){
       <div class="stat big"><span>JEH facturées</span><span>${nf3.format(Math.round(d.jehF*1000)/1000)}</span></div>
       <div class="stat big"><span>JEH rémunérées</span><span>${nf3.format(Math.round(d.jehR*1000)/1000)}</span></div>
       <div class="stat"><span>Études signées</span><span>${d.nbSigned}</span></div></div>
-    <div class="card"><h3>${ic('chart')}Chiffre d’affaires net et dépenses</h3><div class="hint">&nbsp;</div>
-      <div class="stat big"><span>Encaissé HT</span><span>${eur0(d.enc)}</span></div>
-      <div class="stat big"><span>Dépenses (coût total des embauches)</span><span>${eur0(d.dep)}</span></div>
-      <div class="small" style="margin-top:6px">${d.enc===0?'Aucun CA encaissé':Math.round(d.dep/d.enc*100)+' % du CA encaissé en dépenses salariales'}</div></div>
     <div class="card"><h3>${ic('euro')}Rémunérations</h3><div class="hint">JEH non payées, regroupées par personne</div>
       <div class="stat"><span>Brut à payer</span><span>${eur(R.T.brut)}</span></div>
       <div class="stat"><span>Cotisations salariales (retenues)</span><span>${eur(R.T.brut-R.T.net)}</span></div>
@@ -353,7 +375,7 @@ function vDash(D){
       <div class="small" style="margin-top:6px">Estimations : taux dans Paramètres, 1 JEH minimum.</div></div>
   </div>
   <div class="two">
-    <div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}</div>
+    <div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>
     <div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>
   </div>`;
 }
@@ -415,19 +437,21 @@ function vRemun(D){
   ${cards||emptyMsg('Personne à payer pour le moment.')}
   <details class="how"><summary>Comment c’est calculé ?</summary><div class="small">Page automatique : rien à saisir. Pour chaque personne, elle regroupe les JEH du journal qui ne sont ni « Payé », ni « A venir », ni « Non effectué », puis calcule brut, net (après cotisations salariales) et coût Junior. En dessous de 1 JEH au total, cotisations et charges sont calculées sur 1 JEH. Passez les lignes d’un BV à « Payé » et la personne repart à zéro.</div></details>`;
 }
+let FSORT=null;
 function vFormation(D){
   const names=persons(D);Object.keys(S.formation).forEach(id=>{const n=S.formation[id].nom;if(n&&!names.includes(n))names.push(n)});
   const open=D.etudes.filter(e=>e.num&&e.statut!=='Archivée'&&e.statut!=='Refusé / sans suite'),closed=D.etudes.filter(e=>e.num&&(e.statut==='Archivée'||e.statut==='Refusé / sans suite'));
   const cols=open.concat(closed);
   const LV=['0 · Non formé','1 · Notions','2 · Autonome avec appui','3 · Autonome','4 · Référent (peut former)'];
   const key=n=>'f_'+n.toLowerCase().replace(/[^a-z0-9]+/g,'_');
-  const head=cols.map(e=>`<th style="${closed.includes(e)?'opacity:.6':''}">${esc(e.num)}</th>`).join('');
+  const lvOf=(n,en)=>{const d=S.formation[key(n)];return d&&d.niveaux&&isNum(d.niveaux[en])?num(d.niveaux[en]):-1};
+  if(FSORT&&cols.some(e=>e.num===FSORT))names.sort((a,b)=>lvOf(b,FSORT)-lvOf(a,FSORT));
+  const head=cols.map(e=>`<th class="fs${FSORT===e.num?' on':''}" data-fsort="${esc(e.num)}" style="${closed.includes(e)?'opacity:.6':''}">${esc(e.num)}${FSORT===e.num?' ▼':''}</th>`).join('');
   const body=names.map(n=>{const doc=S.formation[key(n)]||{niveaux:{}};const vals=cols.map(e=>doc.niveaux&&isNum(doc.niveaux[e.num])?num(doc.niveaux[e.num]):null).filter(v=>v!==null);
     const avg=vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length):null;
-    return `<tr><td style="white-space:nowrap;padding:6px 10px"><b>${esc(n)}</b></td><td class="n" style="min-width:56px">${avg===null?'':(Math.round(avg*10)/10)}</td>${cols.map(e=>{const v=doc.niveaux&&isNum(doc.niveaux[e.num])?num(doc.niveaux[e.num]):'';return `<td><select data-lvl="${esc(n)}" data-etude="${esc(e.num)}" class="${v===''?'':'lv'+v}"><option value=""></option>${[0,1,2,3,4].map(k=>`<option value="${k}"${v===k?' selected':''}>${k}</option>`).join('')}</select></td>`}).join('')}</tr>`}).join('');
+    return `<tr><td style="white-space:nowrap;padding:6px 10px"><b>${esc(n)}</b></td>${cols.map(e=>{const v=doc.niveaux&&isNum(doc.niveaux[e.num])?num(doc.niveaux[e.num]):'';return `<td><select data-lvl="${esc(n)}" data-etude="${esc(e.num)}" class="${v===''?'':'lv'+v}"><option value=""></option>${[0,1,2,3,4].map(k=>`<option value="${k}"${v===k?' selected':''}>${k}</option>`).join('')}</select></td>`}).join('')}</tr>`}).join('');
   return `<h2>Niveau de formation par intervenant et par étude</h2><div class="small">Une ligne par intervenant (les prénoms viennent du Temps de travail), une colonne par étude : les études en cours d’abord, les archivées ensuite. Choisissez le niveau de 0 à 4 dans la case, la couleur suit.</div>
-  <div class="legend" style="margin:10px 0">${LV.map((l,i)=>`<span><span class="sw lv${i}"></span>${esc(l)}</span>`).join('')}</div>
-  <div class="tw"><table class="mx"><thead><tr><th>Intervenant</th><th>Niveau moyen</th>${head}</tr></thead><tbody>${body||'<tr><td class="small" style="padding:14px">Ajoutez d’abord du temps de travail pour faire apparaître les intervenants.</td></tr>'}</tbody></table></div>`;
+  <div class="tw" style="margin-top:10px"><table class="mx"><thead><tr><th>Intervenant</th>${head}</tr></thead><tbody>${body||'<tr><td class="small" style="padding:14px">Ajoutez d’abord du temps de travail pour faire apparaître les intervenants.</td></tr>'}</tbody></table></div>`;
 }
 
 /* ---------- fiche de saisie (par le bas) ---------- */
@@ -455,62 +479,58 @@ function openEdit(col,id,isNew){
 }
 function refreshEdit(){if(!ED)return;const D=compute(),r=edRow(D),s=$('#edsum');if(r&&s)s.innerHTML=edSummary(r,D)}
 function closeEdit(){
+  if(PSEC){PSEC=null;const el=$('#edit');el.hidden=true;el.innerHTML='';render();return}
   if(!ED)return;const {col,id,isNew}=ED,r=S[col]&&S[col][id];
   if(isNew&&r){const blank=col==='etudes'?!r.client&&!r.num&&!r.resume&&!isNum(r.montant):col==='factures'?!r.etude&&!isNum(r.montant):!r.prenom&&!r.etude&&!isNum(r.min);if(blank)del(col,id)}
   ED=null;const el=$('#edit');el.hidden=true;el.innerHTML='';render();
 }
-function cf(label,path,val,pct){return `<label>${label}</label><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}">`}
-function vParams(D){
+function cf(label,path,val,pct,unit){return `<div class="pr"><label>${label}</label><div class="pin"><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}"><span>${pct?'%':(unit||'')}</span></div></div>`}
+function listEd(k,arr,ph){return `<div class="led">${arr.map((v,i)=>`<div class="li"><input data-li="${k}" data-i="${i}" value="${esc(v)}"><button class="x" data-lidel="${k}:${i}" aria-label="Supprimer">✕</button></div>`).join('')}</div><button class="b ghost addl" data-liadd="${k}">+ ${ph}</button>`}
+const PIC={
+ sync:'<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>',
+ imp:'<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/>',
+ exp:'<path d="M12 15V3M7 8l5-5 5 5"/><path d="M4 17v3h16v-3"/>',
+ rest:'<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/>',
+ thm:'<path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/>',
+ mand:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+ stat:'<path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
+ fact:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+ bell:'<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>',
+ cnje:'<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M8.5 12l2.5 2.5 4.5-5"/>',
+ cot:'<circle cx="12" cy="12" r="9"/><path d="M15 9.2a3.6 3.6 0 1 0 0 5.6M8 11h5.5M8 13h5.5"/>',
+ dev:'<rect x="6" y="2.5" width="12" height="19" rx="2.5"/><path d="M11 18.5h2"/>'};
+const pic=k=>`<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PIC[k]}</svg>`;
+function paramSecs(D){
   const c=D.c;const sumP=o=>Object.values(o).reduce((a,v)=>a+num(v),0);
-  const mand=c.mandats.map((m,i)=>`<div class="row" style="margin-bottom:6px"><input data-mand="${i}" data-k="nom" value="${esc(m.nom)}" style="flex:1 1 140px" placeholder="Nom du mandat"><input type="date" data-mand="${i}" data-k="debut" value="${esc(m.debut)}"><input type="date" data-mand="${i}" data-k="fin" value="${esc(m.fin)}"><button class="x" data-delmand="${i}" aria-label="Supprimer le mandat">✕</button></div>`).join('');
-  return `<h2>Paramètres</h2><div class="small">Modifiez les valeurs : tout se recalcule aussitôt. Les listes se saisissent à raison d’une valeur par ligne.</div>
-  ${devCard()}<div class="two" style="margin-top:12px">
-   <div class="card"><h3>Statut des études</h3><textarea data-list="statuts" rows="10" style="width:100%">${esc(c.statuts.join('\n'))}</textarea><div class="small">Les calculs reconnaissent les noms par défaut (Faisabilité, Devis signé, Archivée…).</div></div>
-   <div class="card"><h3>Statut de la facture</h3><textarea data-list="factures" rows="10" style="width:100%">${esc(c.factures.join('\n'))}</textarea></div>
-   <div class="card"><h3>Mandats</h3>${mand||'<div class="small">Aucun mandat : ajoutez-en un pour rattacher les dates.</div>'}<div class="plus"><button class="b ghost" data-addmand="1">+ Ajouter un mandat</button></div></div>
-   <div class="card"><h3>Délais d’alerte et TVA</h3><div class="cfg">${cf('1re relance par mail : à partir de (jours de retard)','relance1',c.relance1)}${cf('2e relance : à partir de (jours de retard)','relance2',c.relance2)}${cf('Taux de TVA (montants saisis en TTC), %','tva',c.tva,true)}</div></div>
-   <div class="card"><h3>CNJE</h3><div class="cfg"><label>Date d’entrée en vigueur des règles (vide = aucune règle)</label><input type="date" data-cfg="cnje.date" value="${esc(c.cnje.date)}" style="text-align:left">${cf('JEH client minimum (€ HT)','cnje.min',c.cnje.min)}${cf('JEH client maximum (€ HT)','cnje.max',c.cnje.max)}${cf('JEH intervenant maximum (€ HT)','cnje.maxInt',c.cnje.maxInt)}</div><div class="small" style="margin-top:8px">Une étude suit les règles CNJE si elle a été créée à partir de cette date, ou si elle n’est pas archivée (en cours). Sans date, aucune règle n’est appliquée.</div></div>
-   <div class="card"><h3>Calcul des cotisations</h3><div class="cfg">${cf('SMIC horaire brut (€) : la base d’une JEH = 4 × SMIC','smic',c.smic)}</div>
-    <div class="small" style="margin:10px 0 4px"><b>Cotisations salariales (part étudiant), %</b></div><div class="cfg">${Object.keys(COT_LAB).map(k=>cf(COT_LAB[k],'cot.'+k,c.cot[k],true)).join('')}<label><b>Total</b></label><b style="text-align:right">${nf2.format(sumP(c.cot)*100)} %</b></div>
-    <div class="small" style="margin:10px 0 4px"><b>Charges patronales, %</b></div><div class="cfg">${Object.keys(PATR_LAB).map(k=>cf(PATR_LAB[k],'patr.'+k,c.patr[k],true)).join('')}${cf('Assurance chômage part Junior (sur la rétribution brute)','chomage',c.chomage,true)}<label><b>Total charges patronales</b></label><b style="text-align:right">${nf2.format(sumP(c.patr)*100)} %</b></div></div>
-  </div>`;
+  const tot=(l,v)=>`<div class="pr tot"><label>${l}</label><b>${nf2.format(v*100)} %</b></div>`;
+  const cur=c.mandats.find(m=>{const a=dnum(m.debut),b=dnum(m.fin);return a!==null&&b!==null&&TODAY>=a&&TODAY<=b});
+  const mand=c.mandats.map((m,i)=>`<div class="mand"><div class="li"><input data-mand="${i}" data-k="nom" value="${esc(m.nom)}" placeholder="Nom du mandat"><button class="x" data-delmand="${i}" aria-label="Supprimer le mandat">✕</button></div><div class="f2">${fld('Début',`<input type="date" data-mand="${i}" data-k="debut" value="${esc(m.debut)}">`)}${fld('Fin',`<input type="date" data-mand="${i}" data-k="fin" value="${esc(m.fin)}">`)}</div></div>`).join('');
+  const nd=Object.keys(S.devs||{}).length;
+  return [
+   {k:'mand',t:'Mandats',s:c.mandats.length+' mandat'+(c.mandats.length>1?'s':'')+(cur?' · actuel : '+cur.nom:''),b:()=>`${mand||'<div class="small">Aucun mandat.</div>'}<button class="b ghost addl" data-addmand="1">+ Ajouter un mandat</button>`},
+   {k:'stat',t:'Statuts des études',s:c.statuts.length+' statuts',b:()=>listEd('statuts',c.statuts,'Ajouter un statut')},
+   {k:'fact',t:'Statuts de facture',s:c.factures.length+' statuts',b:()=>listEd('factures',c.factures,'Ajouter un statut')},
+   {k:'bell',t:'Relances et TVA',s:'relances à '+c.relance1+' et '+c.relance2+' j · TVA '+nf2.format(c.tva*100).replace(/,00$/,'')+' %',b:()=>cf('1re relance par mail','relance1',c.relance1,false,'jours')+cf('2e relance','relance2',c.relance2,false,'jours')+cf('TVA','tva',c.tva,true)},
+   {k:'cnje',t:'Règles CNJE',s:c.cnje.date?'JEH '+c.cnje.min+'–'+c.cnje.max+' € · depuis le '+fdate(dnum(c.cnje.date)):'Aucune règle appliquée',b:()=>fld('Règles en vigueur depuis le',`<input type="date" data-cfg="cnje.date" value="${esc(c.cnje.date)}">`)+cf('JEH client minimum HT','cnje.min',c.cnje.min,false,'€')+cf('JEH client maximum HT','cnje.max',c.cnje.max,false,'€')+cf('JEH intervenant maximum HT','cnje.maxInt',c.cnje.maxInt,false,'€')},
+   {k:'cot',t:'Cotisations',s:'salariales '+nf2.format(sumP(c.cot)*100)+' % · patronales '+nf2.format(sumP(c.patr)*100)+' %',b:()=>cf('SMIC horaire brut','smic',c.smic,false,'€')+`<div class="sh">Cotisations salariales</div>`+Object.keys(COT_LAB).map(k=>cf(COT_LAB[k],'cot.'+k,c.cot[k],true)).join('')+tot('Total',sumP(c.cot))+`<div class="sh">Charges patronales</div>`+Object.keys(PATR_LAB).map(k=>cf(PATR_LAB[k],'patr.'+k,c.patr[k],true)).join('')+cf('Chômage part Junior','chomage',c.chomage,true)+tot('Total',sumP(c.patr))},
+   {k:'alert',t:'Alertes',s:c.alertesOn===false?'Désactivées':(ALERTS.length-ALERTS.filter(x=>(c.alertesOff||{})[x[0]]).length)+' activées sur '+ALERTS.length,b:()=>`<label class="tg big"><span><b>Activer les alertes</b></span><input type="checkbox" data-alall="1" ${c.alertesOn===false?'':'checked'}><i></i></label><div class="${c.alertesOn===false?'dim':''}">${['Toutes les études','CNJE'].map(g=>`<div class="sh">${g}</div>`+ALERTS.filter(x=>(g==='CNJE')===x[0].startsWith('cnje')).map(x=>`<label class="tg"><span><b>${esc(x[2])}</b><small>${esc(x[3])}</small></span><input type="checkbox" data-alk="${x[0]}" ${(c.alertesOff||{})[x[0]]?'':'checked'} ${c.alertesOn===false?'disabled':''}><i></i></label>`).join('')).join('')}</div>`},
+   {k:'help',t:'Aide',s:'Comment ça marche, BV',b:()=>`<ul class="hlp"><li>Le <b>mandat</b> se déduit de la date (rubrique Mandats).</li><li>L’<b>encaissé</b> d’une étude = somme de ses paiements dans Factures.</li><li><b>JEH rémunérée</b> = minutes ÷ 480 ÷ nombre de personnes.</li><li>Une ligne de temps « Payé », « A venir » ou « Non effectué » n’est jamais à payer.</li><li>Tout est enregistré automatiquement, sur tous vos appareils.</li></ul><div class="sh">BV (bulletins de versement)</div><ul class="hlp"><li><b>À payer</b> : au moins une ligne à verser.</li><li><b>À venir</b> : prévu, pas encore dû.</li><li><b>Payé</b> : toutes les lignes sont payées.</li><li><b>Non effectué</b> : le travail n’a pas eu lieu.</li></ul>`},
+   {k:'dev',t:'Appareils connectés',s:lsGet('suivi.url')?(nd+' appareil'+(nd>1?'s':'')):'Synchronisation non activée',b:()=>devCard().replace(/^<div class="card" style="margin-top:12px"><h3>Appareils connectés<\/h3>/,'<div>')}
+  ];
 }
-const CAT=[
-['CNJE','CNJE : JEH client hors de 80–450 €','Étude en mode CNJE dont la JEH client HT sort de la fourchette des Paramètres.'],
-['CNJE','CNJE : JEH intervenant supérieure à 300 €','Une ligne de temps dépasse le plafond de JEH intervenant HT.'],
-['CNJE','CNJE : nb de JEH facturées non entier','Montant ÷ (1 + TVA) ÷ prix de la JEH n’est pas un entier.'],
-['CNJE','CNJE : JEH rémunérées non entières (par intervenant)','Le total des JEH rémunérées d’un intervenant sur une étude n’est pas un entier ; le message donne les prénoms.'],
-['CNJE','CNJE : JEH facturées ≠ JEH rémunérées','Études « Convention étudiant avant réalisation », « En réalisation » ou « Archivée » dont les JEH facturées et rémunérées diffèrent.'],
-['Toutes','Retard de N j (+ 1re relance par mail / 2e relance)','Acompte, intermédiaire ou solde facturé et échéance dépassée.'],
-['Toutes','Archivée mais reste à encaisser','Étude archivée alors que le client doit encore payer.'],
-['Toutes','Archivée sans solde encaissé','Étude archivée alors que le solde n’est pas marqué encaissé.'],
-['Toutes','Archivée mais BV non payés','Étude archivée alors qu’un intervenant est encore « À payer ».'],
-['Toutes','Encaissé supérieur au montant','Erreur de saisie ou trop-perçu à rembourser.'],
-['Toutes','Facturer l’acompte','Convention signée, convention étudiant avant réalisation ou étude en réalisation sans statut de facture.'],
-['Toutes','Renseigner l’échéance de paiement','Facture émise sans date d’échéance.'],
-['Toutes','Renseigner le temps de travail','Étude en réalisation sans aucune ligne de temps.'],
-['Toutes','Prix de la JEH manquant','Des lignes de temps existent mais la JEH client HT est vide (écrire 0 si c’est voulu).'],
-['Toutes','Rémunérations supérieures au montant HT','Les rémunérations dépassent le montant de l’étude.'],
-['Toutes','Payer les BV','Solde encaissé, intervenants encore « À payer ».'],
-['Toutes','Tout est soldé : archiver l’étude','Solde encaissé, BV payés, rien à encaisser.'],
-['Toutes','Étude refusée mais facturée','Statut refusé avec une facture ou un encaissement.'],
-['Toutes','Solde encaissé mais reste à encaisser','Montant ou encaissé à corriger.'],
-['Toutes','Solde encaissé (Factures) mais statut Facture différent','Un paiement « Solde encaissé » existe dans Factures alors que le suivi n’est pas sur « Solde encaissé ».'],
-['Toutes','Renseigner la date de création','L’étude n’est rattachée à aucun mandat.'],
-['Toutes','N° d’étude en double','Deux lignes avec le même numéro.']];
-function vLegende(D){
-  return `<h2>Légende</h2><div class="two" style="margin-top:8px">
-  <div class="card"><h3>Comment ça marche</h3><ul style="margin:6px 0 0;padding-left:18px">
-   <li>Cases claires : à saisir. Cases teintées : calculées automatiquement.</li>
-   <li>Le <b>mandat</b> se déduit de la date (Paramètres).</li>
-   <li>L’<b>encaissé</b> d’une étude est la somme de ses paiements dans l’onglet Factures.</li>
-   <li>La <b>JEH rémunérée</b> d’une ligne de temps = minutes ÷ 480 ÷ nombre de personnes.</li>
-   <li>Une ligne de temps « Payé », « A venir » ou « Non effectué » n’est jamais à payer.</li>
-   <li>Tout est enregistré automatiquement, sur tous vos appareils.</li></ul></div>
-  <div class="card"><h3>BV (bulletins de versement)</h3><ul style="margin:6px 0 0;padding-left:18px"><li><b>À payer</b> : au moins une ligne à verser.</li><li><b>À venir</b> : prévu, pas encore dû.</li><li><b>Payé</b> : toutes les lignes sont payées.</li><li><b>Non effectué</b> : le travail n’a pas eu lieu.</li></ul></div></div>
-  <h2 style="margin-top:18px">Catalogue des alertes</h2><div class="tw"><table><thead><tr><th>Type</th><th>Alerte</th><th>Quand elle s’affiche</th></tr></thead><tbody>${CAT.map(r=>`<tr><td style="padding:6px 8px">${r[0]}</td><td style="padding:6px 8px"><b>${esc(r[1])}</b></td><td style="padding:6px 8px">${esc(r[2])}</td></tr>`).join('')}</tbody></table></div>`;
+function vParams(D){
+  const u=lsGet('suivi.url'),last=fmtLast(),nb=getBk().length;
+  const row=(k,t,sub,attr)=>`<button class="srow" ${attr}><span class="sic">${pic(k)}</span><span class="stx"><b>${t}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`;
+  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
+  return `<h2>Paramètres</h2>${top}<div class="sh" style="margin:16px 2px 6px">Réglages des calculs</div><div class="card slist">${paramSecs(D).map(x=>`<button class="srow" data-param="${x.k}"><span class="sic">${pic(x.k)}</span><span class="stx"><b>${x.t}</b><small>${esc(x.s)}</small></span><span class="chev">›</span></button>`).join('')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
 }
-
+let PSEC=null;
+function openParam(k){PSEC=k;ED=null;drawParam()}
+function drawParam(){
+  const x=paramSecs(compute()).find(z=>z.k===PSEC);if(!x)return;const el=$('#edit'),sc=el.querySelector('.sc'),y=sc?sc.scrollTop:0;
+  el.innerHTML=`<div class="sbg" data-ed="close"></div><div class="sc prm"><div class="grip"></div><div class="shead"><h2>${x.t}</h2><button class="mx" type="button" data-ed="close" aria-label="Fermer">✕</button></div>${x.b()}<button class="mb solid" type="button" data-ed="close" style="margin-top:16px">Terminé</button></div>`;
+  el.hidden=false;const n=el.querySelector('.sc');if(n)n.scrollTop=y;
+}
 /* ---------- événements ---------- */
 function setPath(o,p,v){const k=p.split('.');let t=o;for(let i=0;i<k.length-1;i++){t[k[i]]=t[k[i]]||{};t=t[k[i]]}t[k[k.length-1]]=v}
 function ensureCfg(){if(!S.cfg)S.cfg=JSON.parse(JSON.stringify(DEFAULT_CFG));S.cfg.cot=Object.assign({},DEFAULT_CFG.cot,S.cfg.cot);S.cfg.patr=Object.assign({},DEFAULT_CFG.patr,S.cfg.patr);S.cfg.cnje=Object.assign({},DEFAULT_CFG.cnje,S.cfg.cnje);if(!S.cfg.mandats)S.cfg.mandats=[];return S.cfg}
@@ -527,25 +547,31 @@ document.addEventListener('change',e=>{
     const doc=S.formation[k]||(S.formation[k]={nom:n,niveaux:{}});doc.nom=n;doc.niveaux=doc.niveaux||{};
     if(t.value==='')delete doc.niveaux[t.dataset.etude];else doc.niveaux[t.dataset.etude]=Number(t.value);
     save('formation/'+k,doc);render();
+  }else if(t.dataset.alall||t.dataset.alk){
+    const c=ensureCfg();if(t.dataset.alall)c.alertesOn=t.checked;else{c.alertesOff=c.alertesOff||{};if(t.checked)delete c.alertesOff[t.dataset.alk];else c.alertesOff[t.dataset.alk]=true}saveCfg();render();if(PSEC)drawParam();
   }else if(t.dataset.cfg){
     const c=ensureCfg();let v=t.type==='date'?t.value:(t.value===''?null:Number(t.value));
     if(t.dataset.pct&&v!==null)v=v/100;
-    setPath(c,t.dataset.cfg,v===null?0:v);saveCfg();render();
+    setPath(c,t.dataset.cfg,v===null?0:v);saveCfg();render();if(PSEC==='cot'){const T=document.querySelectorAll('#edit .pr.tot b'),sp=o=>Object.values(o).reduce((a,x)=>a+num(x),0);if(T[0])T[0].textContent=nf2.format(sp(c.cot)*100)+' %';if(T[1])T[1].textContent=nf2.format(sp(c.patr)*100)+' %'}
   }else if(t.dataset.list){
     const c=ensureCfg();c[t.dataset.list]=t.value.split('\n').map(s=>s.trim()).filter(Boolean);saveCfg();render();
+  }else if(t.dataset.li){
+    const c=ensureCfg(),k=t.dataset.li,v=t.value.trim();if(v)c[k][+t.dataset.i]=v;else c[k].splice(+t.dataset.i,1);saveCfg();render();if(PSEC&&!v)drawParam();
   }else if(t.dataset.mand!==undefined){
     const c=ensureCfg();c.mandats[+t.dataset.mand][t.dataset.k]=t.value;saveCfg();render();
   }
 });
 document.addEventListener('click',e=>{const x=e.target.closest('[data-ed]');if(x&&x.dataset.ed==='close'){closeEdit();return}});
 document.addEventListener('input',e=>{const t=e.target;if(t.id==='q'){FLT[t.dataset.q].q=t.value;const l=$('#lst');if(l)l.innerHTML=({etudes:listEtudes,factures:listFact,temps:listTemps})[t.dataset.q](compute())}});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ED)closeEdit()});
+document.addEventListener('click',e=>{const h=e.target.closest('[data-fsort]');if(h){FSORT=FSORT===h.dataset.fsort?null:h.dataset.fsort;render()}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(ED||PSEC))closeEdit()});
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.eye){const i=$('#cp'),show=i.type==='password';i.type=show?'text':'password';b.setAttribute('aria-pressed',show);b.classList.toggle('on',show);b.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');return}
   if(b.dataset.reconnect){sSet('suivi.pw','');location.reload();return}
   if(b.dataset.syncon){doSync();return}
   if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
+  if(b.dataset.param){openParam(b.dataset.param);return}
   if(b.dataset.edit){const [c,i]=b.dataset.edit.split(':');openEdit(c,i,false);return}
   if(b.dataset.chip){const [k,v]=b.dataset.chip.split(':');FLT[k].s=v;render();return}
   if(b.dataset.eddel){if(b.dataset.arm){const {col,id}=ED;ED.isNew=false;del(col,id);closeEdit()}else{b.dataset.arm='1';b.textContent='Sûr ? Appuyez encore pour supprimer';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='Supprimer'}},3000)}return}
@@ -558,8 +584,10 @@ document.addEventListener('click',e=>{
     if(a==='temps')nid=addRow('temps',{date:dstr(TODAY),prenom:'',etude:'',note:'',min:null,nb:1,jeh:null,statut:'Pas payé'});
     if(nid)openEdit(a,nid,true);
     return}
-  if(b.dataset.addmand){const c=ensureCfg();c.mandats.push({nom:'Nouveau mandat',debut:'',fin:''});saveCfg();render();return}
-  if(b.dataset.delmand!==undefined){if(b.dataset.arm){const c=ensureCfg();c.mandats.splice(+b.dataset.delmand,1);saveCfg();render()}else{b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000)}return}
+  if(b.dataset.liadd){const c=ensureCfg();c[b.dataset.liadd].push('Nouveau statut');saveCfg();render();if(PSEC)drawParam();const l=document.querySelectorAll(`[data-li="${b.dataset.liadd}"]`);const x=l[l.length-1];if(x){x.focus();x.select()}return}
+  if(b.dataset.lidel){const [k,i]=b.dataset.lidel.split(':');if(b.dataset.arm){const c=ensureCfg();c[k].splice(+i,1);saveCfg();render();if(PSEC)drawParam()}else{b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000)}return}
+  if(b.dataset.addmand){const c=ensureCfg();c.mandats.push({nom:'Nouveau mandat',debut:'',fin:''});saveCfg();render();if(PSEC)drawParam();return}
+  if(b.dataset.delmand!==undefined){if(b.dataset.arm){const c=ensureCfg();c.mandats.splice(+b.dataset.delmand,1);saveCfg();render();if(PSEC)drawParam()}else{b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000)}return}
   if(b.dataset.del){
     if(b.dataset.arm){const [col,id]=b.dataset.del.split(':');del(col,id);render()}
     else{b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000)}
@@ -644,8 +672,10 @@ function devCard(){
 const THEME=()=>lsGet('suivi.theme')||'auto';
 function applyTheme(){const t=THEME(),r=document.documentElement;if(t==='auto')r.removeAttribute('data-theme');else r.setAttribute('data-theme',t);
   const dark=t==='dark'||(t==='auto'&&window.matchMedia&&matchMedia('(prefers-color-scheme:dark)').matches);
-  const m=document.querySelector('meta[name=theme-color]');if(m)m.content=dark?'#121014':'#FBF6F9'}
+  document.querySelectorAll('meta[name=theme-color]').forEach(m=>{m.removeAttribute('media');m.content=dark?'#111113':'#F6F6F7'})}
 applyTheme();
+try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
 const VERSION=11;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
@@ -793,16 +823,12 @@ function sheetHTML(){
   const u=lsGet('suivi.url'),last=fmtLast(),bk=getBk();
   const back='<button class="mb ghost" data-mn="home">‹ Retour</button>';
   if(sheetView==='addr')return `<h2>Adresse du script Google</h2><div class="small" style="margin-bottom:10px">À saisir une seule fois : adresse de l’application Web de votre script (elle finit par /exec). Vos données actuelles seront envoyées dans votre Drive si celui-ci est vide.</div><input id="syu" type="url" value="${esc(u||'')}" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="mb solid" data-mn="syncon">Enregistrer et synchroniser</button>${u?'<button class="mb" data-mn="syncoff">Désactiver sur cet appareil</button>':''}${back}`;
-  if(sheetView==='import')return `<h2>Importer un fichier</h2><div class="small" style="margin-bottom:10px">Fichier modèle Excel (.xlsx), tableau .csv, ou sauvegarde .json exportée depuis l’appli.</div><input type="file" id="imf" accept=".xlsx,.csv,.txt,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="width:100%"><div class="msg" id="imm" hidden></div><div id="imb"></div>${back}`;
-  if(sheetView==='restore')return `<h2>Restaurer une sauvegarde</h2><div class="small" style="margin-bottom:10px">Les 6 dernières sauvegardes automatiques de cet appareil. Restaurer remplace toutes les données actuelles (une sauvegarde de l’état actuel est faite avant).</div>${bk.length?bk.map((b,i)=>`<button class="mb" data-mn="rest" data-i="${i}"><span class="t">${esc(new Date(b.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+' à '+new Date(b.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))}</span><span class="s">${esc(countData(b.d))}</span></button>`).join(''):'<div class="small">Aucune sauvegarde pour le moment : elles se créent toutes seules.</div>'}${back}`;
-  return `<div class="shead"><h2>Menu</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
+  if(sheetView==='import')return `<h2>Importer un fichier</h2><div class="small" style="margin-bottom:10px">Fichier modèle Excel (.xlsx), tableau .csv, ou sauvegarde .json exportée depuis l’appli.</div><input type="file" id="imf" accept=".xlsx,.csv,.txt,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="width:100%"><div class="msg" id="imm" hidden></div><div id="imb"></div><button class="mb ghost" data-mn="close">Fermer</button>`;
+  if(sheetView==='restore')return `<h2>Restaurer une sauvegarde</h2><div class="small" style="margin-bottom:10px">Les 6 dernières sauvegardes automatiques de cet appareil. Restaurer remplace toutes les données actuelles (une sauvegarde de l’état actuel est faite avant).</div>${bk.length?bk.map((b,i)=>`<button class="mb" data-mn="rest" data-i="${i}"><span class="t">${esc(new Date(b.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+' à '+new Date(b.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))}</span><span class="s">${esc(countData(b.d))}</span></button>`).join(''):'<div class="small">Aucune sauvegarde pour le moment : elles se créent toutes seules.</div>'}<button class="mb ghost" data-mn="close">Fermer</button>`;
+  return `<div class="shead"><h2>Synchronisation</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
   <div class="mrow"><button class="mb" data-mn="sync"><span class="t">Synchroniser avec mon Drive</span><span class="s">${u?(last?'Dernière sauvegarde : '+esc(last):'Pas encore synchronisé'):'Non configuré : appuyez sur le crayon'}</span></button><button class="mb sq" data-mn="addr" aria-label="Modifier l’adresse du script"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5l4 4L8 20l-5 1 1-5z"/><path d="M13 21h8"/></svg></button></div>
   <div class="msg" id="mm" hidden></div>
-  <button class="mb" data-mn="import"><span class="t">Importer un fichier</span><span class="s">Tableur (Excel, CSV) ou sauvegarde (.json)</span></button>
-  <button class="mb" data-mn="export"><span class="t">Exporter mes données (format .json)</span></button>
-  <button class="mb" data-mn="restore"><span class="t">Restaurer une ancienne sauvegarde (${bk.length})</span></button>
-  <div class="thm" role="group" aria-label="Affichage"><span class="small">Affichage</span>${[['auto','Selon le système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div>
-  <div class="small" style="text-align:center;margin-top:10px">Version ${VERSION}</div>`;
+`;
 }
 function drawSheet(){const el=$('#sheet');if(!el)return;if(!sheetView){el.hidden=true;el.innerHTML='';return}el.hidden=false;el.innerHTML=`<div class="sbg" data-mn="close"></div><div class="sc" role="dialog" aria-modal="true">${sheetHTML()}</div>`}
 window.sheetRefresh=()=>{if(sheetView==='home')drawSheet()};
@@ -820,7 +846,7 @@ document.addEventListener('click',async e=>{
     try{await db.sync();stamp();drawSheet();mmsg('Synchronisé.')}catch(x){mmsg('Synchronisation impossible pour le moment.',1)}
     return}
   if(a==='logout'){sSet('suivi.pw','');location.reload();return}
-  if(a==='theme'){lsSet('suivi.theme',b.dataset.v);applyTheme();drawSheet();return}
+  if(a==='theme'){lsSet('suivi.theme',b.dataset.v);applyTheme();render();return}
   if(a==='syncon'){doSync();return}
   if(a==='syncoff'){lsSet('suivi.url','');location.reload();return}
   if(a==='export'){
@@ -854,7 +880,6 @@ document.addEventListener('change',async e=>{
     }
   }catch(x){imp=null;say(x.message||'Lecture impossible.',1)}
 });
-$('#menubtn')&&$('#menubtn').addEventListener('click',()=>openSheet('home'));
 
 function afterSnap(){if(dirty){pendingRender=true;return}render()}
 document.addEventListener('focusout',()=>{if(pendingRender&&!dirty){pendingRender=false;setTimeout(render,0)}});
