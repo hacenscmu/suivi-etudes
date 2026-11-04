@@ -355,8 +355,8 @@ function vDash(D){
   const n=d.withAlert.length;
   const banner=n===0?`<div class="banner ok">${ic('ok',16)}<span>Tout est à jour : aucune alerte à traiter</span></div>`:`<div class="banner">${ic('warn',16)}<span>${n} étude(s) à traiter · ${d.nbAlerts} alerte(s)</span></div>`;
   const kpi=(l,v,note,k)=>`<div class="kpi"><div class="lab">${ic(k,15)}<span>${l}</span></div><div class="val">${v}</div>${note?`<div class="note">${note}</div>`:''}</div>`;
-  const vue=[{l:'En cours',v:d.enCours,c:PAL[0]},{l:'Archivées',v:d.archivees,c:'var(--arch)'},{l:'Refusées',v:d.refusees,c:PAL[2]}];
-  const det=Object.keys(d.groups).map((k,i)=>({l:k,v:d.groups[k],c:PAL[i%6]}));
+  const vue=[{l:'En cours',v:d.enCours,c:'var(--acc)'},{l:'Archivées',v:d.archivees,c:'var(--arch)'},{l:'Refusées',v:d.refusees,c:PAL[2]}];
+  const det=Object.keys(d.groups).map((k,i)=>({l:k,v:d.groups[k],c:'var(--s'+(i+1)+')'}));
   const al=d.withAlert.slice(0,6);
   const R=remun(D);
   const alHtml=al.length?`<ul class="al">${al.map(e=>`<li><b>${esc(e.num||'(sans n°)')}</b> · ${esc(e.alerts.join(' · '))}</li>`).join('')}</ul>`:'<div class="small">Rien à signaler.</div>';
@@ -371,11 +371,10 @@ function vDash(D){
   </div>`,
    vue:`<div class="card"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>`,
    det:`<div class="card"><h3>${ic('list')}Détail des études en cours</h3><div class="hint">Nombre d’études par statut</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>`,
-   alert:`<div class="card"><h3>${ic('bell')}Alertes à traiter</h3><div class="hint">${n>6?'6 premières sur '+n+' · ':''}Détail : onglet Suivi des études</div>${alHtml}</div>`,
+   alert:n?`<div class="card alc"><h3>${ic('bell')}Alertes à traiter<span class="cnt">${d.nbAlerts}</span></h3>${al.map(e=>`<button class="ali" data-edit="etudes:${e.id}"><span class="aln"><b>${esc(e.num||'(sans n°)')}</b><small>${esc(e.client||'')}</small></span><span class="alx">${e.alerts.map(a=>`<span>${ic('warn',13)}${esc(a)}</span>`).join('')}</span><span class="chev">›</span></button>`).join('')}${n>6?`<button class="b ghost addl" data-goalerts="1">Voir les ${n} études</button>`:''}</div>`:`<div class="card alc ok"><h3>${ic('ok')}Alertes à traiter</h3><div class="small">Rien à signaler.</div></div>`,
    jeh:`<div class="card"><h3>${ic('clock')}Temps de travail (JEH)</h3><div class="hint">${d.nbSigned} étude${d.nbSigned>1?'s':''} signée${d.nbSigned>1?'s':''}</div>
       <div class="hb hf"><div class="hbl"><span>Facturées</span><b>${nf3.format(Math.round(d.jehF*1000)/1000)}</b></div><div class="hbt"><i style="width:${jmx?Math.round(d.jehF/jmx*100):0}%"></i></div></div>
-      <div class="hb"><div class="hbl"><span>Rémunérées</span><b>${nf3.format(Math.round(d.jehR*1000)/1000)}</b></div><div class="hbt alt"><i style="width:${jmx?Math.round(d.jehR/jmx*100):0}%"></i></div></div>
-      <div class="jgap ${Math.abs(jgap)<0.005?'ok':'warn'}">${Math.abs(jgap)<0.005?ic('ok',15)+' Facturées = rémunérées':ic('warn',15)+' Écart : '+(jgap>0?'+':'')+nf3.format(Math.round(jgap*1000)/1000)+' JEH '+(jgap>0?'rémunérées en plus':'non rémunérées')}</div></div>`,
+      <div class="hb"><div class="hbl"><span>Rémunérées</span><b>${nf3.format(Math.round(d.jehR*1000)/1000)}</b></div><div class="hbt alt"><i style="width:${jmx?Math.round(d.jehR/jmx*100):0}%"></i></div></div></div>`,
    remun:`<div class="card"><h3>${ic('euro')}Rémunérations</h3><div class="hint">JEH non payées, regroupées par personne</div>
       <div class="stat"><span>Brut à payer</span><span>${eur(R.T.brut)}</span></div>
       <div class="stat"><span>Cotisations salariales (retenues)</span><span>${eur(R.T.brut-R.T.net)}</span></div>
@@ -390,7 +389,8 @@ function vDash(D){
 }
 /* ---------- listes en cartes ---------- */
 const FLT={etudes:{q:'',s:'all'},factures:{q:''},temps:{q:'',s:'all'}};
-const stCls=s=>s==='En réalisation'?'on':s==='Archivée'?'arch':s==='Refusé / sans suite'?'ref':SIGNED.includes(s)?'sig':'dev';
+const ST_N={'Faisabilité':1,'Devis envoyé':2,'Devis signé':3,'Convention envoyée':4,'Convention signée':5,'Convention étudiant avant réalisation':5,'En réalisation':6};
+const stCls=s=>s==='Archivée'?'arch':s==='Refusé / sans suite'?'ref':ST_N[s]?'s'+ST_N[s]:'dev';
 const bvCls=s=>s==='Pas payé'?'on':s==='Payé'?'arch':s==='A venir'?'dev':'ref';
 const pill=(t,c)=>t?`<span class="pill ${c||''}">${esc(t)}</span>`:'';
 const sd=d=>{if(d===null||d===undefined)return '—';const x=new Date(d*864e5);return x.getUTCDate()+' '+MOIS[x.getUTCMonth()]+' '+x.getUTCFullYear()};
@@ -588,6 +588,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
   if(b.dataset.param){openParam(b.dataset.param);return}
   if(b.dataset.dashed){openParam('dash');return}
+  if(b.dataset.goalerts){FLT.etudes.s='alert';tab='etudes';lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.edit){const [c,i]=b.dataset.edit.split(':');openEdit(c,i,false);return}
   if(b.dataset.chip){const [k,v]=b.dataset.chip.split(':');FLT[k].s=v;render();return}
   if(b.dataset.eddel){if(b.dataset.arm){const {col,id}=ED;ED.isNew=false;del(col,id);closeEdit()}else{b.dataset.arm='1';b.textContent='Sûr ? Appuyez encore pour supprimer';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='Supprimer'}},3000)}return}
