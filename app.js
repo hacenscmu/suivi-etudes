@@ -59,7 +59,7 @@ function del(col,id){delete S[col][id];if(db){const p=col+'/'+id;queue[p]=(queue
 function saveRow(col,id){save(col+'/'+id,S[col][id])}
 function saveCfg(){save('config/main',S.cfg||{})}
 function newId(p){return p+Date.now().toString(36)+Math.random().toString(36).slice(2,5)}
-function addRow(col,defaults){const id=newId(col[0]);S[col][id]=Object.assign({ord:Date.now()},defaults);saveRow(col,id);render()}
+function addRow(col,defaults){const id=newId(col[0]);S[col][id]=Object.assign({ord:Date.now()},defaults);saveRow(col,id);render();return id}
 
 /* ---------- calculs ---------- */
 function mandatOf(dn,c){if(dn===null)return '';for(const m of c.mandats){const a=dnum(m.debut),b=dnum(m.fin);if(a!==null&&b!==null&&dn>=a&&dn<=b)return m.nom}return ''}
@@ -357,38 +357,63 @@ function vDash(D){
     <div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>
   </div>`;
 }
+/* ---------- listes en cartes ---------- */
+const FLT={etudes:{q:'',s:'all'},factures:{q:''},temps:{q:'',s:'all'}};
+const stCls=s=>s==='En réalisation'?'on':s==='Archivée'?'arch':s==='Refusé / sans suite'?'ref':SIGNED.includes(s)?'sig':'dev';
+const bvCls=s=>s==='Pas payé'?'on':s==='Payé'?'arch':s==='A venir'?'dev':'ref';
+const pill=(t,c)=>t?`<span class="pill ${c||''}">${esc(t)}</span>`:'';
+const sd=d=>{if(d===null||d===undefined)return '—';const x=new Date(d*864e5);return x.getUTCDate()+' '+MOIS[x.getUTCMonth()]+' '+x.getUTCFullYear()};
+const dayBox=d=>{if(d===null||d===undefined)return '<div class="dbox"><b>–</b><span>&nbsp;</span></div>';const x=new Date(d*864e5);return `<div class="dbox"><b>${x.getUTCDate()}</b><span>${MOIS[x.getUTCMonth()]}</span></div>`};
+const hm=m=>{m=Math.round(num(m));if(!m)return '—';const h=Math.floor(m/60),r=m%60;return h?(h+' h'+(r?' '+String(r).padStart(2,'0'):'')):(r+' min')};
+const searchBox=k=>`<input id="q" data-q="${k}" class="srch" type="search" placeholder="Rechercher…" value="${esc(FLT[k].q)}" autocomplete="off">`;
+const chipsRow=(k,list)=>`<div class="chips">${list.map(([v,l])=>`<button class="chip" data-chip="${k}:${v}" aria-pressed="${FLT[k].s===v}">${l}</button>`).join('')}</div>`;
+const fab=(a,l)=>`<button class="fab" data-add="${a}" aria-label="${l}">+</button>`;
+const emptyMsg=t=>`<div class="card small" style="text-align:center;padding:22px">${t}</div>`;
+function etudeOK(e,f){
+  const open=e.statut&&!['Archivée','Refusé / sans suite'].includes(e.statut);
+  if(f.s==='cours'&&!open)return false;if(f.s==='arch'&&e.statut!=='Archivée')return false;
+  if(f.s==='ref'&&e.statut!=='Refusé / sans suite')return false;if(f.s==='alert'&&!e.alerts.length)return false;
+  const q=f.q.trim().toLowerCase();return !q||[e.client,e.num,e.resume,e.statut,e.mandat].join(' ').toLowerCase().includes(q);
+}
+function cardEtude(e){
+  const m=num(e.montant),pct=m>0?Math.min(100,Math.round(e.K/m*100)):0,n=e.alerts.length;
+  return `<button class="card ecard" data-edit="etudes:${e.id}"><div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>${esc(e.num)||'N° à saisir'}</span></div>${pill(e.statut,stCls(e.statut))}</div>
+  ${e.resume?`<div class="er">${esc(e.resume)}</div>`:''}
+  ${m>0?`<div class="bar"><i style="width:${pct}%"></i></div><div class="ef3"><span>${ic('euro',14)}${eur0(m)} TTC</span><span>encaissé ${eur0(e.K)}</span><span>reste ${e.L===null?'—':eur0(e.L)}</span></div>`:'<div class="small" style="margin-top:8px">Montant non renseigné</div>'}
+  <div class="emeta"><span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span>${n?`<span class="al">${ic('warn',13)}${n}</span>`:''}</div>
+  ${n?`<div class="eal">${esc(e.alerts[0])}${n>1?' · +'+(n-1)+' autre'+(n>2?'s':''):''}</div>`:''}</button>`;
+}
+function listEtudes(D){
+  const L=D.etudes.filter(e=>etudeOK(e,FLT.etudes)).sort((a,b)=>(b.d||0)-(a.d||0));
+  const tot=L.reduce((a,e)=>a+num(e.montant),0),enc=L.reduce((a,e)=>a+num(e.K),0);
+  return `<div class="sum"><b>${L.length}</b> étude${L.length>1?'s':''}${tot?' · '+eur0(enc)+' encaissés sur '+eur0(tot)+' TTC':''}</div>`+(L.map(cardEtude).join('')||emptyMsg('Aucune étude ici.'));
+}
 function vEtudes(D){
-  const c=D.c;
-  const rows=D.etudes.map(e=>`<tr>
-   <td>${inD('etudes',e,'date')}</td><td class="a">${esc(e.mandat)}</td><td>${inT('etudes',e,'client')}</td><td>${inT('etudes',e,'num')}</td><td style="min-width:150px">${inT('etudes',e,'resume')}</td>
-   <td>${sel('etudes',e,'statut',c.statuts)}</td><td>${sel('etudes',e,'facture',c.factures)}</td><td>${inN('etudes',e,'jeh')}</td><td>${inN('etudes',e,'montant')}</td>
-   <td class="a n">${e.J===null?'':nf3.format(Math.round(e.J*1000)/1000)}</td><td class="a n">${eur(e.K)}</td><td class="a n">${e.L===null?'':eur(e.L)}</td>
-   <td>${inD('etudes',e,'echeance')}</td><td class="a">${esc(e.N)}</td><td class="a al">${esc(e.alerts.join(' · '))}</td>
-   <td class="a n">${e.P===null?'':Math.round(e.P*100)+' %'}</td><td class="a">${e.cnje?'Oui':''}</td><td class="a n">${e.R===null?'':nf3.format(Math.round(e.R*1000)/1000)}</td><td class="a n">${e.S===null?'':eur(e.S)}</td><td>${delBtn('etudes',e.id)}</td></tr>`).join('');
-  return `<h2>Suivi des études</h2><div class="small">Cases claires : à saisir. Cases teintées : calculées (mandat, JEH facturées, encaissé d’après l’onglet Factures, reste, BV d’après Temps de travail, alertes).</div>${addBtn('Ajouter une étude','etudes')}
-  <div class="tw"><table><thead><tr><th>Date de création</th><th>Mandat</th><th>Client</th><th>N° d’étude</th><th>Résumé</th><th>Statut</th><th>Facture</th><th>JEH client HT</th><th>Montant TTC</th><th>Nb JEH facturées</th><th>Encaissé TTC</th><th>Reste à encaisser (TTC)</th><th>Échéance paiement</th><th>BV</th><th>Alertes</th><th>Dépenses embauches / HT</th><th>CNJE</th><th>JEH rémunérées</th><th>JEH interv. max HT</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="20" class="small" style="padding:14px">Aucune étude pour le moment.</td></tr>'}</tbody></table></div>`;
+  const n=D.etudes.filter(e=>e.alerts.length).length;
+  return `<h2>Suivi des études</h2>${searchBox('etudes')}${chipsRow('etudes',[['all','Toutes'],['cours','En cours'],['arch','Archivées'],['ref','Refusées'],['alert','Alertes'+(n?' · '+n:'')]])}<div id="lst">${listEtudes(D)}</div>${fab('etudes','Ajouter une étude')}`;
 }
-function vFactures(D){
-  const rows=D.fact.map(f=>`<tr><td class="a">${esc(f.mandat)}</td><td>${inD('factures',f,'date')}</td><td>${selEtude('factures',f,'etude',D)}</td><td>${inN('factures',f,'montant')}</td><td>${sel('factures',f,'note',D.c.factures)}</td><td>${delBtn('factures',f.id)}</td></tr>`).join('');
-  return `<h2>Factures : une ligne par paiement reçu</h2><div class="small">Date du paiement, étude, montant TTC reçu. La colonne « Encaissé TTC » du suivi est la somme des paiements de l’étude ; le mandat se déduit de la date (voir les mandats dans Paramètres).</div>${addBtn('Ajouter un paiement','factures')}
-  <div class="tw"><table><thead><tr><th>Mandat</th><th>Date</th><th>Étude</th><th>Montant TTC encaissé</th><th>Note</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="6" class="small" style="padding:14px">Aucun paiement enregistré.</td></tr>'}</tbody></table></div>`;
+function listFact(D){
+  const q=FLT.factures.q.trim().toLowerCase();
+  const L=D.fact.filter(f=>!q||[f.etude,f.note,f.mandat].join(' ').toLowerCase().includes(q)).sort((a,b)=>(b.d||0)-(a.d||0));
+  const tot=L.reduce((a,f)=>a+num(f.montant),0);
+  return `<div class="sum"><b>${L.length}</b> paiement${L.length>1?'s':''} · <b>${eur0(tot)}</b> TTC</div>`+(L.map(f=>`<button class="card lcard" data-edit="factures:${f.id}">${dayBox(f.d)}<div class="lm"><b>${esc(f.etude)||'Étude à choisir'}</b><span class="small">${esc(f.mandat)}${f.note?' · '+esc(f.note):''}</span></div><div class="amt">${eur(f.montant)}</div></button>`).join('')||emptyMsg('Aucun paiement enregistré.'));
 }
+function vFactures(D){return `<h2>Factures</h2>${searchBox('factures')}<div id="lst">${listFact(D)}</div>${fab('factures','Ajouter un paiement')}`}
 function selEtude(c,r,f,D){return sel(c,r,f,D.etudes.map(e=>e.num).filter(Boolean))}
-function vTemps(D){
-  const names=persons(D);
-  const rows=D.temps.map(t=>`<tr><td class="a">${esc(t.mandat)}</td><td>${inD('temps',t,'date')}</td><td><input list="pl" ${attr('temps',t.id,'prenom')} value="${esc(t.prenom)}"></td><td>${selEtude('temps',t,'etude',D)}</td><td>${inT('temps',t,'note')}</td><td>${inN('temps',t,'min')}</td><td>${inN('temps',t,'nb')}</td><td>${inN('temps',t,'jeh')}</td>
-   <td class="a n">${t.I===null?'':nf3.format(Math.round(t.I*10000)/10000)}</td><td class="a n">${t.J===null?'':eur(t.J)}</td><td>${sel('temps',{id:t.id,statut:t.stat},'statut',BV_STAT,false)}</td><td>${delBtn('temps',t.id)}</td></tr>`).join('');
-  return `<h2>Temps de travail : qui a travaillé combien, et combien lui verser</h2><div class="small">JEH rémunérée = minutes ÷ 480 ÷ nombre de personnes. Rémunération brute = JEH rémunérée × JEH intervenant HT. Les lignes « Payé », « A venir » ou « Non effectué » ne sont pas à payer.</div>${addBtn('Ajouter une ligne de temps','temps')}
-  <datalist id="pl">${names.map(n=>`<option value="${esc(n)}">`).join('')}</datalist>
-  <div class="tw"><table><thead><tr><th>Mandat</th><th>Date</th><th>Prénom</th><th>Étude</th><th>Note</th><th>Min travaillées</th><th>Nb de personnes</th><th>JEH intervenant HT</th><th>JEH rémunérée</th><th>Rémunération brute</th><th>Statut</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="12" class="small" style="padding:14px">Aucune ligne de temps.</td></tr>'}</tbody></table></div>`;
+function listTemps(D){
+  const f=FLT.temps,q=f.q.trim().toLowerCase();
+  const topay=t=>!['Payé','A venir','Non effectué'].includes(t.stat);
+  const L=D.temps.filter(t=>(f.s==='all'||(f.s==='pay'&&topay(t))||(f.s==='paid'&&t.stat==='Payé'))&&(!q||[t.prenom,t.etude,t.note,t.mandat].join(' ').toLowerCase().includes(q))).sort((a,b)=>(b.d||0)-(a.d||0));
+  const jeh=L.reduce((a,t)=>a+num(t.I),0),brut=L.filter(topay).reduce((a,t)=>a+num(t.J),0);
+  return `<div class="sum"><b>${L.length}</b> ligne${L.length>1?'s':''} · <b>${nf3.format(Math.round(jeh*1000)/1000)}</b> JEH${brut?' · '+eur0(brut)+' brut à payer':''}</div>`+(L.map(t=>`<button class="card lcard" data-edit="temps:${t.id}">${dayBox(t.d)}<div class="lm"><b>${esc(t.prenom)||'Prénom à saisir'}${t.etude?' · '+esc(t.etude):''}</b><span class="small">${hm(t.min)}${num(t.nb)>1?' à '+num(t.nb):''}${t.note?' · '+esc(t.note):''}</span></div><div class="rt"><span class="amt">${t.J===null?'—':eur(t.J)}</span>${pill(t.stat,bvCls(t.stat))}</div></button>`).join('')||emptyMsg('Aucune ligne de temps.'));
 }
+function vTemps(D){return `<h2>Temps de travail</h2>${searchBox('temps')}${chipsRow('temps',[['all','Tout'],['pay','À payer'],['paid','Payé']])}<div id="lst">${listTemps(D)}</div>${fab('temps','Ajouter une ligne de temps')}`}
 function vRemun(D){
-  const R=remun(D);
-  const rows=R.rows.map(r=>`<tr><td>${esc(r.nom)}</td><td class="n">${nf3.format(r.jehPay)}</td><td class="n">${eur(r.dejaPaye)}</td><td class="n">${nf3.format(r.jeh)}</td><td class="n">${eur(r.brut)}</td><td class="n">${eur(r.net)}</td><td class="n">${eur(r.cout)}</td></tr>`).join('');
-  const T=R.T;
-  return `<h2>Rémunérations : ce qu’il reste à payer</h2><div class="small">Page automatique : rien à saisir. Pour chaque personne, elle regroupe les JEH du journal ni « Payé », ni « A venir », ni « Non effectué », puis calcule dessus brut, net (après cotisations salariales) et coût Junior. En dessous de 1 JEH au total, cotisations et charges sont calculées sur 1 JEH (minimum fixe). Passez les lignes d’un BV à « Payé » et la personne repart à zéro.</div>
-  <div class="tw" style="margin-top:12px"><table><thead><tr><th>Nom</th><th>JEH payées</th><th>Déjà payé (brut)</th><th>JEH non payées</th><th>Brut à payer</th><th>Net à virer</th><th>Coût total Junior</th></tr></thead><tbody>
-  <tr style="font-weight:700;background:var(--card2)"><td>Total</td><td class="n">${nf3.format(T.jehPay)}</td><td class="n">${eur(T.dejaPaye)}</td><td class="n">${nf3.format(Math.round(T.jeh*1e6)/1e6)}</td><td class="n">${eur(T.brut)}</td><td class="n">${eur(T.net)}</td><td class="n">${eur(T.cout)}</td></tr>${rows||'<tr><td colspan="7" class="small" style="padding:14px">Personne pour le moment.</td></tr>'}</tbody></table></div>`;
+  const R=remun(D),T=R.T;
+  const cards=R.rows.map(r=>`<div class="card pcard"><div class="eh"><b class="pn">${esc(r.nom)}</b><span class="net">${eur(r.net)}</span></div><div class="small">net à virer</div><div class="ef3" style="margin-top:8px"><span>Brut ${eur(r.brut)}</span><span>${nf3.format(Math.round(r.jeh*1e6)/1e6)} JEH</span><span>Coût Junior ${eur(r.cout)}</span></div><div class="small" style="margin-top:6px">Déjà payé : ${eur(r.dejaPaye)} (${nf3.format(Math.round(r.jehPay*1e6)/1e6)} JEH)</div></div>`).join('');
+  return `<h2>Rémunérations</h2><div class="card pcard tot"><div class="small">Net à virer en tout</div><div class="net big">${eur(T.net)}</div><div class="ef3" style="margin-top:8px"><span>Brut ${eur(T.brut)}</span><span>Cotisations ${eur(T.brut-T.net)}</span><span>Coût Junior ${eur(T.cout)}</span></div></div>
+  ${cards||emptyMsg('Personne à payer pour le moment.')}
+  <details class="how"><summary>Comment c’est calculé ?</summary><div class="small">Page automatique : rien à saisir. Pour chaque personne, elle regroupe les JEH du journal qui ne sont ni « Payé », ni « A venir », ni « Non effectué », puis calcule brut, net (après cotisations salariales) et coût Junior. En dessous de 1 JEH au total, cotisations et charges sont calculées sur 1 JEH. Passez les lignes d’un BV à « Payé » et la personne repart à zéro.</div></details>`;
 }
 function vFormation(D){
   const names=persons(D);Object.keys(S.formation).forEach(id=>{const n=S.formation[id].nom;if(n&&!names.includes(n))names.push(n)});
@@ -396,13 +421,43 @@ function vFormation(D){
   const cols=open.concat(closed);
   const LV=['0 · Non formé','1 · Notions','2 · Autonome avec appui','3 · Autonome','4 · Référent (peut former)'];
   const key=n=>'f_'+n.toLowerCase().replace(/[^a-z0-9]+/g,'_');
-  const head=cols.map(e=>`<th style="${closed.includes(e)?'opacity:.6':''}">${esc(e.num)}<div class="small" style="font-weight:400">${esc(e.statut||'')}</div></th>`).join('');
+  const head=cols.map(e=>`<th style="${closed.includes(e)?'opacity:.6':''}">${esc(e.num)}</th>`).join('');
   const body=names.map(n=>{const doc=S.formation[key(n)]||{niveaux:{}};const vals=cols.map(e=>doc.niveaux&&isNum(doc.niveaux[e.num])?num(doc.niveaux[e.num]):null).filter(v=>v!==null);
     const avg=vals.length?(vals.reduce((a,b)=>a+b,0)/vals.length):null;
     return `<tr><td style="white-space:nowrap;padding:6px 10px"><b>${esc(n)}</b></td><td class="n" style="min-width:56px">${avg===null?'':(Math.round(avg*10)/10)}</td>${cols.map(e=>{const v=doc.niveaux&&isNum(doc.niveaux[e.num])?num(doc.niveaux[e.num]):'';return `<td><select data-lvl="${esc(n)}" data-etude="${esc(e.num)}" class="${v===''?'':'lv'+v}"><option value=""></option>${[0,1,2,3,4].map(k=>`<option value="${k}"${v===k?' selected':''}>${k}</option>`).join('')}</select></td>`}).join('')}</tr>`}).join('');
   return `<h2>Niveau de formation par intervenant et par étude</h2><div class="small">Une ligne par intervenant (les prénoms viennent du Temps de travail), une colonne par étude : les études en cours d’abord, les archivées ensuite. Choisissez le niveau de 0 à 4 dans la case, la couleur suit.</div>
   <div class="legend" style="margin:10px 0">${LV.map((l,i)=>`<span><span class="sw lv${i}"></span>${esc(l)}</span>`).join('')}</div>
   <div class="tw"><table class="mx"><thead><tr><th>Intervenant</th><th>Niveau moyen</th>${head}</tr></thead><tbody>${body||'<tr><td class="small" style="padding:14px">Ajoutez d’abord du temps de travail pour faire apparaître les intervenants.</td></tr>'}</tbody></table></div>`;
+}
+
+/* ---------- fiche de saisie (par le bas) ---------- */
+let ED=null;
+const fld=(l,h)=>`<div class="fld"><label>${l}</label>${h}</div>`;
+const edRow=D=>ED&&(ED.col==='etudes'?D.etudes:ED.col==='factures'?D.fact:D.temps).find(x=>x.id===ED.id);
+function edSummary(r,D){
+  const st=(l,v)=>`<div class="stat"><span>${l}</span><span>${v}</span></div>`;
+  if(ED.col==='etudes')return st('Mandat',esc(r.mandat)||'—')+st('JEH facturées',r.J===null?'—':nf3.format(Math.round(r.J*1000)/1000))+st('Encaissé TTC',eur(r.K))+st('Reste à encaisser TTC',r.L===null?'—':eur(r.L))+st('BV',esc(r.N)||'—')+st('Dépenses embauches / HT',r.P===null?'—':Math.round(r.P*100)+' %')+(r.alerts.length?`<ul class="al wr">${r.alerts.map(a=>`<li>${ic('warn',13)} ${esc(a)}</li>`).join('')}</ul>`:'<div class="small" style="margin-top:6px">Aucune alerte.</div>');
+  if(ED.col==='factures')return st('Mandat',esc(r.mandat)||'—');
+  return st('Mandat',esc(r.mandat)||'—')+st('JEH rémunérée',r.I===null?'—':nf3.format(Math.round(r.I*10000)/10000))+st('Rémunération brute',r.J===null?'—':eur(r.J));
+}
+function edBody(r,D){
+  const c=ED.col,cf=D.c;
+  if(c==='etudes')return fld('Client',inT(c,r,'client'))+fld('N° d’étude',inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut',sel(c,r,'statut',cf.statuts))+fld('Facture',sel(c,r,'facture',cf.factures))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div><div class="f2">${fld('Date de création',inD(c,r,'date'))}${fld('Échéance paiement',inD(c,r,'echeance'))}</div>`;
+  if(c==='factures')return fld('Étude',selEtude(c,r,'etude',D))+fld('Montant TTC encaissé',inN(c,r,'montant'))+`<div class="f2">${fld('Date du paiement',inD(c,r,'date'))}${fld('Note',sel(c,r,'note',cf.factures))}</div>`;
+  return fld('Prénom',`<input list="pl" ${attr(c,r.id,'prenom')} value="${esc(r.prenom)}" autocomplete="off"><datalist id="pl">${persons(D).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`)+fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Date',inD(c,r,'date'))}${fld('Statut',sel(c,{id:r.id,statut:r.stat},'statut',BV_STAT,false))}</div><div class="f2">${fld('Minutes travaillées',inN(c,r,'min'))}${fld('Nb de personnes',inN(c,r,'nb'))}</div>${fld('JEH intervenant HT',inN(c,r,'jeh'))}${fld('Note',inT(c,r,'note'))}`;
+}
+const ED_TITLE={etudes:['Nouvelle étude','Modifier l’étude'],factures:['Nouveau paiement','Modifier le paiement'],temps:['Nouvelle ligne de temps','Modifier la ligne de temps']};
+function openEdit(col,id,isNew){
+  ED={col,id,isNew:!!isNew};const D=compute(),r=edRow(D);if(!r){ED=null;return}
+  const el=$('#edit');
+  el.innerHTML=`<div class="sbg" data-ed="close"></div><div class="sc"><div class="grip"></div><div class="shead"><h2>${ED_TITLE[col][isNew?0:1]}</h2><button class="mx" type="button" data-ed="close" aria-label="Fermer">✕</button></div>${edBody(r,D)}<div class="msg" id="edsum">${edSummary(r,D)}</div><button class="mb solid" type="button" data-ed="close">Terminé</button><button class="mb ghost" type="button" data-eddel="1" style="color:var(--bad)">Supprimer</button></div>`;
+  el.hidden=false;
+}
+function refreshEdit(){if(!ED)return;const D=compute(),r=edRow(D),s=$('#edsum');if(r&&s)s.innerHTML=edSummary(r,D)}
+function closeEdit(){
+  if(!ED)return;const {col,id,isNew}=ED,r=S[col]&&S[col][id];
+  if(isNew&&r){const blank=col==='etudes'?!r.client&&!r.num&&!r.resume&&!isNum(r.montant):col==='factures'?!r.etude&&!isNum(r.montant):!r.prenom&&!r.etude&&!isNum(r.min);if(blank)del(col,id)}
+  ED=null;const el=$('#edit');el.hidden=true;el.innerHTML='';render();
 }
 function cf(label,path,val,pct){return `<label>${label}</label><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}">`}
 function vParams(D){
@@ -466,7 +521,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.c){
     const col=t.dataset.c,id=t.dataset.id,f=t.dataset.f;let v=t.value;if(t.type==='number')v=v===''?null:Number(v);
     if(S[col][id]){S[col][id][f]=v;saveRow(col,id)}
-    render();
+    render();refreshEdit();
   }else if(t.dataset.lvl!==undefined){
     const n=t.dataset.lvl,k='f_'+n.toLowerCase().replace(/[^a-z0-9]+/g,'_');
     const doc=S.formation[k]||(S.formation[k]={nom:n,niveaux:{}});doc.nom=n;doc.niveaux=doc.niveaux||{};
@@ -482,18 +537,26 @@ document.addEventListener('change',e=>{
     const c=ensureCfg();c.mandats[+t.dataset.mand][t.dataset.k]=t.value;saveCfg();render();
   }
 });
+document.addEventListener('click',e=>{const x=e.target.closest('[data-ed]');if(x&&x.dataset.ed==='close'){closeEdit();return}});
+document.addEventListener('input',e=>{const t=e.target;if(t.id==='q'){FLT[t.dataset.q].q=t.value;const l=$('#lst');if(l)l.innerHTML=({etudes:listEtudes,factures:listFact,temps:listTemps})[t.dataset.q](compute())}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&ED)closeEdit()});
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.eye){const i=$('#cp'),show=i.type==='password';i.type=show?'text':'password';b.setAttribute('aria-pressed',show);b.classList.toggle('on',show);b.setAttribute('aria-label',show?'Masquer le mot de passe':'Afficher le mot de passe');return}
   if(b.dataset.reconnect){sSet('suivi.pw','');location.reload();return}
   if(b.dataset.syncon){doSync();return}
   if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
+  if(b.dataset.edit){const [c,i]=b.dataset.edit.split(':');openEdit(c,i,false);return}
+  if(b.dataset.chip){const [k,v]=b.dataset.chip.split(':');FLT[k].s=v;render();return}
+  if(b.dataset.eddel){if(b.dataset.arm){const {col,id}=ED;ED.isNew=false;del(col,id);closeEdit()}else{b.dataset.arm='1';b.textContent='Sûr ? Appuyez encore pour supprimer';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='Supprimer'}},3000)}return}
   if(b.dataset.tab){tab=b.dataset.tab;lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.add){
     const a=b.dataset.add;
-    if(a==='etudes')addRow('etudes',{date:dstr(TODAY),client:'',num:'',resume:'',statut:'Faisabilité',facture:'',jeh:null,montant:null,echeance:''});
-    if(a==='factures')addRow('factures',{date:dstr(TODAY),etude:'',montant:null,note:''});
-    if(a==='temps')addRow('temps',{date:dstr(TODAY),prenom:'',etude:'',note:'',min:null,nb:1,jeh:null,statut:'Pas payé'});
+    let nid;
+    if(a==='etudes')nid=addRow('etudes',{date:dstr(TODAY),client:'',num:'',resume:'',statut:'Faisabilité',facture:'',jeh:null,montant:null,echeance:''});
+    if(a==='factures')nid=addRow('factures',{date:dstr(TODAY),etude:'',montant:null,note:''});
+    if(a==='temps')nid=addRow('temps',{date:dstr(TODAY),prenom:'',etude:'',note:'',min:null,nb:1,jeh:null,statut:'Pas payé'});
+    if(nid)openEdit(a,nid,true);
     return}
   if(b.dataset.addmand){const c=ensureCfg();c.mandats.push({nom:'Nouveau mandat',debut:'',fin:''});saveCfg();render();return}
   if(b.dataset.delmand!==undefined){if(b.dataset.arm){const c=ensureCfg();c.mandats.splice(+b.dataset.delmand,1);saveCfg();render()}else{b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000)}return}
