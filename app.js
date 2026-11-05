@@ -64,6 +64,22 @@ function newId(p){return p+Date.now().toString(36)+Math.random().toString(36).sl
 function addRow(col,defaults){const id=newId(col[0]);S[col][id]=Object.assign({ord:Date.now()},defaults);saveRow(col,id);render();return id}
 
 /* ---------- calculs ---------- */
+const F_TYPES=['Acompte','Intermédiaire','Solde'],F_ETATS=['Émise','Payée'];
+// anciennes lignes = paiements reçus : le type se déduit de la note
+function normFact(f){if(!f.type)f.type=/solde/i.test(f.note||'')?'Solde':/interm/i.test(f.note||'')?'Intermédiaire':'Acompte';if(!f.etat)f.etat='Payée';
+  f.paid=f.etat==='Payée';f.de=dnum(f.date);f.dp=f.paid?dnum(f.datePaiement||f.date):null;f.ech=dnum(f.echeance);f.d=f.paid?f.dp:f.de;f.late=!f.paid&&f.ech!==null&&f.ech<TODAY}
+// statut financier calculé : statut de l'étude + factures
+function finStatus(e){
+  const inv=e.inv,st=e.statut;
+  if(st==='Refusé / sans suite')return inv.length?(inv.some(f=>!f.paid)?'Facture émise':'Encaissé'):'';
+  const sol=inv.filter(f=>f.type==='Solde');
+  if(sol.length)return sol.every(f=>f.paid)?'Solde encaissé':'Solde facturé';
+  const last=inv[inv.length-1];
+  if(!last)return st==='Archivée'?(num(e.montant)>0?'Solde à facturer':''):L_STAT.includes(st)?'Acompte à facturer':'';
+  if(!last.paid)return last.type==='Intermédiaire'?'Facture intermédiaire':'Acompte facturé';
+  if(st==='Archivée')return 'Solde à facturer';
+  return last.type==='Intermédiaire'?'Intermédiaire encaissé':'Acompte encaissé';
+}
 function mandatOf(dn,c){if(dn===null)return '';for(const m of c.mandats){const a=dnum(m.debut),b=dnum(m.fin);if(a!==null&&b!==null&&dn>=a&&dn<=b)return m.nom}return ''}
 function compute(){
   const c=cfg(),tva=c.tva,etudes=sorted('etudes'),fact=sorted('factures'),temps=sorted('temps');
@@ -72,15 +88,18 @@ function compute(){
   const cotTot=Object.values(c.cot).reduce((a,v)=>a+num(v),0);
   const baseJEH=4*num(c.smic);
   const cnjeDate=dnum(c.cnje.date);
-  fact.forEach(f=>{f.d=dnum(f.date);f.mandat=mandatOf(f.d,c)});
+  fact.forEach(f=>{normFact(f);f.mandat=mandatOf(f.d,c)});
+  const pay=fact.filter(f=>f.paid);
   temps.forEach(t=>{t.d=dnum(t.date);t.mandat=mandatOf(t.d,c);t.I=(isNum(t.min)&&num(t.nb)>0)?num(t.min)/480/num(t.nb):null;t.J=t.I===null?null:t.I*num(t.jeh);t.stat=t.statut||'Pas payé'});
   const byEtude={};temps.forEach(t=>{if(t.etude)(byEtude[t.etude]=byEtude[t.etude]||[]).push(t)});
   const personEtude={};temps.forEach(t=>{if(t.prenom&&t.etude&&t.I!==null){const k=t.etude+'\u0001'+t.prenom;personEtude[k]=(personEtude[k]||0)+t.I}});
   const nums={};etudes.forEach(e=>{if(e.num)nums[e.num]=(nums[e.num]||0)+1});
   etudes.forEach(e=>{
     e.d=dnum(e.date);e.mandat=mandatOf(e.d,c);
-    const pays=fact.filter(f=>f.etude===e.num&&e.num);
-    e.K=e.num?pays.reduce((a,f)=>a+num(f.montant),0):0;
+    e.inv=e.num?fact.filter(f=>f.etude===e.num).sort((a,b)=>(a.de||0)-(b.de||0)):[];
+    e.K=e.inv.filter(f=>f.paid).reduce((a,f)=>a+num(f.montant),0);
+    e.facture=finStatus(e);
+    const ue=e.inv.filter(f=>!f.paid&&f.ech!==null).map(f=>f.ech);e.echeance=ue.length?dstr(Math.min(...ue)):'';
     e.J=(num(e.jeh)&&num(e.montant))?num(e.montant)/(1+tva)/num(e.jeh):null;
     e.L=L_STAT.includes(e.statut)?num(e.montant)-e.K:null;
     const ls=byEtude[e.num]||[];e.lines=ls;
@@ -96,7 +115,7 @@ function compute(){
     e.P=num(e.montant)?cost/(num(e.montant)/(1+tva)):null;
     e.alerts=alertsOf(e,c,ls,nums,personEtude,fact).filter(a=>alertOn(a,c));
   });
-  return {c,etudes,fact,temps,tva,chom,patrTot,cotTot,baseJEH,personEtude};
+  return {c,etudes,fact,pay,temps,tva,chom,patrTot,cotTot,baseJEH,personEtude};
 }
 const ALERTS=[
 ['retard',/^Retard de/,'Retard de paiement (+ relances)','Facture émise et échéance dépassée.'],
@@ -113,7 +132,7 @@ const ALERTS=[
 ['archiver',/^Tout est soldé/,'Tout est soldé : archiver','Rien à encaisser, BV payés.'],
 ['refusee',/^Étude refusée/,'Étude refusée mais facturée','Refusée avec facture ou encaissement.'],
 ['solde_reste',/^Solde encaissé mais/,'Solde encaissé mais reste à encaisser','Montant ou encaissé à corriger.'],
-['solde_fact',/^Solde encaissé \(Factures\)/,'Statut facture à mettre à jour','Paiement « Solde encaissé » dans Factures.'],
+['solde_af',/^Facturer le solde/,'Facturer le solde','Étude archivée, solde pas encore facturé.'],
 ['date',/^Renseigner la date/,'Renseigner la date de création','Étude rattachée à aucun mandat.'],
 ['double',/^N° d’étude en double/,'N° d’étude en double','Deux études avec le même numéro.'],
 ['cnje_cli',/^CNJE : JEH client/,'CNJE : JEH client hors fourchette','JEH client hors min–max.'],
@@ -130,7 +149,8 @@ function alertsOf(e,c,ls,nums,pe,fact){
   if(st==='Archivée'&&fa!=='Solde encaissé')A.push('Archivée sans solde encaissé');
   if(st==='Archivée'&&e.N==='À payer')A.push('Archivée mais BV non payés');
   if(I>0&&K>I)A.push('Encaissé supérieur au montant');
-  if(['Convention signée','Convention étudiant avant réalisation','En réalisation'].includes(st)&&!fa)A.push('Facturer l’acompte');
+  if(fa==='Acompte à facturer')A.push('Facturer l’acompte');
+  if(fa==='Solde à facturer')A.push('Facturer le solde');
   if(INVOICED.includes(fa)&&ech===null&&st!=='Archivée'&&st!=='Refusé / sans suite')A.push('Renseigner l’échéance de paiement');
   if(st==='En réalisation'&&!ls.length)A.push('Renseigner le temps de travail (onglet Temps de travail)');
   if(ls.length&&!isNum(e.jeh))A.push('Prix de la JEH manquant : rémunérations calculées à 0 €');
@@ -138,9 +158,8 @@ function alertsOf(e,c,ls,nums,pe,fact){
   if(I>0&&sumJ>I/(1+tva)+1e-9)A.push('Rémunérations supérieures au montant HT');
   if(fa==='Solde encaissé'&&st!=='Archivée'&&e.N==='À payer')A.push('Payer les BV');
   if(fa==='Solde encaissé'&&st!=='Archivée'&&st!=='Refusé / sans suite'&&I>0&&e.N!=='À payer'&&L<=0)A.push('Tout est soldé : archiver l’étude');
-  if(st==='Refusé / sans suite'&&(fa||K>0))A.push('Étude refusée mais facturée');
+  if(st==='Refusé / sans suite'&&e.inv.length)A.push('Étude refusée mais facturée');
   if(fa==='Solde encaissé'&&L>0)A.push('Solde encaissé mais reste à encaisser');
-  if(e.num&&fa!=='Solde encaissé'&&fact.some(f=>f.etude===e.num&&f.note==='Solde encaissé'))A.push('Solde encaissé (Factures) mais statut Facture différent');
   if(e.d===null)A.push('Renseigner la date de création');
   if(e.num&&nums[e.num]>1)A.push('N° d’étude en double');
   if(e.cnje){
@@ -176,7 +195,7 @@ function dash(D,sel){
   const E=D.etudes.filter(inM);
   const sumBy=(arr,f,keys)=>arr.filter(e=>keys.includes(e.statut)).reduce((a,e)=>a+num(f(e)),0);
   const tva1=1+D.tva;
-  const encTTC=all?D.etudes.reduce((a,e)=>a+e.K,0):D.fact.filter(f=>f.mandat===sel).reduce((a,f)=>a+num(f.montant),0);
+  const encTTC=all?D.etudes.reduce((a,e)=>a+e.K,0):D.pay.filter(f=>f.mandat===sel).reduce((a,f)=>a+num(f.montant),0);
   const enc=encTTC/tva1;
   const persN=persons(D);
   const dep=persN.reduce((a,p)=>a+costOf(D,p,t=>all||t.mandat===sel).cost,0);
@@ -208,7 +227,7 @@ function dash(D,sel){
   // séries temporelles (50 points)
   let t0,t1;
   if(all){
-    const ds=D.fact.map(f=>f.d).filter(d=>d!==null),st=mand.map(m=>m.a).filter(x=>x!==null),en=mand.map(m=>m.b).filter(x=>x!==null);
+    const ds=D.pay.map(f=>f.d).filter(d=>d!==null),st=mand.map(m=>m.a).filter(x=>x!==null),en=mand.map(m=>m.b).filter(x=>x!==null);
     const first=[...ds,...st];t0=first.length?Math.min(...first):TODAY;
     t1=en.length?Math.min(TODAY,Math.max(...en)):TODAY;
   }else{
@@ -222,7 +241,7 @@ function dash(D,sel){
   pts.forEach(T=>{
     const na=!all&&T>TODAY;
     if(na){ser.enc.push(null);ser.dep.push(null);ser.tot.push(null);ser.fid.push(null);return}
-    ser.enc.push(D.fact.filter(f=>f.d!==null&&f.d<=T&&(all||f.mandat===sel)).reduce((a,f)=>a+num(f.montant),0)/tva1);
+    ser.enc.push(D.pay.filter(f=>f.d!==null&&f.d<=T&&(all||f.mandat===sel)).reduce((a,f)=>a+num(f.montant),0)/tva1);
     ser.dep.push(D.temps.filter(t=>t.d!==null&&t.d<=T&&t.I!==null&&!['A venir','Non effectué'].includes(t.stat)&&(all||t.mandat===sel)).reduce((a,t)=>a+num(t.J)*(1+D.chom)+t.I*D.baseJEH*D.patrTot,0));
     if(all){ser.tot.push(cli.filter(x=>x.first<=T).length);ser.fid.push(cli.filter(x=>x.fid!==null&&x.fid<=T).length)}
     else{ser.tot.push(cmList.filter(x=>x.mandat===sel&&x.first<=T).length);ser.fid.push(cmList.filter(x=>x.mandat===sel&&x.prev>0&&x.first<=T).length)}
@@ -270,7 +289,7 @@ const sel=(c,r,f,opts,blank)=>{const v=r[f]||'';const o=opts.slice();if(v&&!o.in
 const delBtn=(c,id)=>`<button class="x" data-del="${c}:${id}" title="Supprimer la ligne" aria-label="Supprimer la ligne">✕</button>`;
 
 /* ---------- vues ---------- */
-const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['factures','Factures'],['temps','Temps de travail'],['remun','Rémunérations'],['formation','Qualité formation'],['params','Paramètres']];
+const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['factures','Factures'],['temps','JEH'],['remun','Rémunérations'],['formation','Qualité formation'],['params','Paramètres']];
 const ICO={
  trend:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
  sign:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>',
@@ -287,9 +306,9 @@ const ICO={
  ok:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
  warn:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>'};
 const ic=(k,sz)=>`<svg class="ico" viewBox="0 0 24 24" width="${sz||16}" height="${sz||16}" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICO[k]}</svg>`;
-const TAB_SHORT={dash:'Tableau',etudes:'Études',factures:'Factures',temps:'Temps',remun:'Paie',formation:'Formation',params:'Réglages',legende:'Légende'};
+const TAB_SHORT={dash:'Tableau',etudes:'Études',factures:'Factures',temps:'JEH',remun:'Paie',formation:'Formation',params:'Réglages',legende:'Légende'};
 const TAB_ICON={
- dash:'<path d="M4 20V11M10 20V4M16 20v-6M22 20H2"/>',
+ dash:'<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>',
  etudes:'<path d="M9 3h6M10 3v6l-5.5 9.5A2 2 0 0 0 6.2 21h11.6a2 2 0 0 0 1.7-2.5L14 9V3"/><path d="M7.5 15h9"/>',
  factures:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
  temps:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
@@ -341,7 +360,7 @@ function render(){
   if(fk){const [c,id,f]=fk.split('|');const el=v.querySelector(`[data-c="${c}"][data-id="${id}"][data-f="${f}"]`);if(el){el.focus({preventScroll:true});try{if(el.setSelectionRange&&el.type!=='number'&&el.type!=='date')el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}
   window.scrollTo(0,scrollY);
 }
-const DASH_BLOCKS=[['banner','Bandeau des alertes'],['kpis','Recette, CA signé, à encaisser'],['vue','Où en sont les études ?'],['det','Détail des études en cours'],['alert','Alertes à traiter'],['jeh','Temps de travail (JEH)'],['remun','Rémunérations'],['enc','Encaissé et dépenses'],['cli','Clients totaux et fidèles']];
+const DASH_BLOCKS=[['banner','Bandeau des alertes'],['kpis','Recette, CA signé, à encaisser'],['vue','Où en sont les études ?'],['det','Détail des études en cours'],['alert','Alertes à traiter'],['jeh','Temps de travail (JEH)'],['enc','Encaissé et dépenses'],['cli','Clients totaux et fidèles']];
 // disposition propre à chaque appareil (non synchronisée)
 function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(e){return {}}}
 function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
@@ -371,24 +390,17 @@ function vDash(D){
   </div>`,
    vue:`<div class="card"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>`,
    det:`<div class="card"><h3>${ic('list')}Détail des études en cours</h3><div class="hint">Nombre d’études par statut</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>`,
-   alert:n?`<div class="card alc"><h3>${ic('bell')}Alertes à traiter<span class="cnt">${d.nbAlerts}</span></h3>${al.map(e=>`<button class="ali" data-edit="etudes:${e.id}"><span class="aln"><b>${esc(e.num||'(sans n°)')}</b><small>${esc(e.client||'')}</small></span><span class="alx">${e.alerts.map(a=>`<span>${ic('warn',13)}${esc(a)}</span>`).join('')}</span><span class="chev">›</span></button>`).join('')}${n>6?`<button class="b ghost addl" data-goalerts="1">Voir les ${n} études</button>`:''}</div>`:`<div class="card alc ok"><h3>${ic('ok')}Alertes à traiter</h3><div class="small">Rien à signaler.</div></div>`,
+   alert:n?`<div class="card alc"><h3>${ic('bell')}Alertes à traiter<span class="cnt">${d.nbAlerts}</span></h3>${al.map(e=>`<button class="ali" data-open="${e.id}"><span class="aln"><b>${esc(e.num||'(sans n°)')}</b><small>${esc(e.client||'')}</small></span><span class="alx">${e.alerts.map(a=>`<span>${ic('warn',13)}${esc(a)}</span>`).join('')}</span><span class="chev">›</span></button>`).join('')}${n>6?`<button class="b ghost addl" data-goalerts="1">Voir les ${n} études</button>`:''}</div>`:`<div class="card alc ok"><h3>${ic('ok')}Alertes à traiter</h3><div class="small">Rien à signaler.</div></div>`,
    jeh:`<div class="card"><h3>${ic('clock')}Temps de travail (JEH)</h3><div class="hint">${d.nbSigned} étude${d.nbSigned>1?'s':''} signée${d.nbSigned>1?'s':''}</div>
       <div class="hb hf"><div class="hbl"><span>Facturées</span><b>${nf3.format(Math.round(d.jehF*1000)/1000)}</b></div><div class="hbt"><i style="width:${jmx?Math.round(d.jehF/jmx*100):0}%"></i></div></div>
       <div class="hb"><div class="hbl"><span>Rémunérées</span><b>${nf3.format(Math.round(d.jehR*1000)/1000)}</b></div><div class="hbt alt"><i style="width:${jmx?Math.round(d.jehR/jmx*100):0}%"></i></div></div></div>`,
-   remun:`<div class="card"><h3>${ic('euro')}Rémunérations</h3><div class="hint">JEH non payées, regroupées par personne</div>
-      <div class="stat"><span>Brut à payer</span><span>${eur(R.T.brut)}</span></div>
-      <div class="stat"><span>Cotisations salariales (retenues)</span><span>${eur(R.T.brut-R.T.net)}</span></div>
-      <div class="stat big"><span>Net à virer aux élèves</span><span>${eur(R.T.net)}</span></div>
-      <div class="stat"><span>Charges patronales (estim.)</span><span>${eur(R.T.cout-R.T.brut)}</span></div>
-      <div class="stat big"><span>Coût total pour la Junior</span><span>${eur(R.T.cout)}</span></div>
-      <div class="small" style="margin-top:6px">Estimations : taux dans Paramètres, 1 JEH minimum.</div></div>`,
    enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
    cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
   const L=dashLayout();
   return `<div class="dgrid">${L.order.filter(k=>!L.hide[k]).map(k=>k==='banner'||k==='kpis'?`<div class="full">${B[k]}</div>`:B[k]).join('')}</div>`;
 }
 /* ---------- listes en cartes ---------- */
-const FLT={etudes:{q:'',s:'all'},factures:{q:''},temps:{q:'',s:'all'}};
+const FLT={etudes:{q:'',s:'all'},factures:{q:'',s:'all'},temps:{q:'',s:'all'}};
 const ST_N={'Faisabilité':1,'Devis envoyé':2,'Devis signé':3,'Convention envoyée':4,'Convention signée':5,'Convention étudiant avant réalisation':5,'En réalisation':6};
 const stCls=s=>s==='Archivée'?'arch':s==='Refusé / sans suite'?'ref':ST_N[s]?'s'+ST_N[s]:'dev';
 const bvCls=s=>s==='Pas payé'?'on':s==='Payé'?'arch':s==='A venir'?'dev':'ref';
@@ -408,9 +420,9 @@ function etudeOK(e,f){
 }
 function cardEtude(e){
   const m=num(e.montant),pct=m>0?Math.min(100,Math.round(e.K/m*100)):0,n=e.alerts.length;
-  return `<button class="card ecard" data-edit="etudes:${e.id}"><div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>${esc(e.num)||'N° à saisir'}</span></div>${pill(e.statut,stCls(e.statut))}</div>
+  return `<button class="card ecard" data-open="${e.id}"><div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>${esc(e.num)||'N° à saisir'}</span></div>${pill(e.statut,stCls(e.statut))}</div>
   ${e.resume?`<div class="er">${esc(e.resume)}</div>`:''}
-  ${m>0?`<div class="bar"><i style="width:${pct}%"></i></div><div class="ef3"><span>${ic('euro',14)}${eur0(m)} TTC</span><span>encaissé ${eur0(e.K)}</span><span>reste ${e.L===null?'—':eur0(e.L)}</span></div>`:'<div class="small" style="margin-top:8px">Montant non renseigné</div>'}
+  ${m>0?`<div class="ef3" style="margin-top:8px"><span>${ic('euro',14)}${eur0(m)} TTC</span><span>encaissé ${eur0(e.K)}</span><span>reste ${e.L===null?'—':eur0(e.L)}</span></div>`:'<div class="small" style="margin-top:8px">Montant non renseigné</div>'}
   <div class="emeta"><span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span>${n?`<span class="al">${ic('warn',13)}${n}</span>`:''}</div>
   ${n?`<div class="eal">${esc(e.alerts[0])}${n>1?' · +'+(n-1)+' autre'+(n>2?'s':''):''}</div>`:''}</button>`;
 }
@@ -419,17 +431,48 @@ function listEtudes(D){
   const tot=L.reduce((a,e)=>a+num(e.montant),0),enc=L.reduce((a,e)=>a+num(e.K),0);
   return `<div class="sum"><b>${L.length}</b> étude${L.length>1?'s':''}${tot?' · '+eur0(enc)+' encaissés sur '+eur0(tot)+' TTC':''}</div>`+(L.map(cardEtude).join('')||emptyMsg('Aucune étude ici.'));
 }
+let OPEN=null;
+function openRep(id){OPEN=id;tab='etudes';lsSet('suivi.tab',tab);try{history.pushState({rep:id},'')}catch(x){}render();window.scrollTo(0,0)}
+function closeRep(){if(history.state&&history.state.rep)history.back();else{OPEN=null;render()}}
+window.addEventListener('popstate',()=>{if(OPEN){OPEN=null;render();window.scrollTo(0,0)}});
+function vReport(e,D){
+  const m=num(e.montant),ht=m/(1+D.tva),n=e.alerts.length;
+  const ft=(l,v,cls)=>`<div class="ft ${cls||''}"><small>${l}</small><b>${v}</b></div>`;
+  const ne=e.echeance?dnum(e.echeance):null;
+  const per={};e.lines.forEach(t=>{const p=t.prenom||'?';const x=per[p]||(per[p]={I:0,J:0,topay:false,n:0});x.I+=num(t.I);x.J+=num(t.J);x.n++;if(!['Payé','A venir','Non effectué'].includes(t.stat))x.topay=true});
+  const jr=e.R||0,jf=num(e.J),jmx=Math.max(jr,jf);
+  const key=nm=>'f_'+nm.toLowerCase().replace(/[^a-z0-9]+/g,'_');
+  const lv=Object.keys(per).map(p=>{const d=S.formation[key(p)];const v=d&&d.niveaux&&isNum(d.niveaux[e.num])?num(d.niveaux[e.num]):null;return [p,v]}).filter(x=>x[1]!==null);
+  return `<button class="back" data-closerep="1">‹ Études</button>
+  <div class="card hero"><div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>${esc(e.num)||'N° à saisir'}${e.mandat?' · '+esc(e.mandat):''}</span></div><button class="pen" data-edit="etudes:${e.id}" aria-label="Modifier l’étude"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button></div>
+   ${e.resume?`<div class="er">${esc(e.resume)}</div>`:''}
+   <div class="pills">${pill(e.statut||'Sans statut',stCls(e.statut))}${e.facture?pill(e.facture,'fin'):''}</div>
+   <div class="small" style="margin-top:6px">Créée le ${sd(e.d)}</div></div>
+  ${n?`<div class="card alc"><h3>${ic('bell')}À traiter<span class="cnt">${n}</span></h3><ul class="al wr">${e.alerts.map(a=>`<li>${ic('warn',13)} ${esc(a)}</li>`).join('')}</ul></div>`:''}
+  <div class="card"><h3>${ic('euro')}Finances</h3><div class="ftg">${ft('Montant TTC',m?eur0(m):'—')}${ft('Encaissé TTC',eur0(e.K),'acc')}${ft('Reste à encaisser',e.L===null?'—':eur0(e.L))}${ft('Prochaine échéance',ne!==null?fdate(ne):'—',ne!==null&&ne<TODAY?'late':'')}</div>
+   <div class="ef3" style="margin-top:10px"><span>${m?eur0(ht)+' HT':''}</span><span>JEH client ${isNum(e.jeh)?eur0(e.jeh):'—'}</span>${e.P!==null?`<span>Dépenses ${Math.round(e.P*100)} % du HT</span>`:''}</div></div>
+  <div class="card"><h3>${ic('sign')}Factures<span class="cnt soft">${e.inv.length}</span></h3>${e.inv.map(f=>factCard(f,false)).join('')||'<div class="small" style="margin:6px 0">Aucune facture.</div>'}<button class="b ghost addl" data-add="factures" data-et="${esc(e.num)}" ${e.num?'':'disabled'}>+ Ajouter une facture</button></div>
+  <div class="card"><h3>${ic('clock')}JEH</h3>
+   <div class="hb hf"><div class="hbl"><span>Facturées</span><b>${nf3.format(Math.round(jf*1000)/1000)}</b></div><div class="hbt"><i style="width:${jmx?Math.round(jf/jmx*100):0}%"></i></div></div>
+   <div class="hb"><div class="hbl"><span>Rémunérées</span><b>${nf3.format(Math.round(jr*1000)/1000)}</b></div><div class="hbt alt"><i style="width:${jmx?Math.round(jr/jmx*100):0}%"></i></div></div>
+   ${Object.keys(per).map(p=>`<div class="stat"><span>${esc(p)} · ${nf3.format(Math.round(per[p].I*1000)/1000)} JEH</span><span>${eur(per[p].J)} ${pill(per[p].topay?'À payer':'Payé',per[p].topay?'on':'arch')}</span></div>`).join('')}
+   ${e.lines.length?`<details class="how"><summary>Voir les ${e.lines.length} lignes de temps</summary>${e.lines.slice().sort((a,b)=>(b.d||0)-(a.d||0)).map(t=>`<button class="card lcard" data-edit="temps:${t.id}">${dayBox(t.d)}<div class="lm"><b>${esc(t.prenom)||'Prénom à saisir'}</b><span class="small">${hm(t.min)}${t.note?' · '+esc(t.note):''}</span></div><div class="rt"><span class="amt">${t.J===null?'—':eur(t.J)}</span>${pill(t.stat,bvCls(t.stat))}</div></button>`).join('')}</details>`:''}
+   <button class="b ghost addl" data-add="temps" data-et="${esc(e.num)}" ${e.num?'':'disabled'}>+ Ajouter du temps</button></div>
+  ${lv.length?`<div class="card"><h3>${ic('users')}Formation sur cette étude</h3><div class="pills">${lv.map(([p,v])=>`<span class="lvp lv${v}">${esc(p)} · ${v}</span>`).join('')}</div></div>`:''}`;
+}
 function vEtudes(D){
+  if(OPEN){const e=D.etudes.find(x=>x.id===OPEN);if(e)return vReport(e,D);OPEN=null}
   const n=D.etudes.filter(e=>e.alerts.length).length;
   return `<h2>Suivi des études</h2>${searchBox('etudes')}${chipsRow('etudes',[['all','Toutes'],['cours','En cours'],['arch','Archivées'],['ref','Refusées'],['alert','Alertes'+(n?' · '+n:'')]])}<div id="lst">${listEtudes(D)}</div>${fab('etudes','Ajouter une étude')}`;
 }
+function factCard(f,showEt){const st=f.paid?'Payée':f.late?'En retard':'Émise';return `<button class="card lcard" data-edit="factures:${f.id}">${dayBox(f.de)}<div class="lm"><b>${showEt?(esc(f.etude)||'Étude à choisir')+' · ':''}${esc(f.type)}</b><span class="small">${f.paid?'Payée le '+fdate(f.dp):f.ech!==null?'Échéance '+fdate(f.ech):'Sans échéance'}</span></div><div class="rt"><span class="amt">${eur(f.montant)}</span>${pill(st,f.paid?'arch':f.late?'on':'s2')}</div></button>`}
 function listFact(D){
-  const q=FLT.factures.q.trim().toLowerCase();
-  const L=D.fact.filter(f=>!q||[f.etude,f.note,f.mandat].join(' ').toLowerCase().includes(q)).sort((a,b)=>(b.d||0)-(a.d||0));
-  const tot=L.reduce((a,f)=>a+num(f.montant),0);
-  return `<div class="sum"><b>${L.length}</b> paiement${L.length>1?'s':''} · <b>${eur0(tot)}</b> TTC</div>`+(L.map(f=>`<button class="card lcard" data-edit="factures:${f.id}">${dayBox(f.d)}<div class="lm"><b>${esc(f.etude)||'Étude à choisir'}</b><span class="small">${esc(f.mandat)}${f.note?' · '+esc(f.note):''}</span></div><div class="amt">${eur(f.montant)}</div></button>`).join('')||emptyMsg('Aucun paiement enregistré.'));
+  const f=FLT.factures,q=f.q.trim().toLowerCase();
+  const L=D.fact.filter(x=>(f.s==='all'||(f.s==='due'&&!x.paid)||(f.s==='late'&&x.late)||(f.s==='paid'&&x.paid))&&(!q||[x.etude,x.type,x.mandat].join(' ').toLowerCase().includes(q))).sort((a,b)=>(b.de||0)-(a.de||0));
+  const enc=L.filter(x=>x.paid).reduce((a,x)=>a+num(x.montant),0),due=L.filter(x=>!x.paid).reduce((a,x)=>a+num(x.montant),0);
+  return `<div class="sum"><b>${L.length}</b> facture${L.length>1?'s':''} · ${eur0(enc)} encaissés${due?' · <b>'+eur0(due)+'</b> à encaisser':''}</div>`+(L.map(x=>factCard(x,true)).join('')||emptyMsg('Aucune facture.'));
 }
-function vFactures(D){return `<h2>Factures</h2>${searchBox('factures')}<div id="lst">${listFact(D)}</div>${fab('factures','Ajouter un paiement')}`}
+function vFactures(D){const n=D.fact.filter(x=>x.late).length;return `<h2>Factures</h2>${searchBox('factures')}${chipsRow('factures',[['all','Toutes'],['due','À encaisser'],['late','En retard'+(n?' · '+n:'')],['paid','Payées']])}<div id="lst">${listFact(D)}</div>${fab('factures','Ajouter une facture')}`}
 function selEtude(c,r,f,D){return sel(c,r,f,D.etudes.map(e=>e.num).filter(Boolean))}
 function listTemps(D){
   const f=FLT.temps,q=f.q.trim().toLowerCase();
@@ -438,7 +481,7 @@ function listTemps(D){
   const jeh=L.reduce((a,t)=>a+num(t.I),0),brut=L.filter(topay).reduce((a,t)=>a+num(t.J),0);
   return `<div class="sum"><b>${L.length}</b> ligne${L.length>1?'s':''} · <b>${nf3.format(Math.round(jeh*1000)/1000)}</b> JEH${brut?' · '+eur0(brut)+' brut à payer':''}</div>`+(L.map(t=>`<button class="card lcard" data-edit="temps:${t.id}">${dayBox(t.d)}<div class="lm"><b>${esc(t.prenom)||'Prénom à saisir'}${t.etude?' · '+esc(t.etude):''}</b><span class="small">${hm(t.min)}${num(t.nb)>1?' à '+num(t.nb):''}${t.note?' · '+esc(t.note):''}</span></div><div class="rt"><span class="amt">${t.J===null?'—':eur(t.J)}</span>${pill(t.stat,bvCls(t.stat))}</div></button>`).join('')||emptyMsg('Aucune ligne de temps.'));
 }
-function vTemps(D){return `<h2>Temps de travail</h2>${searchBox('temps')}${chipsRow('temps',[['all','Tout'],['pay','À payer'],['paid','Payé']])}<div id="lst">${listTemps(D)}</div>${fab('temps','Ajouter une ligne de temps')}`}
+function vTemps(D){return `<h2>JEH</h2>${searchBox('temps')}${chipsRow('temps',[['all','Tout'],['pay','À payer'],['paid','Payé']])}<div id="lst">${listTemps(D)}</div>${fab('temps','Ajouter une ligne de temps')}`}
 function vRemun(D){
   const R=remun(D),T=R.T;
   const cards=R.rows.map(r=>`<div class="card pcard"><div class="eh"><b class="pn">${esc(r.nom)}</b><span class="net">${eur(r.net)}</span></div><div class="small">net à virer</div><div class="ef3" style="margin-top:8px"><span>Brut ${eur(r.brut)}</span><span>${nf3.format(Math.round(r.jeh*1e6)/1e6)} JEH</span><span>Coût Junior ${eur(r.cout)}</span></div><div class="small" style="margin-top:6px">Déjà payé : ${eur(r.dejaPaye)} (${nf3.format(Math.round(r.jehPay*1e6)/1e6)} JEH)</div></div>`).join('');
@@ -469,17 +512,17 @@ const fld=(l,h)=>`<div class="fld"><label>${l}</label>${h}</div>`;
 const edRow=D=>ED&&(ED.col==='etudes'?D.etudes:ED.col==='factures'?D.fact:D.temps).find(x=>x.id===ED.id);
 function edSummary(r,D){
   const st=(l,v)=>`<div class="stat"><span>${l}</span><span>${v}</span></div>`;
-  if(ED.col==='etudes')return st('Mandat',esc(r.mandat)||'—')+st('JEH facturées',r.J===null?'—':nf3.format(Math.round(r.J*1000)/1000))+st('Encaissé TTC',eur(r.K))+st('Reste à encaisser TTC',r.L===null?'—':eur(r.L))+st('BV',esc(r.N)||'—')+st('Dépenses embauches / HT',r.P===null?'—':Math.round(r.P*100)+' %')+(r.alerts.length?`<ul class="al wr">${r.alerts.map(a=>`<li>${ic('warn',13)} ${esc(a)}</li>`).join('')}</ul>`:'<div class="small" style="margin-top:6px">Aucune alerte.</div>');
+  if(ED.col==='etudes')return st('Statut financier (auto)',esc(r.facture)||'—')+st('Prochaine échéance',r.echeance?fdate(dnum(r.echeance)):'—')+st('Mandat',esc(r.mandat)||'—')+st('JEH facturées',r.J===null?'—':nf3.format(Math.round(r.J*1000)/1000))+st('Encaissé TTC',eur(r.K))+st('Reste à encaisser TTC',r.L===null?'—':eur(r.L))+st('BV',esc(r.N)||'—')+st('Dépenses embauches / HT',r.P===null?'—':Math.round(r.P*100)+' %')+(r.alerts.length?`<ul class="al wr">${r.alerts.map(a=>`<li>${ic('warn',13)} ${esc(a)}</li>`).join('')}</ul>`:'<div class="small" style="margin-top:6px">Aucune alerte.</div>');
   if(ED.col==='factures')return st('Mandat',esc(r.mandat)||'—');
   return st('Mandat',esc(r.mandat)||'—')+st('JEH rémunérée',r.I===null?'—':nf3.format(Math.round(r.I*10000)/10000))+st('Rémunération brute',r.J===null?'—':eur(r.J));
 }
 function edBody(r,D){
   const c=ED.col,cf=D.c;
-  if(c==='etudes')return fld('Client',inT(c,r,'client'))+fld('N° d’étude',inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut',sel(c,r,'statut',cf.statuts))+fld('Facture',sel(c,r,'facture',cf.factures))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div><div class="f2">${fld('Date de création',inD(c,r,'date'))}${fld('Échéance paiement',inD(c,r,'echeance'))}</div>`;
-  if(c==='factures')return fld('Étude',selEtude(c,r,'etude',D))+fld('Montant TTC encaissé',inN(c,r,'montant'))+`<div class="f2">${fld('Date du paiement',inD(c,r,'date'))}${fld('Note',sel(c,r,'note',cf.factures))}</div>`;
+  if(c==='etudes')return fld('Client',inT(c,r,'client'))+fld('N° d’étude',inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut de l’étude',sel(c,r,'statut',cf.statuts))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div>`+fld('Date de création',inD(c,r,'date'));
+  if(c==='factures')return fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Type',sel(c,r,'type',F_TYPES,false))}${fld('Montant TTC',inN(c,r,'montant'))}</div><div class="f2">${fld('Date d’émission',inD(c,r,'date'))}${fld('Échéance',inD(c,r,'echeance'))}</div><div class="f2">${fld('État',sel(c,r,'etat',F_ETATS,false))}${fld('Payée le',inD(c,r,'datePaiement'))}</div>`;
   return fld('Prénom',`<input list="pl" ${attr(c,r.id,'prenom')} value="${esc(r.prenom)}" autocomplete="off"><datalist id="pl">${persons(D).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`)+fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Date',inD(c,r,'date'))}${fld('Statut',sel(c,{id:r.id,statut:r.stat},'statut',BV_STAT,false))}</div><div class="f2">${fld('Minutes travaillées',inN(c,r,'min'))}${fld('Nb de personnes',inN(c,r,'nb'))}</div>${fld('JEH intervenant HT',inN(c,r,'jeh'))}${fld('Note',inT(c,r,'note'))}`;
 }
-const ED_TITLE={etudes:['Nouvelle étude','Modifier l’étude'],factures:['Nouveau paiement','Modifier le paiement'],temps:['Nouvelle ligne de temps','Modifier la ligne de temps']};
+const ED_TITLE={etudes:['Nouvelle étude','Modifier l’étude'],factures:['Nouvelle facture','Modifier la facture'],temps:['Nouvelle ligne de temps','Modifier la ligne de temps']};
 function openEdit(col,id,isNew){
   ED={col,id,isNew:!!isNew};const D=compute(),r=edRow(D);if(!r){ED=null;return}
   const el=$('#edit');
@@ -490,8 +533,8 @@ function refreshEdit(){if(!ED)return;const D=compute(),r=edRow(D),s=$('#edsum');
 function closeEdit(){
   if(PSEC){PSEC=null;const el=$('#edit');el.hidden=true;el.innerHTML='';render();return}
   if(!ED)return;const {col,id,isNew}=ED,r=S[col]&&S[col][id];
-  if(isNew&&r){const blank=col==='etudes'?!r.client&&!r.num&&!r.resume&&!isNum(r.montant):col==='factures'?!r.etude&&!isNum(r.montant):!r.prenom&&!r.etude&&!isNum(r.min);if(blank)del(col,id)}
-  ED=null;const el=$('#edit');el.hidden=true;el.innerHTML='';render();
+  if(isNew&&r){const blank=col==='etudes'?!r.client&&!r.num&&!r.resume&&!isNum(r.montant):col==='factures'?!isNum(r.montant):!r.prenom&&!isNum(r.min);if(blank)del(col,id)}
+  const wasNewEt=isNew&&col==='etudes'&&S.etudes[id];ED=null;const el=$('#edit');el.hidden=true;el.innerHTML='';if(wasNewEt){openRep(id);return}render();
 }
 function cf(label,path,val,pct,unit){return `<div class="pr"><label>${label}</label><div class="pin"><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}"><span>${pct?'%':(unit||'')}</span></div></div>`}
 function listEd(k,arr,ph){return `<div class="led">${arr.map((v,i)=>`<div class="li"><span class="hdl" data-k="${k}" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><input data-li="${k}" data-i="${i}" value="${esc(v)}"><button class="x" data-lidel="${k}:${i}" aria-label="Supprimer">✕</button></div>`).join('')}</div><button class="b ghost addl" data-liadd="${k}">+ ${ph}</button>`}
@@ -518,7 +561,6 @@ function paramSecs(D){
   return [
    {k:'mand',t:'Mandats',s:c.mandats.length+' mandat'+(c.mandats.length>1?'s':'')+(cur?' · actuel : '+cur.nom:''),b:()=>`${mand||'<div class="small">Aucun mandat.</div>'}<button class="b ghost addl" data-addmand="1">+ Ajouter un mandat</button>`},
    {k:'stat',t:'Statuts des études',s:c.statuts.length+' statuts',b:()=>listEd('statuts',c.statuts,'Ajouter un statut')},
-   {k:'fact',t:'Statuts de facture',s:c.factures.length+' statuts',b:()=>listEd('factures',c.factures,'Ajouter un statut')},
    {k:'bell',t:'Relances et TVA',s:'relances à '+c.relance1+' et '+c.relance2+' j · TVA '+nf2.format(c.tva*100).replace(/,00$/,'')+' %',b:()=>cf('1re relance par mail','relance1',c.relance1,false,'jours')+cf('2e relance','relance2',c.relance2,false,'jours')+cf('TVA','tva',c.tva,true)},
    {k:'cnje',t:'Règles CNJE',s:c.cnje.date?'JEH '+c.cnje.min+'–'+c.cnje.max+' € · depuis le '+fdate(dnum(c.cnje.date)):'Aucune règle appliquée',b:()=>fld('Règles en vigueur depuis le',`<input type="date" data-cfg="cnje.date" value="${esc(c.cnje.date)}">`)+cf('JEH client minimum HT','cnje.min',c.cnje.min,false,'€')+cf('JEH client maximum HT','cnje.max',c.cnje.max,false,'€')+cf('JEH intervenant maximum HT','cnje.maxInt',c.cnje.maxInt,false,'€')},
    {k:'cot',t:'Cotisations',s:'salariales '+nf2.format(sumP(c.cot)*100)+' % · patronales '+nf2.format(sumP(c.patr)*100)+' %',b:()=>cf('SMIC horaire brut','smic',c.smic,false,'€')+`<div class="sh">Cotisations salariales</div>`+Object.keys(COT_LAB).map(k=>cf(COT_LAB[k],'cot.'+k,c.cot[k],true)).join('')+tot('Total',sumP(c.cot))+`<div class="sh">Charges patronales</div>`+Object.keys(PATR_LAB).map(k=>cf(PATR_LAB[k],'patr.'+k,c.patr[k],true)).join('')+cf('Chômage part Junior','chomage',c.chomage,true)+tot('Total',sumP(c.patr))},
@@ -553,7 +595,7 @@ document.addEventListener('change',e=>{
   if(t.id==='msel'){mandatSel=t.value;lsSet('suivi.mandat',mandatSel);render();return}
   if(t.dataset.c){
     const col=t.dataset.c,id=t.dataset.id,f=t.dataset.f;let v=t.value;if(t.type==='number')v=v===''?null:Number(v);
-    if(S[col][id]){S[col][id][f]=v;saveRow(col,id)}
+    if(S[col][id]){S[col][id][f]=v;if(col==='factures'&&f==='etat'&&v==='Payée'&&!S[col][id].datePaiement)S[col][id].datePaiement=dstr(TODAY);saveRow(col,id);if(col==='factures'&&f==='etat'&&ED)openEdit(ED.col,ED.id,ED.isNew)}
     render();refreshEdit();
   }else if(t.dataset.lvl!==undefined){
     const n=t.dataset.lvl,k='f_'+n.toLowerCase().replace(/[^a-z0-9]+/g,'_');
@@ -589,16 +631,19 @@ document.addEventListener('click',e=>{
   if(b.dataset.param){openParam(b.dataset.param);return}
   if(b.dataset.dashed){openParam('dash');return}
   if(b.dataset.goalerts){FLT.etudes.s='alert';tab='etudes';lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
+  if(b.dataset.open){openRep(b.dataset.open);return}
+  if(b.dataset.closerep){closeRep();return}
   if(b.dataset.edit){const [c,i]=b.dataset.edit.split(':');openEdit(c,i,false);return}
   if(b.dataset.chip){const [k,v]=b.dataset.chip.split(':');FLT[k].s=v;render();return}
   if(b.dataset.eddel){if(b.dataset.arm){const {col,id}=ED;ED.isNew=false;del(col,id);closeEdit()}else{b.dataset.arm='1';b.textContent='Sûr ? Appuyez encore pour supprimer';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='Supprimer'}},3000)}return}
-  if(b.dataset.tab){tab=b.dataset.tab;lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
+  if(b.dataset.tab){OPEN=null;tab=b.dataset.tab;lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.add){
     const a=b.dataset.add;
     let nid;
     if(a==='etudes')nid=addRow('etudes',{date:dstr(TODAY),client:'',num:'',resume:'',statut:'Faisabilité',facture:'',jeh:null,montant:null,echeance:''});
-    if(a==='factures')nid=addRow('factures',{date:dstr(TODAY),etude:'',montant:null,note:''});
-    if(a==='temps')nid=addRow('temps',{date:dstr(TODAY),prenom:'',etude:'',note:'',min:null,nb:1,jeh:null,statut:'Pas payé'});
+    const et=b.dataset.et||'';
+    if(a==='factures')nid=addRow('factures',{date:dstr(TODAY),etude:et,type:'Acompte',montant:null,echeance:'',etat:'Émise',datePaiement:''});
+    if(a==='temps')nid=addRow('temps',{date:dstr(TODAY),prenom:'',etude:et,note:'',min:null,nb:1,jeh:null,statut:'Pas payé'});
     if(nid)openEdit(a,nid,true);
     return}
   if(b.dataset.liadd){const c=ensureCfg();c[b.dataset.liadd].push('Nouveau statut');saveCfg();render();if(PSEC)drawParam();const l=document.querySelectorAll(`[data-li="${b.dataset.liadd}"]`);const x=l[l.length-1];if(x){x.focus();x.select()}return}

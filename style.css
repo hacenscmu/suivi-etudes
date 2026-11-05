@@ -348,3 +348,20 @@ h1{font-size:20px}
 .alx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;font-size:13px;font-weight:600}
 .alx span{display:flex;gap:6px;align-items:flex-start}.alx svg{flex:none;margin-top:2px;color:var(--acc)}
 .emeta .al,.eal,ul.al.wr li{color:var(--acc)}.eal{font-weight:600}
+
+/* rapport d'étude */
+.back{border:0;background:transparent;color:var(--acc);font:inherit;font-weight:700;font-size:15px;padding:6px 2px 10px;cursor:pointer}
+.hero .et b{font-size:20px}
+.pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.pill.fin{background:var(--card);color:var(--acc);border:1.5px solid var(--acc)}
+.card+.card{margin-top:10px}
+#view>.card{margin-bottom:10px}
+.ftg{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.ft{background:var(--card2);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column}
+.ft small{font-size:11.5px;color:var(--mute)}.ft b{font-size:19px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ft.acc b{color:var(--acc)}.ft.late{background:var(--accsoft)}.ft.late b{color:var(--acc)}
+.cnt.soft{background:var(--card2);color:var(--ink)}
+.card .lcard{box-shadow:none;border:1px solid var(--line);background:var(--card);margin:8px 0 0}
+.lvp{padding:5px 10px;border-radius:99px;font-size:12.5px;font-weight:700}
+.lvp.lv3,.lvp.lv4{color:#fff}
+button.b.ghost:disabled{opacity:.4}
