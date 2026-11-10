@@ -192,7 +192,7 @@ function index_(){
     if(!row[0]&&!row[1]&&!row[2]) return;
     var col=String(row[0]), id=String(row[1]), key=col+'\u0001'+id, line=i+2;
     if(READ_COLLECTIONS.indexOf(col)<0){bad.push({collection:col,id:id,line:line,reason:'unknown_collection'});return;}
-    if(!ID_RE.test(id)){bad.push({collection:col,id:id,line:line,reason:'invalid_id'});return;}
+    if(!validIdForCollection_(col,id)){bad.push({collection:col,id:id,line:line,reason:'invalid_id'});return;}
     if(idx[key]){
       idx[key].duplicate=true; idx[key].lines.push(line);
       bad.push({collection:col,id:id,line:line,reason:'duplicate'});
@@ -223,6 +223,7 @@ function loadAll_(){
   return ok_(data,{revision:revision_(),anomalies:I.anomalies});
 }
 
+function validIdForCollection_(col,id){return col==="config"?id==="main":typeof id==="string"&&ID_RE.test(id);}
 function dateOk_(s){
   if(typeof s!=='string') return false;
   var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s); if(!m) return false;
@@ -342,7 +343,8 @@ function mutate_(b,who){
     return conflict_(READ_COLLECTIONS.indexOf(col)>=0?'READ_ONLY_COLLECTION':'UNKNOWN_COLLECTION',
       READ_COLLECTIONS.indexOf(col)>=0?'La collection historique temps est en lecture seule':'Collection inconnue');
   }
-  if(typeof id!=='string'||!ID_RE.test(id)) return conflict_('INVALID_REQUEST','Identifiant absent ou invalide');
+  if(!validIdForCollection_(col,id)) return conflict_('INVALID_REQUEST','Identifiant absent ou invalide');
+  if(action==='delete'&&col==='config') return conflict_('INVALID_REQUEST','La configuration principale ne peut pas être supprimée');
   if(typeof b.opId!=='string'||!OP_RE.test(b.opId)) return conflict_('INVALID_REQUEST','opId stable absent ou invalide');
   if(typeof b.expectedVersion!=='number'||!Number.isSafeInteger(b.expectedVersion)||
      b.expectedVersion<(action==='delete'?1:0)) return conflict_('INVALID_REQUEST','expectedVersion invalide');
