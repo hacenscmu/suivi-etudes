@@ -9,6 +9,7 @@
 
 const { analyserIntervention, agregerInterventions } = require("./interventions");
 const { analyserFacture } = require("./factures");
+const { STATUTS_ETUDE, STATUTS_CA_SIGNE } = require("./etudes");
 
 function dateValide(value) {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -29,13 +30,14 @@ function calculerTableauDeBord({
   interventions = [],
   dateFin = new Date().toISOString().slice(0, 10),
   nombreMois = 6,
+  tva = 0.2,
 } = {}) {
   const anomalies = [];
   if (![etudes, factures, interventions].every(Array.isArray)) {
     return { valide: false, anomalies: ["Les collections du tableau de bord doivent être des tableaux"] };
   }
-  if (!dateValide(dateFin) || !Number.isInteger(nombreMois) || nombreMois < 1 || nombreMois > 24) {
-    return { valide: false, anomalies: ["Paramètres de période invalides"] };
+  if (!dateValide(dateFin) || !Number.isInteger(nombreMois) || nombreMois < 1 || nombreMois > 24 || !Number.isFinite(tva) || tva < 0 || tva > 1) {
+    return { valide: false, anomalies: ["Paramètres de période ou taux de TVA invalides"] };
   }
 
   let caSigne = 0;
@@ -54,12 +56,22 @@ function calculerTableauDeBord({
       return;
     }
     etudeIds.add(etude.id);
-    const montant = montantValide(etude.montant);
-    if (montant === null) {
-      anomalies.push({ collection: "etudes", index, raison: "Montant signé absent ou invalide" });
+    if (!STATUTS_ETUDE.includes(etude.statut)) {
+      anomalies.push({ collection: "etudes", index, raison: "Statut d'étude absent ou inconnu" });
       caSigneComplet = false;
-    } else {
-      caSigne += montant;
+      return;
+    }
+    const montant = montantValide(etude.montant);
+    if (STATUTS_CA_SIGNE.has(etude.statut)) {
+      if (montant === null) {
+        anomalies.push({ collection: "etudes", index, raison: "Montant signé absent ou invalide" });
+        caSigneComplet = false;
+      } else {
+        caSigne += montant / (1 + tva);
+      }
+    } else if (etude.montant !== undefined && etude.montant !== null && etude.montant !== "" && montant === null) {
+      anomalies.push({ collection: "etudes", index, raison: "Montant d'étude invalide" });
+      caSigneComplet = false;
     }
   });
 
@@ -80,8 +92,8 @@ function calculerTableauDeBord({
       facturesCompletes = false;
       return;
     }
-    montantFacture += montant;
-    if (analyse.payee) encaisse += montant;
+    montantFacture += montant / (1 + tva);
+    if (analyse.payee) encaisse += montant / (1 + tva);
   });
 
   const calculInterventions = agregerInterventions(interventions);
