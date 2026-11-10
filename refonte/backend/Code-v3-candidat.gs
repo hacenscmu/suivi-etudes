@@ -290,7 +290,7 @@ function relationError_(I,col,record){
 }
 function dependanceError_(I,col,id){
   var refs={
-    clients:[['etudes','clientId'],['etudes','clientId']],
+    clients:[['etudes','clientId']],
     etudes:[['factures','etudeId'],['interventions','etudeId']],
     membres:[['interventions','membreId'],['lignesBV','membreId']],
     bvs:[['lignesBV','bvId']]
