@@ -10,7 +10,7 @@ const eur=n=>nf2.format(n||0)+' €';
 const eur0=n=>nf0.format(Math.round(n||0))+' €';
 const num=v=>(v===null||v===undefined||v===''||isNaN(Number(v)))?0:Number(v);
 const isNum=v=>v!==null&&v!==undefined&&v!==''&&!isNaN(Number(v));
-const dnum=s=>{if(!s)return null;const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);return m?Date.UTC(+m[1],+m[2]-1,+m[3])/864e5:null};
+const dnum=s=>{if(!s)return null;const m=/^(\d{4})-(\d{2})-(\d{2})/.exec(s);if(!m)return null;const t=Date.UTC(+m[1],+m[2]-1,+m[3]),d=new Date(t);return d.getUTCMonth()===+m[2]-1&&d.getUTCDate()===+m[3]?t/864e5:null}; // refuse les dates impossibles (31 février…)
 const dstr=n=>new Date(n*864e5).toISOString().slice(0,10);
 const now=new Date();const TODAY=Date.UTC(now.getFullYear(),now.getMonth(),now.getDate())/864e5;
 const fdate=n=>{const d=new Date(n*864e5);return d.toLocaleDateString('fr-FR',{timeZone:'UTC'})};
@@ -73,7 +73,9 @@ function finStatus(e){
   const inv=e.inv,st=e.statut;
   if(st==='Refusé / sans suite')return inv.length?(inv.some(f=>!f.paid)?'Facture émise':'Encaissé'):'';
   const sol=inv.filter(f=>f.type==='Solde');
-  if(sol.length)return sol.every(f=>f.paid)?'Solde encaissé':'Solde facturé';
+  if(sol.length)return inv.every(f=>f.paid)?'Solde encaissé':'Solde facturé'; // encaissé seulement si TOUTES les factures sont payées
+  const unpaid=inv.find(f=>!f.paid);
+  if(unpaid)return unpaid.type==='Intermédiaire'?'Facture intermédiaire':'Acompte facturé'; // une facture antérieure impayée n'est plus masquée
   const last=inv[inv.length-1];
   if(!last)return st==='Archivée'?(num(e.montant)>0?'Solde à facturer':''):L_STAT.includes(st)?'Acompte à facturer':'';
   if(!last.paid)return last.type==='Intermédiaire'?'Facture intermédiaire':'Acompte facturé';
@@ -100,7 +102,7 @@ function compute(){
     e.K=e.inv.filter(f=>f.paid).reduce((a,f)=>a+num(f.montant),0);
     e.facture=finStatus(e);
     const ue=e.inv.filter(f=>!f.paid&&f.ech!==null).map(f=>f.ech);e.echeance=ue.length?dstr(Math.min(...ue)):'';
-    e.J=(num(e.jeh)&&num(e.montant))?num(e.montant)/(1+tva)/num(e.jeh):null;
+    e.J=(num(e.jeh)&&num(e.montant))?Math.max(0,num(e.montant)/(1+tva)-num(e.frais))/num(e.jeh):null; // les frais (labo…) ne sont pas des JEH
     e.L=L_STAT.includes(e.statut)?num(e.montant)-e.K:null;
     const ls=byEtude[e.num]||[];e.lines=ls;
     if(!e.num||!ls.length)e.N='';
@@ -201,7 +203,7 @@ function dash(D,sel){
   const dep=persN.reduce((a,p)=>a+costOf(D,p,t=>all||t.mandat===sel).cost,0);
   const ca=sumBy(E,e=>e.montant,SIGNED)/tva1,reste=sumBy(E,e=>e.L,SIGNED)/tva1;
   const archive=sumBy(E,e=>e.montant,['Archivée'])/tva1;
-  const retard=all?D.etudes.filter(e=>INVOICED.includes(e.facture)&&dnum(e.echeance)!==null&&dnum(e.echeance)<TODAY).reduce((a,e)=>a+num(e.L),0)/tva1:0;
+  const retard=E.reduce((a,e)=>a+e.inv.filter(f=>f.late).reduce((b,f)=>b+num(f.montant),0),0)/tva1; // seules les factures échues et impayées, filtre de mandat respecté
   const jehF=sumBy(E,e=>e.J,SIGNED),jehR=D.temps.filter(t=>all||t.mandat===sel).reduce((a,t)=>a+num(t.I),0);
   const nbSigned=E.filter(e=>SIGNED.includes(e.statut)).length;
   const cnt=k=>E.filter(e=>e.statut===k).length;
@@ -518,7 +520,7 @@ function edSummary(r,D){
 }
 function edBody(r,D){
   const c=ED.col,cf=D.c;
-  if(c==='etudes')return fld('Client',inT(c,r,'client'))+fld('N° d’étude',inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut de l’étude',sel(c,r,'statut',cf.statuts))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div>`+fld('Date de création',inD(c,r,'date'));
+  if(c==='etudes')return fld('Client',inT(c,r,'client'))+fld('N° d’étude',inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut de l’étude',sel(c,r,'statut',cf.statuts))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div>`+fld('Dont frais HT (labo…, hors JEH)',inN(c,r,'frais'))+fld('Date de création',inD(c,r,'date'));
   if(c==='factures')return fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Type',sel(c,r,'type',F_TYPES,false))}${fld('Montant TTC',inN(c,r,'montant'))}</div><div class="f2">${fld('Date d’émission',inD(c,r,'date'))}${fld('Échéance',inD(c,r,'echeance'))}</div><div class="f2">${fld('État',sel(c,r,'etat',F_ETATS,false))}${fld('Payée le',inD(c,r,'datePaiement'))}</div>`;
   return fld('Prénom',`<input list="pl" ${attr(c,r.id,'prenom')} value="${esc(r.prenom)}" autocomplete="off"><datalist id="pl">${persons(D).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`)+fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Date',inD(c,r,'date'))}${fld('Statut',sel(c,{id:r.id,statut:r.stat},'statut',BV_STAT,false))}</div><div class="f2">${fld('Minutes travaillées',inN(c,r,'min'))}${fld('Nb de personnes',inN(c,r,'nb'))}</div>${fld('JEH intervenant HT',inN(c,r,'jeh'))}${fld('Note',inT(c,r,'note'))}`;
 }
@@ -739,7 +741,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=11;
+const VERSION=12;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,config:S.cfg||null}));
