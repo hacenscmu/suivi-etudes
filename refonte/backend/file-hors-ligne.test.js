@@ -221,3 +221,21 @@ test("refuse de mettre en file une écriture dans la collection historique temps
   }), e => e.code === "READ_ONLY_COLLECTION");
   assert.deepEqual(store.valeur(), []);
 });
+
+test("une opération interrompue par le serveur est bloquée jusqu'à remplacement explicite", async () => {
+  const store = stockage();
+  const file = creerFileHorsLigne({
+    stockage: store,
+    api: { save: async () => { const e = new Error("mutation non appliquée"); e.code = "OP_INTERRUPTED"; throw e; }, delete: async () => ({}) },
+  });
+  await file.ajouter(saveOp("op_queue_interrupted_01"));
+  const first = await file.synchroniser();
+  assert.equal(first.restantes, 1);
+  assert.equal(first.bloquePar.code, "OP_INTERRUPTED");
+  assert.equal((await file.inspecter())[0].etat, "incident");
+  await assert.rejects(file.remplacerApresConflit("op_queue_interrupted_01", saveOp("op_queue_interrupted_02", "nouveau")), e => e.code === "INCIDENT_NOT_FOUND");
+  await file.remplacerApresIncident("op_queue_interrupted_01", saveOp("op_queue_interrupted_02", "nouveau"));
+  const second = await file.synchroniser();
+  assert.equal(second.traitees, 1);
+  assert.equal(second.restantes, 0);
+});
