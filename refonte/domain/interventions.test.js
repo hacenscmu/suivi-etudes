@@ -72,3 +72,21 @@ test("bloque l'agrégation si une intervention est invalide", () => {
 test("bloque une collection qui n'est pas un tableau", () => {
   assert.equal(agregerInterventions(null).valide, false);
 });
+
+test("alerte au-dessus de 300 € HT/JEH pour l'intervenant sans bloquer l'intervention", () => {
+  const r = analyserIntervention({ ...ligne, prixJehHt: 301 });
+  assert.equal(r.valide, true);
+  assert.ok(r.alertes.some(a => a.includes("plafond HAC de 300")));
+});
+
+test("le prix intervenant à 300 € HT est accepté sans alerte et le plafond est configurable", () => {
+  assert.equal(analyserIntervention({ ...ligne, prixJehHt: 300 }).alertes.length, 0);
+  assert.equal(analyserIntervention({ ...ligne, prixJehHt: 350 }, { plafondJehHt: 400 }).alertes.length, 0);
+});
+
+test("propage les alertes de prix intervenant dans l'agrégation", () => {
+  const r = agregerInterventions([{ ...ligne, prixJehHt: 350 }]);
+  assert.equal(r.valide, true);
+  assert.equal(r.alertes.length, 1);
+  assert.equal(r.alertes[0].index, 0);
+});
