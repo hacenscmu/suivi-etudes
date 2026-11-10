@@ -135,7 +135,7 @@ function relation_(I, c, r) {
 
 function dateValide_(s) {
   if(typeof s!=='string') return false;
-  var m=/^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s); if(!m) return false;
+  var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s); if(!m) return false;
   var d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));
   return d.getUTCFullYear()==+m[1]&&d.getUTCMonth()==+m[2]-1&&d.getUTCDate()==+m[3];
 }
