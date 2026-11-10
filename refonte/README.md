@@ -26,7 +26,7 @@ Cette arborescence contient le nouveau socle métier, isolé de l'application de
 | `domain/adaptateur-historique.js` | Produire un aperçu de migration sans écriture, avec correspondances client/membre explicites |
 | `application/lecture.js` | Assembler les collections validées, vérifier les références et fournir un modèle de lecture unifié à l'interface |
 | `application/commandes.js` | Préparer et appliquer des ajouts/modifications immuables en mémoire, après validation structurelle et métier |
-| `backend/Code-v3-candidat.gs` | Candidat Apps Script v3 non déployé, à tester uniquement sur une copie dédiée |
+| `backend/apps-script/Code.gs` | Serveur Apps Script v3 candidat, testé dans un simulateur Node et non déployé |
 | `backend/client-api-v3.js` | Parler au contrat v3 via un transport injecté, avec versions, opId et erreurs explicites |
 | `backend/file-hors-ligne.js` | Conserver les opérations tant que le serveur n'a pas confirmé le succès ; arbitrage explicite des conflits |
 | `backend/mock-serveur-v3.js` | Simuler le serveur v3 en mémoire pour tester versions, idempotence et tombstones |
@@ -34,17 +34,17 @@ Cette arborescence contient le nouveau socle métier, isolé de l'application de
 
 ## Backend
 
-Le contrat cible est documenté dans [`backend/contrat-api-v3.md`](backend/contrat-api-v3.md). Il distingue désormais `interventions` (modèle actif, une personne par ligne) de `temps` (lecture historique seule pendant la migration). L'audit du candidat v2.2 est dans [`backend/audit-compatibilite-v2.2.md`](backend/audit-compatibilite-v2.2.md) : il confirme que le candidat ne peut pas être raccordé tel quel au nouveau modèle (clients, membres, BV, identifiants stables et protocole). Ce sont des documents de conception ; Le candidat `Code-v3-candidat.gs` reste un fichier de travail non déployé ; aucun serveur ni aucune donnée de production n'ont été modifiés.
+Le contrat cible est documenté dans [`backend/contrat-api-v3.md`](backend/contrat-api-v3.md). Il distingue `interventions` (modèle actif, une personne par ligne) de `temps` (lecture historique seule). Le serveur candidat [`backend/apps-script/Code.gs`](backend/apps-script/Code.gs) est exécuté par un simulateur avec de faux services Google ; il n'est pas déployé et doit encore être éprouvé sur une copie réelle avant toute décision de bascule.
 
 ## Tests
 
 Depuis la racine du dépôt, avec Node.js :
 
 ```sh
-node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js
+node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js
 ```
 
-Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 162 tests : domaine, application, client API v3, serveur simulé, intégration client/serveur et file hors ligne. Le dernier run complet vérifié : 162 réussis, 0 échec ; le workflow vérifie aussi la reproductibilité du bundle navigateur.
+Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 213 tests : domaine, application, client API v3, serveur simulé, intégration client/serveur et file hors ligne. Le dernier run complet vérifié : 213 réussis, 0 échec ; le workflow vérifie aussi la reproductibilité du bundle navigateur.
 
 ## État d'intégration
 
