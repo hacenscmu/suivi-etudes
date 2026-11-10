@@ -65,7 +65,7 @@ function agregerInterventions(interventions) {
   interventions.forEach((intervention, index) => {
     const analyse = analyserIntervention(intervention);
     analyse.anomalies.forEach(raison => anomalies.push({ index, raison }));
-    if (!analyse.valide) return;
+    if (!analyse.valide || !analyse.statutTravaille) return;
     totalJehTravaillees += analyse.jehTravaillees;
     parMembre.set(intervention.membreId, (parMembre.get(intervention.membreId) || 0) + analyse.jehTravaillees);
     parEtude.set(intervention.etudeId, (parEtude.get(intervention.etudeId) || 0) + analyse.jehTravaillees);
