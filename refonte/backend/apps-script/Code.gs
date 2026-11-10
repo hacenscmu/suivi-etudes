@@ -136,6 +136,13 @@ function relation_(I, c, r) {
   }
   if (c === 'formation') {
     if (!vivante_(I, 'membres', r.membreId)) return 'Membre de formation introuvable';
+    var prefixGrille = 'formation\\u0001';
+    var autreGrille = Object.keys(I.idx).some(function(key) {
+      var e = I.idx[key];
+      return key.indexOf(prefixGrille) === 0 && key !== prefixGrille + r.id && e.o &&
+        !e.corrompu && !e.doublon && e.o._deleted !== true && e.o.membreId === r.membreId;
+    });
+    if (autreGrille) return 'Une grille Qualité formation existe déjà pour ce membre';
     if (!simple_(r.niveaux)) return 'Grille de niveaux invalide';
     var idsEtudes = Object.keys(r.niveaux);
     for (var fi = 0; fi < idsEtudes.length; fi++) {
