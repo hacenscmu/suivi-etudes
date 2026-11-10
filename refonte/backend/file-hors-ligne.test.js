@@ -226,7 +226,7 @@ test("une opération interrompue par le serveur est bloquée jusqu'à remplaceme
   const store = stockage();
   const file = creerFileHorsLigne({
     stockage: store,
-    api: { save: async () => { const e = new Error("mutation non appliquée"); e.code = "OP_INTERRUPTED"; throw e; }, delete: async () => ({}) },
+    api: { save: async op => { if (op.opId === "op_queue_interrupted_01") { const e = new Error("mutation non appliquée"); e.code = "OP_INTERRUPTED"; throw e; } return { data: { ok: true } }; }, delete: async () => ({}) },
   });
   await file.ajouter(saveOp("op_queue_interrupted_01"));
   const first = await file.synchroniser();
