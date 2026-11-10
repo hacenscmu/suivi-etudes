@@ -234,3 +234,57 @@ test("refuse une facture sans étude stable ou avec un montant invalide", async 
   })));
   assert.equal(r.error.code, "INVALID_REQUEST");
 });
+
+test("valide une grille de formation avec membre et étude existants", async () => {
+  const server = base();
+  const r = body(await server.transport(req("save", {
+    collection: "formation", id: "formation_0001",
+    record: { id: "formation_0001", membreId: "membre_0001", nom: "Alex Martin", niveaux: { etude_0001: 3 } },
+    opId: "op_formation_valid_01", expectedVersion: 0,
+  })));
+  assert.equal(r.ok, true, JSON.stringify(r));
+});
+
+test("refuse une grille de formation avec membre ou étude inconnus", async () => {
+  const server = base();
+  const badMember = body(await server.transport(req("save", {
+    collection: "formation", id: "formation_0001",
+    record: { id: "formation_0001", membreId: "membre_absent", nom: "Alex", niveaux: {} },
+    opId: "op_formation_member_01", expectedVersion: 0,
+  })));
+  const badStudy = body(await server.transport(req("save", {
+    collection: "formation", id: "formation_0002",
+    record: { id: "formation_0002", membreId: "membre_0001", nom: "Alex", niveaux: { etude_absente: 2 } },
+    opId: "op_formation_study_01", expectedVersion: 0,
+  })));
+  assert.equal(badMember.error.code, "INVALID_REQUEST");
+  assert.equal(badStudy.error.code, "INVALID_REQUEST");
+});
+
+test("refuse les niveaux de formation hors de l'échelle 0 à 4", async () => {
+  const server = base();
+  const r = body(await server.transport(req("save", {
+    collection: "formation", id: "formation_0001",
+    record: { id: "formation_0001", membreId: "membre_0001", nom: "Alex", niveaux: { etude_0001: 5 } },
+    opId: "op_formation_level_01", expectedVersion: 0,
+  })));
+  assert.equal(r.error.code, "INVALID_REQUEST");
+});
+
+test("protège les membres et études référencés par la grille Qualité formation", async () => {
+  const server = base();
+  const save = body(await server.transport(req("save", {
+    collection: "formation", id: "formation_0001",
+    record: { id: "formation_0001", membreId: "membre_0001", nom: "Alex", niveaux: { etude_0001: 2 } },
+    opId: "op_formation_ref_01", expectedVersion: 0,
+  })));
+  assert.equal(save.ok, true);
+  const delMember = body(await server.transport(req("delete", {
+    collection: "membres", id: "membre_0001", opId: "op_formation_del_member", expectedVersion: 1,
+  })));
+  const delStudy = body(await server.transport(req("delete", {
+    collection: "etudes", id: "etude_0001", opId: "op_formation_del_study", expectedVersion: 1,
+  })));
+  assert.equal(delMember.error.code, "INVALID_REQUEST");
+  assert.equal(delStudy.error.code, "INVALID_REQUEST");
+});
