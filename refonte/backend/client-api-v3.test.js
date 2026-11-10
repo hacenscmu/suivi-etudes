@@ -152,3 +152,12 @@ test("refuse une collection active absente ou mal formée dans loadAll", async (
   const c = client(async () => succes({ etudes: {} }));
   await assert.rejects(c.loadAll(), e => e.code === "INVALID_RESPONSE" && e.message.includes("clients"));
 });
+
+test("autorise uniquement la fiche config/main et interdit sa suppression", async () => {
+  let request;
+  const c = client(async r => { request = r; return succes({ id: "main" }); });
+  await c.save({ collection: "config", id: "main", record: { id: "main", tva: 0.2 }, opId: "op_config_0001", expectedVersion: 1 });
+  assert.equal(request.id, "main");
+  await assert.rejects(c.save({ collection: "config", id: "config_0001", record: { id: "config_0001" }, opId: "op_config_0002", expectedVersion: 0 }), e => e.code === "INVALID_REQUEST");
+  await assert.rejects(c.delete({ collection: "config", id: "main", opId: "op_config_0003", expectedVersion: 1 }), e => e.code === "INVALID_REQUEST");
+});
