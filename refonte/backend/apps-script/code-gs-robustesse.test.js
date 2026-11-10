@@ -114,7 +114,7 @@ test("corps de requête mesuré en octets UTF-8", async () => {
 });
 
 test("un tombstone ne publie pas le marqueur interne _opId", async () => {
-  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: base });
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: { ...base, membres: { membre_0001: { id: "membre_0001", _v: 1 } } } });
   await body(s, req("delete", { collection: "membres", id: "membre_0001", expectedVersion: 1, opId: "op_tombstone_hide_01" }));
   const loaded = await body(s, req("loadAll"));
   assert.equal(loaded.data.membres.membre_0001._deleted, true);
