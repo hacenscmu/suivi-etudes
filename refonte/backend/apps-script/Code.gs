@@ -73,7 +73,7 @@ function index_() {
     if (!r[0] && !r[1] && !r[2]) return;
     var c = String(r[0]), id = String(r[1]), k = c + '\u0001' + id, ligne = i + 2;
     if (COLLECTIONS_LECTURE.indexOf(c) < 0) { anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'collection'}); return; }
-    if (c === 'config' ? id !== 'main' : !ID_VALIDE.test(id)) { anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'id'}); return; }
+    if (c === 'config' ? id !== 'main' : !ID_VALIDE.test(id)) { idx[k] = {ligne: ligne, lignes: [ligne], corrompu: true}; anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'id'}); return; }
     if (idx[k]) { idx[k].lignes.push(ligne); idx[k].doublon = true; anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'doublon'}); return; }
     var o = null; try { o = JSON.parse(r[2]); } catch (x) {}
     if (!simple_(o)) { idx[k] = {ligne: ligne, lignes: [ligne], corrompu: true}; anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'json'}); return; }
