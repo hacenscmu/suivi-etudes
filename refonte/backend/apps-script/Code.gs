@@ -242,7 +242,7 @@ function dependance_(I, c, id) {
     if (trouve) return 'Suppression refusée : des fiches '+collection+' référencent encore cet élément';
   }
   if (c === 'etudes') {
-    var prefixFormation = 'formation\\u0001';
+    var prefixFormation = 'formation\u0001';
     var grilleTrouvee = Object.keys(I.idx).some(function(key) {
       var entree = I.idx[key];
       return key.indexOf(prefixFormation) === 0 && entree.o && !entree.corrompu && !entree.doublon &&
