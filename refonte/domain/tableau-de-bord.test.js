@@ -89,8 +89,8 @@ test("n'ajoute pas une étude non signée au CA signé", () => {
 
 test("convertit les factures TTC en montants HT avec le taux de TVA", () => {
   const r = calculerTableauDeBord({ ...base, tva: 0.1 });
-  assert.equal(r.montantFacture, 4090.909090909091);
-  assert.equal(r.encaisse, 3181.818181818182);
+  assert.ok(Math.abs(r.montantFacture - 4090.909090909091) < 1e-9);
+  assert.ok(Math.abs(r.encaisse - 3181.818181818182) < 1e-9);
 });
 
 test("refuse un taux de TVA invalide", () => {
