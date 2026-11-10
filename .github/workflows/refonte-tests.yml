@@ -15,6 +15,7 @@ on:
     branches: [Refonte]
     paths:
       - "refonte/domain/**"
+      - "refonte/backend/**"
       - "refonte/application/**"
       - "refonte/build/**"
       - "refonte/demo/**"
