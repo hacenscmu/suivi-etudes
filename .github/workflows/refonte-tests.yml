@@ -43,4 +43,4 @@ jobs:
       - name: Vérifier la syntaxe du candidat Apps Script v3
         run: node --check < refonte/backend/apps-script/Code.gs
       - name: Exécuter tous les tests métier
-        run: node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js
+        run: node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js refonte/migration/*.test.js

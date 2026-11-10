@@ -41,7 +41,8 @@ test("les prénoms et noms clients réutilisés sont signalés sans fusion", () 
   });
   assert.equal(resultat.resume.nomsClientsReutilises, 1);
   assert.equal(resultat.resume.prenomsReutilises, 1);
-  assert.equal(resultat.migrationAutomatiqueAutorisee, false);
+  // Cas normal (un client, plusieurs études ; une personne, plusieurs lignes) : signalé, mais non bloquant.
+  assert.equal(resultat.migrationAutomatiqueAutorisee, true);
   assert.ok(resultat.anomalies.every(a => a.gravite === "a_verifier"));
 });
 

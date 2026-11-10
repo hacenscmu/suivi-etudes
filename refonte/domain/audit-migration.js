@@ -56,7 +56,9 @@ function auditerDonneesHistoriques({ etudes = [], factures = [], temps = [] } = 
   });
 
   return {
-    migrationAutomatiqueAutorisee: anomalies.length === 0,
+    // Seules les anomalies bloquantes empêchent l'aperçu : un même client sur plusieurs études ou un même
+    // prénom sur plusieurs lignes est le cas normal, simplement signalé « à vérifier ».
+    migrationAutomatiqueAutorisee: anomalies.every(a => a.gravite !== "bloquante"),
     resume: {
       nombreEtudes: etudes.length, nombreFactures: factures.length, nombreLignesTemps: temps.length,
       doublonsNumerosEtude: doublonsNumerosEtude.length, nomsClientsReutilises: doublonsClients.length,
