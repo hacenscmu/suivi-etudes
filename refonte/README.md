@@ -21,6 +21,7 @@ Elle n'est pas encore branchée sur l'interface ni sur le backend de production.
 | `domain/clients.js` | Définir une relation ponctuelle/récurrente et une cadence explicite |
 | `domain/identites.js` | Valider les identifiants stables et les liens entre objets |
 | `domain/audit-migration.js` | Auditer les anciennes collections sans les modifier |
+| `domain/adaptateur-historique.js` | Produire un aperçu de migration sans écriture, avec correspondances client/membre explicites |
 
 ## Tests
 
@@ -36,4 +37,4 @@ Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépen
 
 L'audit historique est en lecture seule : il relève les numéros d'étude dupliqués, les références facture/temps introuvables ou ambiguës, ainsi que les noms de clients et prénoms réutilisés qui nécessitent une revue humaine.
 
-Les modules sont actuellement autonomes. Les formats d'entrée constituent le modèle cible de travail, pas encore un contrat de données migré. Avant raccordement à `app.js`, il faut construire et tester un adaptateur depuis les collections historiques (`etudes`, `factures`, `temps`, etc.), traiter les doublons et attribuer des identifiants stables sans perdre les références. Les calculs actuels de production restent inchangés.
+L’adaptateur historique produit uniquement un aperçu : il bloque les références d’étude ambiguës, exige un générateur d’identifiants explicite, signale les correspondances client/membre absentes ou invalides et ne regroupe jamais automatiquement les lignes de temps en BV. Il ne réalise aucune écriture.\n\nLes modules sont actuellement autonomes. Les formats d'entrée constituent le modèle cible de travail, pas encore un contrat de données migré. Avant raccordement à `app.js`, il faut construire et tester un adaptateur depuis les collections historiques (`etudes`, `factures`, `temps`, etc.), traiter les doublons et attribuer des identifiants stables sans perdre les références. Les calculs actuels de production restent inchangés.
