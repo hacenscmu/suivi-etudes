@@ -7,8 +7,8 @@
 
 - Enveloppe v3 `{ ok, apiVersion, data, meta, error }` et codes d'erreur du contrat.
 - Jetons individuels : le serveur ne garde que l'empreinte SHA-256 (propriété `TOKENS`), révocation par membre.
-- Versions optimistes, `VERSION_CONFLICT` sans écrasement, suppression logique (`_deleted`), `temps` en lecture seule.
-- Relations vérifiées : facture → étude ; intervention → étude + membre ; ligne de BV → BV + membre.
+- Versions optimistes, `VERSION_CONFLICT` sans écrasement, suppression logique (`_deleted`), `temps` en lecture seule, suppression parent refusée si des fiches actives le référencent.
+- Validation des champs métier principaux : études, factures, interventions, lignes de BV, clients, membres et formations ; les relations facture → étude, intervention → étude + membre et ligne de BV → BV + membre sont vérifiées.
 - Idempotence **durable** (feuille `Journal`) et **récupérable après panne** : Journal `pending` → fiche écrite avec `_opId` → Journal `committed`. Une panne entre deux écritures est résolue au rejeu ou au prochain accès à la fiche ; une écriture n'est jamais appliquée deux fois.
 - Clés en doublon et lignes illisibles jamais publiées ni écrasées ; `mettreEnQuarantaine(collection, id)` pour réparer.
 - Taille mesurée en octets UTF-8 ; aucun tableur créé en silence ; aucun jeton ni donnée dans les journaux.
