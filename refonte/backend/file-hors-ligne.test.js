@@ -178,3 +178,36 @@ test("abandonner ne retire que l'opération explicitement ciblée", async () => 
   assert.deepEqual(await file.abandonner("op_queue_0014"), { retiree: true, nombre: 1 });
   assert.equal((await file.inspecter())[0].opId, "op_queue_0015");
 });
+
+test("réessaie avec le même opId si la réponse réseau est perdue après écriture serveur", async () => {
+  const { creerClientApiV3 } = require("./client-api-v3");
+  const { creerServeurMemoireV3 } = require("./mock-serveur-v3");
+  const serveur = creerServeurMemoireV3({
+    token: "token-retry-123",
+    donnees: { clients: { client_0001: { id: "client_0001", raisonSociale: "Avant", _v: 1 } } },
+  });
+  let perdrePremiereReponse = true;
+  const api = creerClientApiV3({
+    obtenirToken: () => "token-retry-123",
+    transport: async request => {
+      const response = await serveur.transport(request);
+      if (request.action === "save" && perdrePremiereReponse) {
+        perdrePremiereReponse = false;
+        throw new Error("réponse perdue après commit");
+      }
+      return response;
+    },
+  });
+  const store = stockage();
+  const file = creerFileHorsLigne({ stockage: store, api });
+  await file.ajouter(saveOp("op_queue_retry_001", "Après", 1));
+  const premier = await file.synchroniser();
+  assert.equal(premier.restantes, 1);
+  assert.equal(serveur.lireRevision(), 1);
+  assert.equal(serveur.lireDonnees().clients.client_0001.raisonSociale, "Après");
+  const second = await file.synchroniser();
+  assert.equal(second.traitees, 1);
+  assert.equal(second.restantes, 0);
+  assert.equal(serveur.lireRevision(), 1);
+  assert.deepEqual(await file.inspecter(), []);
+});
