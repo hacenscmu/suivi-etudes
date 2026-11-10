@@ -107,7 +107,7 @@ test("bout en bout : l'aperçu est lisible par la couche application v3", () => 
   const r = migrerV11(exportV11());
   const src = r.collections;
   const etat = { clients: src.clients, membres: src.membres, etudes: src.etudes, factures: src.factures,
-    interventions: src.interventions.filter(i => i.statut), bvs: [], lignesBV: [] }; // lignes sans statut : à classer avant
+    interventions: src.interventions.filter(i => i.statut), formation: src.formation, bvs: [], lignesBV: [] }; // lignes sans statut : à classer avant
   const vue = construireVueApplication(etat, { dateFin: "2026-11-30" });
   assert.equal(vue.valide, true, JSON.stringify(vue.anomalies));
 });
