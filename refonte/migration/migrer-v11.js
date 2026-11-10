@@ -8,7 +8,7 @@
  *  - clients : un client par nom normalisé, fusion à confirmer ;
  *  - membres : v11 ne connaît que le prénom ; homonymes à séparer manuellement ;
  *  - interventions : minutesIndividuelles = min ÷ nb (confirmé : 120 min collectives à 2 = 60 min chacune) ;
- *  - temps.jeh : signification non confirmée ; valeur conservée dans jehV11, jamais convertie par défaut ;
+ *  - temps.jeh : prix HT de la JEH intervenant, confirmé par le calcul v11 (t.J = t.I × t.jeh) ; valeur brute conservée dans jehV11 ;
  *  - un mapping explicite peut qualifier temps.jeh comme prix intervenant HT ou nombre de JEH ;
  *  - études : « jeh » = prix HT de la JEH client ; « frais » (v12) conservé ;
  *  - factures : liées à l'étude par numéro → identifiant ; un état absent est signalé (v11 le supposait « Payée ») ;
@@ -48,7 +48,7 @@ function migrerV11(exportV11, { correspondances = {} } = {}) {
     tempsVersMembre: mapping("tempsVersMembre"),
     formationVersMembre: mapping("formationVersMembre"),
     nomsMembres: mapping("nomsMembres"),
-    jehTemps: correspondances.jehTemps ?? "non_qualifie",
+    jehTemps: correspondances.jehTemps ?? "prix_intervenant_ht",
   };
   if (!["non_qualifie", "prix_intervenant_ht", "nombre_jeh"].includes(C.jehTemps)) {
     throw new Error("jehTemps doit valoir non_qualifie, prix_intervenant_ht ou nombre_jeh.");
