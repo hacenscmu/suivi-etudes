@@ -93,7 +93,7 @@
         '" style="height:' + (m.jeh / max * 100) + '%"></div><small>' + escapeHtml(m.mois.slice(5)) + "</small></div>").join("") +
       '</div></section><section class="panel"><h3>Encaissement</h3><div class="sub">Part du CA signé déjà encaissée</div><div class="ring-wrap"><div class="ring" style="background:conic-gradient(var(--pink) 0 ' +
       percent + '%,#f4eaf0 ' + percent + '% 100%)"></div><div class="ring-info"><strong>' + money(d.encaisse) + '</strong><small>sur ' + money(d.caSigne) +
-      " HT signés</small></div></div><div class="sub">" + money(d.resteAEncaisser) + " HT restent à encaisser</div></section></div>" +
+      ' HT signés</small></div></div><div class="sub">' + money(d.resteAEncaisser) + " HT restent à encaisser</div></section></div>" +
       heading("À surveiller", "Factures et suivis en cours") +
       '<section class="panel">' + (alerts || '<div class="empty">Aucune facture en attente.</div>') + "</section>";
   }
