@@ -28,7 +28,7 @@ Chaque réponse doit exposer :
 
 Le client se fonde sur `ok` et `error.code`, pas uniquement sur le statut HTTP, car Apps Script peut renvoyer un statut HTTP générique pour une erreur métier.
 
-Codes minimaux : `AUTH_REQUIRED`, `AUTH_INVALID`, `INVALID_REQUEST`, `UNKNOWN_COLLECTION`, `NOT_FOUND`, `VERSION_CONFLICT`, `DUPLICATE_OPERATION`, `PAYLOAD_TOO_LARGE`, `READ_ONLY_COLLECTION`, `INTERNAL_ERROR`.
+Codes minimaux : `AUTH_REQUIRED`, `AUTH_INVALID`, `INVALID_REQUEST`, `UNKNOWN_COLLECTION`, `NOT_FOUND`, `VERSION_CONFLICT`, `DUPLICATE_OPERATION`, `PAYLOAD_TOO_LARGE`, `READ_ONLY_COLLECTION`, `OP_INTERRUPTED`, `INTERNAL_ERROR`.
 
 ## 3. Authentification
 
