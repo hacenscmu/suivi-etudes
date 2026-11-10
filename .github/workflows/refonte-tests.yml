@@ -5,12 +5,14 @@ on:
     branches: [Refonte]
     paths:
       - "refonte/domain/**"
+      - "refonte/demo/**"
       - "refonte/README.md"
       - ".github/workflows/refonte-tests.yml"
   pull_request:
     branches: [Refonte]
     paths:
       - "refonte/domain/**"
+      - "refonte/demo/**"
       - ".github/workflows/refonte-tests.yml"
 
 permissions:
@@ -26,5 +28,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Vérifier le prototype isolé
+        run: node refonte/demo/validate-demo.mjs
       - name: Exécuter tous les tests métier
         run: node --test refonte/domain/*.test.js
