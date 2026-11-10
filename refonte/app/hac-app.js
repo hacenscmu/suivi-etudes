@@ -2102,20 +2102,37 @@
     }
   };
   const cache = Object.create(null);
+
   function resoudre(parent, demande) {
-    const segments = demande.startsWith(".") ? parent.split("/").slice(0, -1).concat(demande.split("/")) : demande.split("/");
+    const segments = demande.startsWith(".")
+      ? parent.split("/").slice(0, -1).concat(demande.split("/"))
+      : demande.split("/");
     const normalises = [];
-    for (const segment of segments) { if (!segment || segment === ".") continue; if (segment === "..") normalises.pop(); else normalises.push(segment); }
-    let id = normalises.join("/"); if (!id.endsWith(".js")) id += ".js";
-    if (!Object.prototype.hasOwnProperty.call(definitions, id)) throw new Error("Module HAC introuvable : " + id);
+    for (const segment of segments) {
+      if (!segment || segment === ".") continue;
+      if (segment === "..") normalises.pop();
+      else normalises.push(segment);
+    }
+    let id = normalises.join("/");
+    if (!id.endsWith(".js")) id += ".js";
+    if (!Object.prototype.hasOwnProperty.call(definitions, id)) {
+      throw new Error("Module HAC introuvable : " + id);
+    }
     return id;
   }
+
   function charger(id) {
     if (cache[id]) return cache[id].exports;
-    const module = { exports: {} }; cache[id] = module;
-    definitions[id](demande => charger(resoudre(id, demande)), module, module.exports);
+    const module = { exports: {} };
+    cache[id] = module;
+    definitions[id](
+      demande => charger(resoudre(id, demande)),
+      module,
+      module.exports
+    );
     return module.exports;
   }
+
   global.HAC = Object.freeze({
     ...charger("application/lecture.js"),
     ...charger("application/commandes.js"),
