@@ -2,14 +2,14 @@
 (() => {
   "use strict";
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
-  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, EN_COURS, ALERTES, calculerPaie } = window.HAC;
+  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, EN_COURS, ALERTES, calculerPaie } = window.HAC;
   let filtreEtudes = "En cours";
   const alertesParEtude = () => calculerAlertes({ etudes: donneesVues().etudes, factures: donneesVues().factures, interventions: donneesVues().interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
   // ---- Mode essai : un serveur v3 simulé sur ce téléphone, avec des données d'exemple. Aucune donnée réelle. ----
   const JETON_ESSAI = "essai-local-hac-v3";
   const v1 = o => Object.fromEntries(o.map(x => [x.id, { ...x, _v: 1 }]));
   const EXEMPLE = {
-    clients: v1([{ id: "client_0001", raisonSociale: "Soléa Industrie", relationType: "ponctuelle" }, { id: "client_0002", raisonSociale: "Novalys", relationType: "longue_duree" }]),
+    clients: v1([{ id: "client_0001", raisonSociale: "Soléa Industrie", relationType: "ponctuelle" }, { id: "client_0002", raisonSociale: "Novalys", relationType: "longue_duree", cadenceFacturation: "mensuelle", dateProchaineFacture: "2026-10-10" }]),
     membres: v1([{ id: "membre_0001", nomComplet: "Camille Martin", role: "Cheffe de projet" }, { id: "membre_0002", nomComplet: "Lucas Bernard" }]),
     etudes: v1([{ id: "etude_0001", clientId: "client_0001", client: "Soléa Industrie", num: "HAC-2026-018", date: "2026-09-04", statut: "En réalisation", montant: 5040, jeh: 400 },
       { id: "etude_0002", clientId: "client_0002", client: "Novalys", num: "HAC-2026-021", date: "2026-11-03", statut: "Devis envoyé", montant: 1800, jeh: 350 }]),
@@ -40,6 +40,7 @@
   let current = "Accueil";
   let recherche = "";
   const money = n => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n || 0);
+  const dateFr = s => s ? String(s).split("-").reverse().join("/") : "";
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   // ---- Mandats : la fin d'un mandat = veille du suivant (comme en v12) ----
   let mandatSel = (() => { try { return localStorage.getItem("hac.v3.mandat") || "Tous les mandats"; } catch { return "Tous les mandats"; } })();
@@ -98,8 +99,19 @@
     }).join("");
     const AL = alertesParEtude();
     const parEtude = donneesVues().etudes.map(e => ({ e, a: AL.get(e.id)?.alertes || [] })).filter(x => x.a.length);
-    const alerts = parEtude.map(({ e, a }) => '<button type="button" class="alert invoice-button" data-etude="' + e.id + '"><div class="alert-icon">' + a.length + '</div><div><strong>' +
+    const alertsEtudes = parEtude.map(({ e, a }) => '<button type="button" class="alert invoice-button" data-etude="' + e.id + '"><div class="alert-icon">' + a.length + '</div><div><strong>' +
       escapeHtml(nomEtude(e)) + "</strong><small>" + a.map(x => escapeHtml(x.texte)).join(" · ") + "</small></div></button>").join("");
+    const alertesClients = data.clients.flatMap(client => {
+      const r = analyserAlerteClient(client);
+      if (r.anomalie) return [{ client, texte: "Renseigner la date de référence de facturation" }];
+      if (r.alerteActivable && r.prochaineEcheance <= aujourdHui()) {
+        return [{ client, texte: "Facture périodique à émettre · échéance du " + dateFr(r.prochaineEcheance) }];
+      }
+      return [];
+    });
+    const alertsClients = alertesClients.map(({ client, texte }) => '<button type="button" class="alert invoice-button" data-client="' + client.id + '"><div class="alert-icon">!</div><div><strong>' +
+      escapeHtml(client.raisonSociale || "Client") + "</strong><small>" + escapeHtml(texte) + "</small></div></button>").join("");
+    const alerts = alertsEtudes + alertsClients;
     return '<div class="stats">' +
       '<div class="stat"><div class="label">JEH travaillées · étudiants</div><strong>' + (d.totalJehTravaillees ?? "—").toLocaleString?.("fr-FR") + '</strong><small>Interventions réalisées uniquement</small></div>' +
       '<div class="stat"><div class="label">Chiffre d’affaires signé HT</div><strong>' + money(d.caSigne) + '</strong><small>' + d.nombreEtudes + " études suivies</small></div>" +
@@ -112,7 +124,7 @@
       '</div></section><section class="panel"><h3>Encaissement</h3><div class="sub">Part du CA signé déjà encaissée</div><div class="ring-wrap"><div class="ring" style="background:conic-gradient(var(--pink) 0 ' +
       percent + '%,#f4eaf0 ' + percent + '% 100%)"></div><div class="ring-info"><strong>' + money(d.encaisse) + '</strong><small>sur ' + money(d.caSigne) +
       ' HT signés</small></div></div><div class="sub">' + money(d.resteAEncaisser) + " HT restent à encaisser</div></section></div>" +
-      heading("Alertes à traiter", parEtude.length + " étude(s) concernée(s)") +
+      heading("Alertes à traiter", (parEtude.length + alertesClients.length) + " élément(s) concerné(s)") +
       '<section class="panel">' + (alerts || '<div class="empty">Aucune alerte. Tout est à jour.</div>') + "</section>";
   }
 
@@ -129,7 +141,13 @@
         '</strong><small>' + escapeHtml(AL.get(s.id)?.facture || "—") + (AL.get(s.id)?.alertes.length ? ' · <span class="accent">⚠ ' + escapeHtml(AL.get(s.id).alertes[0].texte) + (AL.get(s.id).alertes.length > 1 ? " (+" + (AL.get(s.id).alertes.length - 1) + ")" : "") + "</span>" : "") + '</small></div><span class="pill ' +
         (s.statut === "Archivée" ? "green" : s.statut === "Devis envoyé" ? "pink" : "") + '">' + escapeHtml(s.statut) +
         '</span><div class="amount">' + money(s.montant / 1.2) + " HT</div></button>").join("") || '<div class="empty">Aucune étude. Commencez par « ＋ Client » puis « ＋ Étude ».</div>') + "</section>" +
-      heading("Clients", data.clients.length + " clients") + '<section class="listbox rows">' + data.clients.map(c => '<button type="button" class="item invoice-button" data-client="' + c.id + '"><div class="item-main"><strong>' + escapeHtml(c.raisonSociale) + '</strong><small>' + (c.relationType === "longue_duree" ? "Relation récurrente" : "Mission ponctuelle") + " · " + data.etudes.filter(e => e.clientId === c.id).length + " étude(s)</small></div></button>").join("") + "</section>";
+      heading("Clients", data.clients.length + " clients") + '<section class="listbox rows">' + data.clients.map(c => {
+        const alerte = analyserAlerteClient(c);
+        const cadence = c.cadenceFacturation ? " · " + ({ mensuelle: "mensuelle", trimestrielle: "trimestrielle", semestrielle: "semestrielle", annuelle: "annuelle" }[c.cadenceFacturation] || "cadence inconnue") : "";
+        const prochaine = alerte.prochaineEcheance ? " · prochaine échéance " + dateFr(alerte.prochaineEcheance) : alerte.anomalie ? " · date de référence à renseigner" : "";
+        return '<button type="button" class="item invoice-button" data-client="' + c.id + '"><div class="item-main"><strong>' + escapeHtml(c.raisonSociale) + '</strong><small>' +
+          (c.relationType === "longue_duree" ? "Relation longue durée" + cadence + prochaine : "Mission ponctuelle") + " · " + data.etudes.filter(e => e.clientId === c.id).length + " étude(s)</small></div></button>";
+      }).join("") + "</section>";</section>";
   }
 
   function finances(v) {
@@ -337,10 +355,16 @@
   }
   function ouvrirClient(id) {
     const c = id ? data.clients.find(x => x.id === id) : {};
-    formulaire({ titre: id ? "Modifier le client" : "Nouveau client", valeurs: { relationType: "ponctuelle", ...c }, champs: [
+    formulaire({ titre: id ? "Modifier le client" : "Nouveau client", valeurs: { relationType: "ponctuelle", cadenceFacturation: "", dateProchaineFacture: "", ...c }, champs: [
       { name: "raisonSociale", label: "Nom du client", required: true },
-      { name: "relationType", label: "Type de collaboration", type: "select", required: true, options: [["ponctuelle", "Ponctuelle (mission délimitée)"], ["longue_duree", "Récurrente (relation suivie)"]] },
-    ], onValider: d => enregistrer("clients", id, d, "client") });
+      { name: "relationType", label: "Type de collaboration", type: "select", required: true, options: [["ponctuelle", "Ponctuelle (mission délimitée)"], ["longue_duree", "Longue durée (relation durable, type CDI)"]] },
+      { name: "cadenceFacturation", label: "Cadence de facturation", type: "select", options: [["mensuelle", "Mensuelle"], ["trimestrielle", "Trimestrielle"], ["semestrielle", "Semestrielle"], ["annuelle", "Annuelle"]], aide: "Facultative : renseignez-la uniquement si une facture périodique est prévue." },
+      { name: "dateProchaineFacture", label: "Date de référence de facturation", type: "date", aide: "Date de la dernière facture ou du dernier jalon ; la prochaine échéance est calculée avec la cadence." },
+    ], onValider: d => {
+      if (d.relationType !== "longue_duree") { d.cadenceFacturation = null; d.dateProchaineFacture = null; }
+      else { d.cadenceFacturation = d.cadenceFacturation || null; d.dateProchaineFacture = d.dateProchaineFacture || null; }
+      return enregistrer("clients", id, d, "client");
+    } });
   }
   function ouvrirFacture(id) {
     const f = id ? data.factures.find(x => x.id === id) : {};
