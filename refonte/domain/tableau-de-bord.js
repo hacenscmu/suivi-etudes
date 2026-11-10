@@ -31,6 +31,7 @@ function calculerTableauDeBord({
   dateFin = new Date().toISOString().slice(0, 10),
   nombreMois = 6,
   tva = 0.2,
+  plafondJehHt = 300,
 } = {}) {
   const anomalies = [];
   if (![etudes, factures, interventions].every(Array.isArray)) {
@@ -96,7 +97,7 @@ function calculerTableauDeBord({
     if (analyse.payee) encaisse += montant / (1 + tva);
   });
 
-  const calculInterventions = agregerInterventions(interventions);
+  const calculInterventions = agregerInterventions(interventions, { plafondJehHt });
   calculInterventions.anomalies.forEach(a => anomalies.push({ collection: "interventions", ...a }));
 
   const fin = new Date(dateFin + "T00:00:00.000Z");
@@ -125,6 +126,7 @@ function calculerTableauDeBord({
     totalJehTravaillees: calculInterventions.totalJehTravaillees,
     jehParMois: calculInterventions.valide ? mois : null,
     jehParMembre: calculInterventions.valide ? calculInterventions.parMembre : null,
+    alertesInterventions: calculInterventions.alertes,
     anomalies,
   };
 }
