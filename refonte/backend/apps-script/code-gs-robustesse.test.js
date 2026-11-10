@@ -129,3 +129,17 @@ test("le serveur refuse de supprimer un client encore référencé par une étud
   const r = await body(s, req("delete", { collection: "clients", id: "client_0001", expectedVersion: 1, opId: "op_delete_parent_01" }));
   assert.equal(r.error.code, "INVALID_REQUEST");
 });
+
+test("le serveur refuse une intervention aux champs métier invalides", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: {
+    etudes: { etude_0001: { id: "etude_0001", _v: 1 } },
+    membres: { membre_0001: { id: "membre_0001", nomComplet: "A", _v: 1 } },
+  } });
+  const r = await body(s, req("save", {
+    collection: "interventions", id: "interv_bad_001",
+    record: { id: "interv_bad_001", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-02-30", statut: "Pas payé", minutesIndividuelles: -1 },
+    expectedVersion: 0, opId: "op_interv_bad_001",
+  }));
+  assert.equal(r.error.code, "INVALID_REQUEST");
+  assert.equal(s.lireRevision(), 0);
+});
