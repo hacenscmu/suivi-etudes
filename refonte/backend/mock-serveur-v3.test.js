@@ -171,3 +171,16 @@ test("refuse une API version incorrecte et une action inconnue", async () => {
   assert.equal(body(await server.transport({ action: "loadAll", apiVersion: 2, token: TOKEN })).error.code, "API_VERSION_MISMATCH");
   assert.equal(body(await server.transport(req("inventer"))).error.code, "INVALID_REQUEST");
 });
+
+test("accepte uniquement config/main et protège la configuration contre la suppression", async () => {
+  const server = base();
+  const save = body(await server.transport(req("save", {
+    collection: "config", id: "main", record: { id: "main", tva: 0.2 },
+    opId: "op_config_save_01", expectedVersion: 0,
+  })));
+  assert.equal(save.ok, true);
+  const del = body(await server.transport(req("delete", {
+    collection: "config", id: "main", opId: "op_config_del_01", expectedVersion: 1,
+  })));
+  assert.equal(del.error.code, "INVALID_REQUEST");
+});
