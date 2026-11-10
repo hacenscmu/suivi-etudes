@@ -15,6 +15,7 @@ on:
     paths:
       - "refonte/domain/**"
       - "refonte/application/**"
+      - "refonte/build/**"
       - "refonte/demo/**"
       - ".github/workflows/refonte-tests.yml"
 
