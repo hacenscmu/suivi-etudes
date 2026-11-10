@@ -9,6 +9,10 @@ const COLLECTIONS_ECRITURE = new Set([
   "bvs", "lignesBV", "formation", "config", "appareils",
 ]);
 const COLLECTIONS_LECTURE = new Set([...COLLECTIONS_ECRITURE, "temps"]);
+const COLLECTIONS_TABLEAUX = Object.freeze([
+  "etudes", "clients", "membres", "factures", "interventions",
+  "bvs", "lignesBV", "formation", "appareils",
+]);
 const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;
 const OP_ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{7,127}$/;
 
@@ -107,7 +111,39 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
       if (!objetSimple(enveloppe.data)) {
         throw new ErreurApiV3("INVALID_RESPONSE", "loadAll doit renvoyer un objet de collections");
       }
-      return { collections: enveloppe.data, meta: enveloppe.meta ?? null };
+      const collections = {};
+      const tombstones = {};
+      for (const nom of COLLECTIONS_TABLEAUX) {
+        const raw = enveloppe.data[nom];
+        if (!objetSimple(raw)) {
+          throw new ErreurApiV3("INVALID_RESPONSE", "Collection absente ou mal formée : " + nom);
+        }
+        collections[nom] = [];
+        tombstones[nom] = {};
+        for (const [id, record] of Object.entries(raw)) {
+          if (!objetSimple(record) || (record.id !== undefined && record.id !== id)) {
+            throw new ErreurApiV3("INVALID_RESPONSE", "Enregistrement invalide dans " + nom + " : " + id);
+          }
+          if (record._deleted === true) {
+            tombstones[nom][id] = Number.isSafeInteger(record._v) ? record._v : 0;
+          } else {
+            collections[nom].push({ ...record, id });
+          }
+        }
+      }
+      const configRaw = enveloppe.data.config;
+      if (!objetSimple(configRaw)) {
+        throw new ErreurApiV3("INVALID_RESPONSE", "Collection config absente ou mal formée");
+      }
+      const configRecord = configRaw.main;
+      if (configRecord && configRecord._deleted === true) tombstones.config = { main: configRecord._v ?? 0 };
+      return {
+        collections,
+        config: configRecord && configRecord._deleted !== true ? configRecord : null,
+        tombstones,
+        legacyTemps: objetSimple(enveloppe.data.temps) ? enveloppe.data.temps : null,
+        meta: enveloppe.meta ?? null,
+      };
     },
 
     async save({ collection, id, record, opId, expectedVersion } = {}) {
@@ -154,6 +190,7 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
 
 module.exports = {
   COLLECTIONS_ECRITURE,
+  COLLECTIONS_TABLEAUX,
   ErreurApiV3,
   lireEnveloppe,
   creerClientApiV3,
