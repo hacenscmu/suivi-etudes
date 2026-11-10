@@ -82,10 +82,9 @@ test("refuse une collection historique mal formée au lieu de la traiter comme v
 });
 
 test("refuse un générateur qui réutilise un identifiant", () => {
-  const r = adaptateurHistorique({
-    etudes: { etude0001: { num: "A-1", client: "Client" } },
-    factures: { facture01: { etude: "A-1", montant: 10, etat: "Payée" } },
+  assert.throws(() => adaptateurHistorique({
+    etudes: { "1": { num: "A-1", client: "Client" } },
+    factures: { "2": { etude: "A-1", montant: 10, etat: "Payée" } },
     createId: () => "identifiant_reutilise",
-  });
-  assert.throws(() => r, /identifiant stable/);
+  }), /identifiant stable/);
 });
