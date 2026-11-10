@@ -9,6 +9,7 @@ on:
       - "refonte/application/**"
       - "refonte/build/**"
       - "refonte/demo/**"
+      - "refonte/migration/**"
       - "refonte/README.md"
       - ".github/workflows/refonte-tests.yml"
   pull_request:
