@@ -35,6 +35,14 @@ function validerIdentifiant(id, label = "identifiant") {
     throw new ErreurApiV3("INVALID_REQUEST", label + " absent ou invalide");
   }
 }
+function validerIdentifiantCollection(id, collection, action) {
+  if (collection === "config") {
+    if (id !== "main") throw new ErreurApiV3("INVALID_REQUEST", "La collection config utilise uniquement l'identifiant main");
+    if (action === "delete") throw new ErreurApiV3("INVALID_REQUEST", "La configuration principale ne peut pas être supprimée");
+    return;
+  }
+  validerIdentifiant(id);
+}
 
 function validerOperation({ opId, expectedVersion }, { suppression = false } = {}) {
   if (typeof opId !== "string" || !OP_ID_VALIDE.test(opId)) {
@@ -131,6 +139,10 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
           }
         }
       }
+      const legacyTemps = enveloppe.data.temps;
+      if (!objetSimple(legacyTemps)) {
+        throw new ErreurApiV3("INVALID_RESPONSE", "Collection historique temps absente ou mal formée");
+      }
       const configRaw = enveloppe.data.config;
       if (!objetSimple(configRaw)) {
         throw new ErreurApiV3("INVALID_RESPONSE", "Collection config absente ou mal formée");
@@ -141,7 +153,7 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
         collections,
         config: configRecord && configRecord._deleted !== true ? configRecord : null,
         tombstones,
-        legacyTemps: objetSimple(enveloppe.data.temps) ? enveloppe.data.temps : null,
+        legacyTemps,
         meta: enveloppe.meta ?? null,
       };
     },
@@ -153,7 +165,7 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
       if (collection === "temps" || !COLLECTIONS_ECRITURE.has(collection)) {
         throw new ErreurApiV3("READ_ONLY_COLLECTION", "La collection historique temps est en lecture seule ; utiliser interventions");
       }
-      validerIdentifiant(id);
+      validerIdentifiantCollection(id, collection, "save");
       if (!objetSimple(record) || record.id !== id) {
         throw new ErreurApiV3("INVALID_REQUEST", "record doit être un objet dont id correspond à id");
       }
@@ -180,7 +192,7 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
       if (collection === "temps" || !COLLECTIONS_ECRITURE.has(collection)) {
         throw new ErreurApiV3("READ_ONLY_COLLECTION", "La collection historique temps est en lecture seule ; utiliser interventions");
       }
-      validerIdentifiant(id);
+      validerIdentifiantCollection(id, collection, "delete");
       validerOperation({ opId, expectedVersion }, { suppression: true });
       const enveloppe = await appeler({ action: "delete", collection, id, opId, expectedVersion });
       return { data: enveloppe.data, meta: enveloppe.meta ?? null };
