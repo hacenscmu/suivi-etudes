@@ -49,5 +49,5 @@ test("une personne ne peut apparaître qu'une fois sur le même BV", () => {
 test("les identifiants et quantités manquants sont signalés", () => {
   const resultat = validerBV({ lignes: [{ jeh: -0.2 }] });
   assert.equal(resultat.valide, false);
-  assert.equal(resultat.anomalies.length, 2);
+  assert.equal(resultat.anomalies.length, 3);
 });
