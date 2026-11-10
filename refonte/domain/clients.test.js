@@ -100,3 +100,37 @@ test("une date invalide ne génère pas de prochaine échéance", () => {
     null,
   );
 });
+
+test("une étude peut hériter explicitement de la cadence du client", () => {
+  const resultat = resoudreRelation(
+    { relationType: "longue_duree", cadenceFacturation: "mensuelle" },
+    { cadenceFacturationMode: "client", cadenceFacturation: "annuelle" },
+  );
+  assert.deepEqual(resultat, { type: "longue_duree", cadenceFacturation: "mensuelle", anomalie: null });
+});
+
+test("une étude peut désactiver explicitement la cadence du client", () => {
+  const resultat = analyserAlerteClient(
+    { relationType: "longue_duree", cadenceFacturation: "mensuelle", dateProchaineFacture: "2026-10-10" },
+    { cadenceFacturationMode: "aucune" },
+  );
+  assert.equal(resultat.alerteActivable, false);
+  assert.equal(resultat.prochaineEcheance, null);
+  assert.equal(resultat.anomalie, null);
+});
+
+test("une étude peut définir sa propre cadence et sa propre date de référence", () => {
+  const resultat = analyserAlerteClient(
+    { relationType: "ponctuelle", cadenceFacturation: null },
+    { relationType: "longue_duree", cadenceFacturationMode: "personnalisee", cadenceFacturation: "trimestrielle", dateProchaineFacture: "2026-08-15" },
+  );
+  assert.deepEqual(resultat, { alerteActivable: true, prochaineEcheance: "2026-11-15", anomalie: null });
+});
+
+test("un mode de cadence d'étude inconnu est signalé", () => {
+  const resultat = resoudreRelation(
+    { relationType: "longue_duree", cadenceFacturation: "mensuelle" },
+    { cadenceFacturationMode: "automatique" },
+  );
+  assert.ok(resultat.anomalie);
+});
