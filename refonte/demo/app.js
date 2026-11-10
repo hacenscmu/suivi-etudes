@@ -104,7 +104,7 @@
       '<div class="toolbar"><input class="search" id="search" placeholder="Rechercher une étude…" value="' + escapeHtml(recherche) +
       '"><button class="action" id="addStudy">＋ Ajouter</button></div>') +
       '<section class="listbox rows">' + (rows.map(s => '<div class="item"><div class="item-main"><strong>' + escapeHtml(s.num) + " · " + escapeHtml(s.clientLibelle) +
-        '</strong><small>' + escapeHtml(s.date) + " · " + s.factures.length + ' facture(s)</small></div><span class="pill " +
+        '</strong><small>' + escapeHtml(s.date) + " · " + s.factures.length + ' facture(s)</small></div><span class="pill ' +
         (s.statut === "Archivée" ? "green" : s.statut === "Devis envoyé" ? "pink" : "") + '">' + escapeHtml(s.statut) +
         '</span><div class="amount">' + money(s.montant / 1.2) + " HT</div></div>").join("") || '<div class="empty">Aucune étude trouvée.</div>') + "</section>";
   }
