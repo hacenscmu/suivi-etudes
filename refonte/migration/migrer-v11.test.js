@@ -31,13 +31,13 @@ test("n'écrit rien et ne modifie pas l'export source", () => {
   assert.equal(JSON.stringify(src), copie);
 });
 
-test("minutes individuelles = min ÷ nb et le champ jeh v11 reste non qualifié par défaut", () => {
+test("minutes individuelles = min ÷ nb et jeh v11 est reconnu comme prix intervenant HT", () => {
   const r = migrerV11(exportV11());
   const t1 = r.collections.interventions.find(i => i.sourceLegacyId === "t1");
   assert.equal(t1.minutesIndividuelles, 60);
-  assert.equal(t1.prixJehHt, null);
+  assert.equal(t1.prixJehHt, 300);
   assert.equal(t1.jehV11, 300);
-  assert.ok(r.anomalies.some(a => a.type === "jeh_historique_non_qualifie"));
+  assert.equal(r.anomalies.some(a => a.type === "jeh_historique_non_qualifie"), false);
 });
 
 test("le prix JEH client et les frais de l'étude sont conservés", () => {
@@ -118,12 +118,12 @@ test("le rapport texte liste résumé, totaux et questions", () => {
   assert.match(t, /jehTravailleesAvant/);
 });
 
-test("ne mappe le champ jeh v11 en prix intervenant qu'avec une correspondance explicite", () => {
-  const r = migrerV11(exportV11(), { correspondances: { jehTemps: "prix_intervenant_ht" } });
+test("une correspondance explicite peut neutraliser la qualification du champ jeh", () => {
+  const r = migrerV11(exportV11(), { correspondances: { jehTemps: "non_qualifie" } });
   const t1 = r.collections.interventions.find(i => i.sourceLegacyId === "t1");
-  assert.equal(t1.prixJehHt, 300);
+  assert.equal(t1.prixJehHt, null);
   assert.equal(t1.jehV11, 300);
-  assert.equal(r.anomalies.some(a => a.type === "jeh_historique_non_qualifie"), false);
+  assert.ok(r.anomalies.some(a => a.type === "jeh_historique_non_qualifie"));
 });
 
 test("si jeh v11 est déclaré comme nombre de JEH, compare avec les minutes calculées", () => {
