@@ -40,5 +40,7 @@ jobs:
         run: git diff --exit-code -- refonte/demo/hac-core.js
       - name: Vérifier l’interface isolée
         run: node refonte/demo/validate-demo.mjs
+      - name: Vérifier la syntaxe du candidat Apps Script v3
+        run: node --check < refonte/backend/Code-v3-candidat.gs
       - name: Exécuter tous les tests métier
         run: node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js
