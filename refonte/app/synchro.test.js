@@ -102,3 +102,17 @@ test("une commande métier invalide n'est ni appliquée ni envoyée", async () =
   assert.equal(r.valide, false);
   assert.equal((await s.statut()).enAttente, 0);
 });
+
+test("BV et sa ligne enregistrés ensemble, dans l'ordre parent → enfant", async () => {
+  const { s, serveur } = monter();
+  await s.demarrer();
+  const etat = s.lireEtat();
+  const p1 = preparerAjout({ etat, collection: "bvs", donnees: { date: "2026-11-10", reference: "BV-1" }, creerId: () => "bv_00000001" });
+  const p2 = preparerAjout({ etat: { ...etat, bvs: [p1.commande.enregistrement] }, collection: "lignesBV", donnees: { bvId: "bv_00000001", membreId: "membre_0001", jeh: 0.5 }, creerId: () => "ligne_00000001" });
+  const seul = await s.executer(p2.commande);
+  assert.equal(seul.valide, false, "une ligne sans son BV est refusée");
+  const r = await s.executerPlusieurs([p1.commande, p2.commande]);
+  assert.equal(r.valide, true);
+  assert.equal(r.envoi.restantes, 0);
+  assert.equal(serveur.lireDonnees().lignesBV.ligne_00000001.jeh, 0.5);
+});

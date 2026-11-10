@@ -80,11 +80,12 @@
     const rows = v.listes.etudes.filter(s => [s.num, s.clientLibelle, s.statut].join(" ").toLowerCase().includes(recherche.toLowerCase()));
     return heading("Études", data.etudes.length + " études",
       '<div class="toolbar"><input class="search" id="search" placeholder="Rechercher une étude…" value="' + escapeHtml(recherche) +
-      '"><button class="action" id="addStudy">＋ Ajouter</button></div>') +
-      '<section class="listbox rows">' + (rows.map(s => '<div class="item"><div class="item-main"><strong>' + escapeHtml(s.num) + " · " + escapeHtml(s.clientLibelle) +
+      '"><button class="ghost action" id="addClient">＋ Client</button><button class="action" id="addStudy">＋ Étude</button></div>') +
+      '<section class="listbox rows">' + (rows.map(s => '<button type="button" class="item invoice-button" data-etude="' + s.id + '"><div class="item-main"><strong>' + escapeHtml(s.num) + " · " + escapeHtml(s.clientLibelle) +
         '</strong><small>' + escapeHtml(s.date) + " · " + s.factures.length + ' facture(s)</small></div><span class="pill ' +
         (s.statut === "Archivée" ? "green" : s.statut === "Devis envoyé" ? "pink" : "") + '">' + escapeHtml(s.statut) +
-        '</span><div class="amount">' + money(s.montant / 1.2) + " HT</div></div>").join("") || '<div class="empty">Aucune étude trouvée.</div>') + "</section>";
+        '</span><div class="amount">' + money(s.montant / 1.2) + " HT</div></button>").join("") || '<div class="empty">Aucune étude. Commencez par « ＋ Client » puis « ＋ Étude ».</div>') + "</section>" +
+      heading("Clients", data.clients.length + " clients") + '<section class="listbox rows">' + data.clients.map(c => '<button type="button" class="item invoice-button" data-client="' + c.id + '"><div class="item-main"><strong>' + escapeHtml(c.raisonSociale) + '</strong><small>' + (c.relationType === "longue_duree" ? "Relation récurrente" : "Mission ponctuelle") + " · " + data.etudes.filter(e => e.clientId === c.id).length + " étude(s)</small></div></button>").join("") + "</section>";
   }
 
   function finances(v) {
@@ -96,7 +97,7 @@
       '<div class="stat"><div class="label">En attente HT</div><strong>' + money(d.resteAEncaisser) + '</strong><small>Factures non payées</small></div>',
       '<div class="stat"><div class="label">À facturer HT</div><strong>' + money(Math.max(0, d.caSigne - d.montantFacture)) + '</strong><small>CA signé moins facturé</small></div>',
       '</div>',
-      heading("Factures", "Touchez une facture pour la marquer payée ou non payée"),
+      heading("Factures", "Touchez une facture pour la modifier", '<button class="action" id="addFacture">＋ Facture</button>'),
       '<section class="listbox rows">',
       v.listes.factures.map(f =>
         '<button class="item invoice-button" data-invoice="' + f.id + '" type="button">' +
@@ -112,14 +113,25 @@
 
   function team(v) {
     const totals = new Map(v.tableauDeBord.jehParMembre.map(x => [x.membreId, x.jeh]));
-    const bvTotal = data.lignesBV.reduce((sum, l) => sum + Number(l.jeh), 0);
-    return heading("Équipe", "JEH réellement travaillées par étudiant") +
-      '<section class="listbox rows">' + v.listes.membres.map(m => '<div class="item"><div class="mark" style="width:36px;height:36px;border-radius:50%;font-size:12px">' +
+    const nomMembre = id => data.membres.find(m => m.id === id)?.nomComplet || "?";
+    const interv = [...data.interventions].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    return heading("Équipe", "JEH réellement travaillées par étudiant", '<button class="action" id="addMembre">＋ Membre</button>') +
+      '<section class="listbox rows">' + (v.listes.membres.map(m => '<button type="button" class="item invoice-button" data-membre="' + m.id + '"><div class="mark" style="width:36px;height:36px;border-radius:50%;font-size:12px">' +
         escapeHtml(m.libelle.split(" ").map(x => x[0]).join("").slice(0, 2)) + '</div><div class="item-main"><strong>' + escapeHtml(m.libelle) +
         '</strong><small>' + escapeHtml(m.role || "Membre") + '</small></div><div class="amount">' +
-        ((totals.get(m.id) || 0).toLocaleString("fr-FR")) + " JEH</div></div>").join("") +
-      '</section><div class="section-head"><h2>Bulletins de versement</h2><span>' + data.bvs.length + " BV · " +
-      bvTotal.toLocaleString("fr-FR") + " JEH enregistrées</span></div>";
+        ((totals.get(m.id) || 0).toLocaleString("fr-FR", { maximumFractionDigits: 3 })) + " JEH</div></button>").join("") || '<div class="empty">Aucun membre.</div>') + "</section>" +
+      heading("Interventions", interv.length + " ligne(s) · une ligne par personne", '<button class="action" id="addInterv">＋ Intervention</button>') +
+      '<section class="listbox rows">' + (interv.map(i => {
+        const e = data.etudes.find(x => x.id === i.etudeId);
+        return '<button type="button" class="item invoice-button" data-interv="' + i.id + '"><div class="item-main"><strong>' + escapeHtml(nomMembre(i.membreId)) + " · " + escapeHtml(e?.num || "") +
+          '</strong><small>' + escapeHtml(i.date) + " · " + escapeHtml(i.statut) + '</small></div><div class="amount">' + (Number(i.minutesIndividuelles || 0) / 480).toLocaleString("fr-FR", { maximumFractionDigits: 3 }) + " JEH</div></button>";
+      }).join("") || '<div class="empty">Aucune intervention.</div>') + "</section>" +
+      heading("Bulletins de versement", data.bvs.length + " BV", '<button class="action" id="addBV">＋ BV</button>') +
+      '<section class="listbox rows">' + (data.lignesBV.map(l => {
+        const bv = data.bvs.find(b => b.id === l.bvId), jeh = Number(l.jeh) || 0;
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(nomMembre(l.membreId)) + " · " + escapeHtml(bv?.reference || bv?.date || "") + '</strong><small>' + escapeHtml(bv?.date || "") +
+          (jeh > 0 && jeh < 1 ? " · cotisations calculées sur 1 JEH" : "") + '</small></div><div class="amount">' + jeh.toLocaleString("fr-FR") + " JEH</div></div>";
+      }).join("") || '<div class="empty">Aucun BV.</div>') + "</section>";
   }
 
   function settings() {
@@ -132,45 +144,120 @@
       '<div class="item"><div class="item-main"><strong>Se déconnecter de cet appareil</strong><small>Efface l’adresse, le jeton et les données gardées sur ce téléphone</small></div><button class="ghost action" id="logout">Déconnexion</button></div></section>';
   }
 
-  function ouvrirAjoutEtude() {
-    const clients = data.clients.map(c => '<option value="' + c.id + '">' + escapeHtml(c.raisonSociale) + "</option>").join("");
+  // ---------- Formulaires ----------
+  const STATUTS_ETUDE = ["Faisabilité", "Devis envoyé", "Devis signé", "Convention envoyée", "Convention signée", "Convention étudiant avant réalisation", "En réalisation", "Archivée", "Refusé / sans suite"];
+  const STATUTS_JEH = [["Pas payé", "Fait, pas encore payé"], ["Payé", "Payé (BV versé)"], ["A venir", "À venir"], ["Non effectué", "Non effectué"]];
+  const opts = (liste, val) => liste.map(o => { const [v, l] = Array.isArray(o) ? o : [o, o]; return '<option value="' + escapeHtml(v) + '"' + (String(v) === String(val ?? "") ? " selected" : "") + ">" + escapeHtml(l) + "</option>"; }).join("");
+  const nomEtude = e => (e.num || "Étude") + " · " + (data.clients.find(c => c.id === e.clientId)?.raisonSociale || e.client || "");
+
+  function formulaire({ titre, champs, valeurs = {}, onValider, supprimer = null }) {
     const dialog = document.createElement("dialog");
     dialog.className = "study-dialog";
-    dialog.innerHTML = '<form method="dialog" id="studyForm"><div class="section-head"><h2>Nouvelle étude</h2><button class="ghost close-dialog" value="cancel" aria-label="Fermer">×</button></div>' +
-      '<label>Client<select name="clientId" required>' + clients + '</select></label>' +
-      '<label>Intitulé / numéro<input name="num" required maxlength="80" placeholder="HAC-2026-022"></label>' +
-      '<label>Montant TTC (€)<input name="montant" type="number" min="0" step="0.01" required></label>' +
-      '<label>Statut<select name="statut"><option>Faisabilité</option><option>Devis envoyé</option><option>Devis signé</option><option>Convention envoyée</option><option>Convention signée</option></select></label>' +
-      '<div class="dialog-actions"><button class="ghost" value="cancel">Annuler</button><button class="action" id="saveStudy" value="default">Créer l’étude</button></div></form>';
+    const html = champs.map(c => {
+      const v = valeurs[c.name] ?? c.defaut ?? "";
+      const req = c.required ? " required" : "";
+      let input;
+      if (c.type === "select") input = '<select name="' + c.name + '"' + req + ">" + (c.required ? "" : '<option value="">—</option>') + opts(c.options, v) + "</select>";
+      else input = '<input name="' + c.name + '" type="' + (c.type || "text") + '"' + req + (c.type === "number" ? ' step="any" min="0" inputmode="decimal"' : "") + ' value="' + escapeHtml(v) + '">';
+      return "<label>" + escapeHtml(c.label) + input + (c.aide ? '<small class="sub">' + escapeHtml(c.aide) + "</small>" : "") + "</label>";
+    }).join("");
+    dialog.innerHTML = '<form method="dialog"><div class="section-head"><h2>' + escapeHtml(titre) + '</h2><button class="ghost close-dialog" value="cancel" aria-label="Fermer">×</button></div>' + html +
+      '<p class="sub" data-erreur style="color:var(--red)"></p><div class="dialog-actions"><button class="ghost" value="cancel">Annuler</button><button class="action" data-ok value="default">Enregistrer</button></div></form>';
     document.body.appendChild(dialog);
     dialog.addEventListener("close", () => dialog.remove());
-    dialog.querySelector("#studyForm").addEventListener("submit", event => {
-      if (event.submitter?.id !== "saveStudy") return;
-      event.preventDefault();
-      const form = new FormData(event.currentTarget);
-      const clientId = form.get("clientId");
-      const client = data.clients.find(c => c.id === clientId);
-      const numero = String(form.get("num") || "").trim();
-      const montant = Number(form.get("montant"));
-      if (!client || !numero || !Number.isFinite(montant) || montant < 0) return;
-      const id = nouvelId("etude");
-      const prepared = preparerAjout({
-        etat: data,
-        collection: "etudes",
-        donnees: {
-          clientId,
-          client: client.raisonSociale,
-          num: numero,
-          date: aujourdHui(),
-          statut: form.get("statut"),
-          montant,
-          jeh: null,
-        },
-        creerId: () => id,
-      });
-      executer(prepared).then(ok => { if (ok) { dialog.close(); current = "Études"; render(); } });
+    dialog.querySelector("form").addEventListener("submit", async ev => {
+      if (!ev.submitter?.hasAttribute("data-ok")) return;
+      ev.preventDefault();
+      const f = new FormData(ev.currentTarget), d = {};
+      champs.forEach(c => { const raw = String(f.get(c.name) ?? "").trim(); d[c.name] = c.type === "number" ? (raw === "" ? null : Number(raw.replace(",", "."))) : raw; });
+      const erreur = await onValider(d);
+      if (erreur) { dialog.querySelector("[data-erreur]").textContent = erreur; return; }
+      dialog.close(); render();
     });
     dialog.showModal();
+  }
+
+  async function enregistrer(collection, id, donnees, prefixe) {
+    const prepared = id
+      ? preparerModification({ etat: data, collection, id, modifications: donnees })
+      : preparerAjout({ etat: data, collection, donnees, creerId: () => nouvelId(prefixe) });
+    if (!prepared.valide) return prepared.anomalies.map(a => a.raison || a).join(" · ");
+    const r = await synchro.executer(prepared.commande);
+    if (!r.valide) return r.anomalies.map(a => a.raison || a).join(" · ");
+    data = synchro.lireEtat(); await majStatut(); return null;
+  }
+
+  function ouvrirEtude(id) {
+    const e = id ? data.etudes.find(x => x.id === id) : {};
+    formulaire({ titre: id ? "Modifier l’étude" : "Nouvelle étude", valeurs: { ...e, date: e.date || aujourdHui(), statut: e.statut || "Faisabilité" }, champs: [
+      { name: "clientId", label: "Client", type: "select", required: true, options: data.clients.map(c => [c.id, c.raisonSociale]), aide: data.clients.length ? "" : "Créez d’abord un client (bouton « ＋ Client »)." },
+      { name: "num", label: "N° d’étude", required: true },
+      { name: "resume", label: "Résumé" },
+      { name: "statut", label: "Statut", type: "select", required: true, options: synchro?.lireConfig()?.statuts || STATUTS_ETUDE },
+      { name: "montant", label: "Montant TTC (€)", type: "number" },
+      { name: "jeh", label: "Prix de la JEH client HT (€)", type: "number", aide: "Fourchette CNJE : 80 à 450 € HT" },
+      { name: "frais", label: "Dont frais HT (labo…, hors JEH)", type: "number" },
+      { name: "date", label: "Date de création", type: "date", required: true },
+    ], onValider: d => { d.client = data.clients.find(c => c.id === d.clientId)?.raisonSociale || ""; return enregistrer("etudes", id, d, "etude"); } });
+  }
+  function ouvrirClient(id) {
+    const c = id ? data.clients.find(x => x.id === id) : {};
+    formulaire({ titre: id ? "Modifier le client" : "Nouveau client", valeurs: { relationType: "ponctuelle", ...c }, champs: [
+      { name: "raisonSociale", label: "Nom du client", required: true },
+      { name: "relationType", label: "Type de collaboration", type: "select", required: true, options: [["ponctuelle", "Ponctuelle (mission délimitée)"], ["longue_duree", "Récurrente (relation suivie)"]] },
+    ], onValider: d => enregistrer("clients", id, d, "client") });
+  }
+  function ouvrirFacture(id) {
+    const f = id ? data.factures.find(x => x.id === id) : {};
+    formulaire({ titre: id ? "Modifier la facture" : "Nouvelle facture", valeurs: { type: "Acompte", etat: "Émise", date: aujourdHui(), ...f }, champs: [
+      { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
+      { name: "type", label: "Type", type: "select", required: true, options: ["Acompte", "Intermédiaire", "Solde"] },
+      { name: "etat", label: "État", type: "select", required: true, options: ["Émise", "Payée"] },
+      { name: "montant", label: "Montant TTC (€)", type: "number", required: true },
+      { name: "date", label: "Date d’émission", type: "date" },
+      { name: "echeance", label: "Échéance", type: "date" },
+      { name: "datePaiement", label: "Date de paiement", type: "date" },
+    ], onValider: d => { if (d.etat === "Payée" && !d.datePaiement) d.datePaiement = aujourdHui(); return enregistrer("factures", id, d, "facture"); } });
+  }
+  function ouvrirMembre(id) {
+    const m = id ? data.membres.find(x => x.id === id) : {};
+    formulaire({ titre: id ? "Modifier le membre" : "Nouveau membre", valeurs: m, champs: [
+      { name: "nomComplet", label: "Prénom et nom", required: true },
+      { name: "role", label: "Rôle (facultatif)" },
+    ], onValider: d => enregistrer("membres", id, d, "membre") });
+  }
+  function ouvrirIntervention(id) {
+    const i = id ? data.interventions.find(x => x.id === id) : {};
+    formulaire({ titre: id ? "Modifier l’intervention" : "Nouvelle intervention (JEH)", valeurs: { date: aujourdHui(), statut: "Pas payé", nb: 1, duree: i.minutesIndividuelles, ...i }, champs: [
+      { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
+      { name: "membreId", label: "Intervenant", type: "select", required: true, options: data.membres.map(m => [m.id, m.nomComplet]) },
+      { name: "date", label: "Date", type: "date", required: true },
+      { name: "statut", label: "Statut", type: "select", required: true, options: STATUTS_JEH },
+      { name: "duree", label: "Durée totale (minutes)", type: "number", required: true },
+      { name: "nb", label: "Nombre de personnes", type: "number", required: true, aide: "Une ligne par personne : la durée est répartie (120 min à 2 = 60 min chacun). 480 min = 1 JEH." },
+      { name: "prixJehHt", label: "JEH intervenant HT (€)", type: "number", aide: "Plafond HAC : 300 € HT" },
+    ], onValider: d => {
+      if (!(d.nb >= 1) || d.nb % 1) return "Le nombre de personnes doit être un entier d’au moins 1.";
+      const { duree, nb, ...reste } = d;
+      return enregistrer("interventions", id, { ...reste, minutesIndividuelles: Math.round((duree / nb) * 100) / 100 }, "interv");
+    } });
+  }
+  function ouvrirBV() {
+    formulaire({ titre: "Nouveau bulletin de versement", valeurs: { date: aujourdHui() }, champs: [
+      { name: "membreId", label: "Intervenant", type: "select", required: true, options: data.membres.map(m => [m.id, m.nomComplet]) },
+      { name: "date", label: "Date du BV", type: "date", required: true },
+      { name: "reference", label: "Référence" },
+      { name: "jeh", label: "JEH versées", type: "number", required: true, aide: "En dessous de 1 JEH, cotisations et charges sont calculées sur 1 JEH (le BV reste valide)." },
+    ], onValider: async d => {
+      const bvId = nouvelId("bv"), ligneId = nouvelId("ligne");
+      const p1 = preparerAjout({ etat: data, collection: "bvs", donnees: { date: d.date, reference: d.reference }, creerId: () => bvId });
+      const etatAvecBv = { ...data, bvs: [...data.bvs, p1.commande?.enregistrement].filter(Boolean) };
+      const p2 = preparerAjout({ etat: etatAvecBv, collection: "lignesBV", donnees: { bvId, membreId: d.membreId, jeh: d.jeh }, creerId: () => ligneId });
+      const pb = [p1, p2].find(x => !x.valide); if (pb) return pb.anomalies.map(a => a.raison || a).join(" · ");
+      const r = await synchro.executerPlusieurs([p1.commande, p2.commande]);
+      if (!r.valide) return r.anomalies.map(a => a.raison || a).join(" · ");
+      data = synchro.lireEtat(); await majStatut(); return null;
+    } });
   }
 
   function render() {
@@ -194,18 +281,18 @@
     document.getElementById("logout")?.addEventListener("click", deconnecter);
     const search = document.getElementById("search");
     if (search) search.addEventListener("input", () => { recherche = search.value; const pos = search.selectionStart; render(); const next = document.getElementById("search"); next?.focus(); next?.setSelectionRange(pos, pos); });
-    document.getElementById("addStudy")?.addEventListener("click", ouvrirAjoutEtude);
-    document.querySelectorAll("[data-invoice]").forEach(button => button.addEventListener("click", () => {
-      const id = button.dataset.invoice;
-      const invoice = data.factures.find(f => f.id === id);
-      const prepared = preparerModification({
-        etat: data,
-        collection: "factures",
-        id,
-        modifications: { etat: invoice.etat === "Payée" ? "Émise" : "Payée" },
-      });
-      executer(prepared).then(render);
-    }));
+    const brancher = (sel, f) => document.querySelectorAll(sel).forEach(el => el.addEventListener("click", () => f(el)));
+    brancher("#addStudy", () => ouvrirEtude());
+    brancher("#addClient", () => ouvrirClient());
+    brancher("#addFacture", () => ouvrirFacture());
+    brancher("#addMembre", () => ouvrirMembre());
+    brancher("#addInterv", () => ouvrirIntervention());
+    brancher("#addBV", () => ouvrirBV());
+    brancher("[data-etude]", el => ouvrirEtude(el.dataset.etude));
+    brancher("[data-client]", el => ouvrirClient(el.dataset.client));
+    brancher("[data-invoice]", el => ouvrirFacture(el.dataset.invoice));
+    brancher("[data-membre]", el => ouvrirMembre(el.dataset.membre));
+    brancher("[data-interv]", el => ouvrirIntervention(el.dataset.interv));
   }
 
   // ---- Synchronisation ----
@@ -274,6 +361,6 @@
     };
   }
 
-  document.getElementById("quickAdd").addEventListener("click", () => { current = "Études"; render(); ouvrirAjoutEtude(); });
+  document.getElementById("quickAdd").addEventListener("click", () => { current = "Études"; render(); ouvrirEtude(); });
   if (connexion?.url && connexion?.token) demarrer(); else afficherConnexion();
 })();

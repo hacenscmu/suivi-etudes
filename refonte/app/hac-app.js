@@ -1408,8 +1408,7 @@
      *  - un conflit n'est jamais résolu en silence : la file s'arrête et l'interface demande quoi faire.
      * Aucune dépendance au navigateur : stockage, client et générateur d'opId sont injectés (testable dans Node).
      */
-    const { creerEtatVide } = require("../application/lecture");
-    const { appliquerCommande } = require("../application/commandes");
+    const { creerEtatVide, construireVueApplication } = require("../application/lecture");
     const { creerFileHorsLigne } = require("../backend/file-hors-ligne");
     
     const CHAMPS_SERVEUR = ["_v", "_par", "_le", "_opId", "_deleted"];
@@ -1467,13 +1466,36 @@
     
         /** Applique une commande (preparerAjout / preparerModification) puis l'envoie au serveur. */
         async executer(commande) {
-          const res = appliquerCommande(etat, commande);
-          if (!res.valide) return { valide: false, anomalies: res.anomalies };
-          const col = commande.collection, id = commande.id;
-          const fiche = res.etat[col].find(x => x.id === id);
-          const attendue = Number.isSafeInteger(fiche?._v) ? fiche._v : 0;
-          await file.ajouter({ type: "save", collection: col, id, record: sansChampsServeur(fiche), opId: creerOpId(), expectedVersion: attendue });
-          etat = { ...res.etat, [col]: res.etat[col].map(x => (x.id === id ? { ...x, _v: attendue + 1 } : x)) };
+          return this.executerPlusieurs([commande]);
+        },
+    
+        /**
+         * Applique plusieurs commandes comme un tout (ex. un BV et sa ligne) : l'état final est validé une seule fois,
+         * puis les écritures partent dans l'ordre (le parent avant l'enfant, comme l'exige le serveur).
+         */
+        async executerPlusieurs(commandes) {
+          let suivant = etat;
+          for (const c of commandes) {
+            const col = c?.collection;
+            if (!Array.isArray(suivant[col])) return { valide: false, anomalies: ["Collection inconnue"] };
+            if (c.type === "ajouter") {
+              if (!c.enregistrement || c.enregistrement.id !== c.id || suivant[col].some(x => x.id === c.id)) return { valide: false, anomalies: ["Ajout invalide"] };
+              suivant = { ...suivant, [col]: [...suivant[col], { ...c.enregistrement }] };
+            } else if (c.type === "modifier") {
+              if (!suivant[col].some(x => x.id === c.id) || !c.modifications || "id" in c.modifications) return { valide: false, anomalies: ["Modification invalide"] };
+              suivant = { ...suivant, [col]: suivant[col].map(x => (x.id === c.id ? { ...x, ...c.modifications } : x)) };
+            } else return { valide: false, anomalies: ["Type de commande non pris en charge"] };
+          }
+          const verif = construireVueApplication(suivant);
+          if (!verif.valide) return { valide: false, anomalies: verif.anomalies };
+          for (const c of commandes) {
+            const col = c.collection, id = c.id;
+            const fiche = suivant[col].find(x => x.id === id);
+            const attendue = Number.isSafeInteger(fiche?._v) ? fiche._v : 0;
+            await file.ajouter({ type: "save", collection: col, id, record: sansChampsServeur(fiche), opId: creerOpId(), expectedVersion: attendue });
+            suivant = { ...suivant, [col]: suivant[col].map(x => (x.id === id ? { ...x, _v: attendue + 1 } : x)) };
+          }
+          etat = suivant;
           await memoriser();
           let envoi;
           try { envoi = await synchroniser(); } catch (e) { if (e?.code !== "NETWORK_ERROR") throw e; envoi = { restantes: (await file.inspecter()).length }; }
