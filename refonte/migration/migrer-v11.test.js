@@ -150,6 +150,7 @@ test("une formation peut être rattachée à un membre séparé par correspondan
   const r = migrerV11(exportV11(), {
     correspondances: {
       tempsVersMembre: { t1: "mbr_alex_0001", t3: "mbr_alex_0002" },
+      membres: { "Zoé": "mbr_zoe_000001" },
       nomsMembres: { mbr_alex_0001: "Alex Martin", mbr_alex_0002: "Alex Dupont", mbr_zoe_000001: "Zoé Durand" },
       formationVersMembre: { f_alex: "mbr_alex_0001" },
     },
@@ -160,4 +161,16 @@ test("une formation peut être rattachée à un membre séparé par correspondan
 
 test("refuse une correspondance avec un identifiant instable", () => {
   assert.throws(() => migrerV11(exportV11(), { correspondances: { membres: { Alex: "a1" } } }), /Identifiant de correspondance invalide/);
+});
+
+test("le plafond de 300 € ne s'applique au champ historique que si son sens prix est confirmé", () => {
+  const r = migrerV11(exportV11(), { correspondances: { jehTemps: "prix_intervenant_ht" } });
+  assert.ok(r.anomalies.some(a => a.type === "prix_jeh_intervenant_sup_300" && a.valeur === 320));
+});
+
+test("une correspondance client explicite supprime la question de fusion correspondante", () => {
+  const r = migrerV11(exportV11(), { correspondances: {
+    clients: { "B+T Environnement": "cli_bt_sudouest", "b+t  environnement": "cli_bt_sudouest" },
+  } });
+  assert.equal(r.questions.some(q => q.type === "clients_fusionnes"), false);
 });
