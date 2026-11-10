@@ -30,17 +30,27 @@ test("compte le CA d'une étude archivée", () => {
   assert.equal(r.caSigneHt, 3000);
 });
 
-test("signale un prix JEH supérieur au plafond HAC sans le traiter comme une règle légale", () => {
+test("accepte un prix JEH client de 350 € HT (dans la fourchette CNJE 80–450 €)", () => {
   const r = analyserEtude({ ...etude, jeh: 350 });
-  assert.ok(r.alertes.some(a => a.includes("plafond HAC de 300")));
+  assert.equal(r.alertes.length, 0);
   assert.equal(r.nombreJehFacturees, 3000 / 350);
   assert.equal(r.valide, true);
 });
 
-test("ne signale pas le plafond lorsque le prix JEH est égal à 300 € HT", () => {
-  const r = analyserEtude({ ...etude, jeh: 300 });
-  assert.equal(r.prixJehHt, 300);
-  assert.equal(r.nombreJehFacturees, 10);
+test("signale un prix JEH client hors de la fourchette CNJE (alerte, pas anomalie)", () => {
+  for (const jeh of [79, 451]) {
+    const r = analyserEtude({ ...etude, jeh });
+    assert.ok(r.alertes.some(a => a.includes("hors de la fourchette CNJE 80–450")));
+    assert.equal(r.valide, true);
+  }
+});
+
+test("les bornes 80 et 450 € HT sont acceptées", () => {
+  for (const jeh of [80, 450]) assert.equal(analyserEtude({ ...etude, jeh }).alertes.length, 0);
+});
+
+test("ne confond pas la fourchette client avec le plafond intervenant de 300 €", () => {
+  const r = analyserEtude({ ...etude, jeh: 400 });
   assert.equal(r.alertes.length, 0);
 });
 

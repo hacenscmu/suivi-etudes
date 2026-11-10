@@ -1,12 +1,19 @@
 /**
  * HAC refonte — validation métier des bulletins de versement.
  *
- * Un BV peut contenir plusieurs lignes (une par personne).
- * Le minimum de 1 JEH s'applique au total du BV, pas à chaque ligne,
- * ni au cumul annuel d'une personne.
+ * Un BV regroupe des lignes, une par personne.
+ * Règle « minimum de 1 JEH par BV » (app.js v11 l. 181, 186, 490) : ce n'est PAS
+ * une interdiction. Un BV de 0,5 JEH est valide : la personne est payée sur 0,5 JEH,
+ * mais cotisations et charges sont calculées sur une assiette de 1 JEH.
+ * L'assiette est calculée PAR PERSONNE (les cotisations sont individuelles) :
+ * assietteJeh = max(jeh, 1) si jeh > 0, sinon 0.
  */
 
 const { estIdValide } = require("./identites");
+
+function assietteJeh(jeh) {
+  return jeh > 0 ? Math.max(jeh, 1) : 0;
+}
 
 function validerBV(bv) {
   const anomalies = [];
@@ -18,6 +25,7 @@ function validerBV(bv) {
   if (lignes.length === 0) anomalies.push("Le BV doit contenir au moins une ligne");
 
   const personnes = new Set();
+  const assiettes = [];
   let totalJeh = 0;
 
   lignes.forEach((ligne, index) => {
@@ -40,14 +48,11 @@ function validerBV(bv) {
       anomalies.push({ index, raison: "Nombre de JEH absent ou invalide" });
     } else {
       totalJeh += jeh;
+      assiettes.push({ personneId, jeh, assietteJeh: assietteJeh(jeh) });
     }
   });
 
-  if (lignes.length > 0 && totalJeh < 1) {
-    anomalies.push("Le total du BV doit atteindre au moins 1 JEH");
-  }
-
-  return { valide: anomalies.length === 0, totalJeh, anomalies };
+  return { valide: anomalies.length === 0, totalJeh, assiettes, anomalies };
 }
 
 
@@ -103,6 +108,7 @@ function analyserCollectionBVs({ bvs = [], lignesBV = [], membres = [] } = {}) {
   const resume = [];
   for (const [bvId, entry] of bvsParId) {
     const personnes = new Set();
+    const assiettes = [];
     let totalJeh = 0;
     entry.lignes.forEach(({ ligne, index }) => {
       if (typeof ligne.membreId === "string" && personnes.has(ligne.membreId)) {
@@ -110,17 +116,18 @@ function analyserCollectionBVs({ bvs = [], lignesBV = [], membres = [] } = {}) {
       }
       if (typeof ligne.membreId === "string") personnes.add(ligne.membreId);
       const jeh = Number(ligne.jeh);
-      if (ligne.jeh !== "" && ligne.jeh != null && Number.isFinite(jeh) && jeh >= 0) totalJeh += jeh;
+      if (ligne.jeh !== "" && ligne.jeh != null && Number.isFinite(jeh) && jeh >= 0) {
+        totalJeh += jeh;
+        assiettes.push({ membreId: ligne.membreId, jeh, assietteJeh: assietteJeh(jeh) });
+      }
     });
     if (entry.lignes.length === 0) {
       anomalies.push({ collection: "bvs", index: entry.index, raison: "Le BV ne contient aucune ligne" });
-    } else if (totalJeh < 1) {
-      anomalies.push({ collection: "bvs", index: entry.index, raison: "Le total du BV doit atteindre au moins 1 JEH" });
     }
-    resume.push({ bvId, nombreLignes: entry.lignes.length, nombrePersonnes: personnes.size, totalJeh });
+    resume.push({ bvId, nombreLignes: entry.lignes.length, nombrePersonnes: personnes.size, totalJeh, assiettes });
   }
 
   return { valide: anomalies.length === 0, resume, anomalies };
 }
 
-module.exports = { validerBV, analyserCollectionBVs };
+module.exports = { validerBV, analyserCollectionBVs, assietteJeh };

@@ -42,7 +42,10 @@ function nombreValide(value, { zero = true } = {}) {
 function analyserEtude(etude, {
   factures = [],
   tva = 0.2,
-  plafondJehHt = 300,
+  // Fourchette CNJE du prix de la JEH CLIENT (app.js v11 l. 34 et 166 : 80–450 € HT).
+  // Le plafond de 300 € concerne la JEH versée à l'INTERVENANT (lignes JEH), pas ce prix-ci.
+  prixJehMinHt = 80,
+  prixJehMaxHt = 450,
 } = {}) {
   const anomalies = [];
   const alertes = [];
@@ -84,8 +87,8 @@ function analyserEtude(etude, {
 
   const montantHt = montantTtc !== null && tauxTva !== null ? montantTtc / (1 + tauxTva) : null;
   const nombreJehFacturees = montantHt !== null && prixJehHt !== null ? montantHt / prixJehHt : null;
-  if (prixJehHt !== null && plafondJehHt !== null && prixJehHt > plafondJehHt) {
-    alertes.push("Prix de JEH supérieur au plafond HAC de " + plafondJehHt + " € HT");
+  if (prixJehHt !== null && ((prixJehMinHt !== null && prixJehHt < prixJehMinHt) || (prixJehMaxHt !== null && prixJehHt > prixJehMaxHt))) {
+    alertes.push("Prix de la JEH client (" + prixJehHt + " € HT) hors de la fourchette CNJE " + prixJehMinHt + "–" + prixJehMaxHt + " € HT");
   }
 
   return {

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { validerBV, analyserCollectionBVs } = require("./bv");
+const { validerBV, analyserCollectionBVs, assietteJeh } = require("./bv");
 
 const base = {
   membres: [{ id: "membre_001" }, { id: "membre_002" }],
@@ -11,38 +11,25 @@ const base = {
   ],
 };
 
-test("un BV avec plusieurs personnes atteint le minimum global d'une JEH", () => {
-  const resultat = validerBV({
-    lignes: [
-      { personneId: "p1", jeh: 0.25 },
-      { personneId: "p2", jeh: 0.75 },
-    ],
-  });
-  assert.equal(resultat.valide, true);
-  assert.equal(resultat.totalJeh, 1);
-  assert.deepEqual(resultat.anomalies, []);
+test("assiette minimale : max(JEH, 1) par personne, 0 si aucune JEH", () => {
+  assert.equal(assietteJeh(0.25), 1);
+  assert.equal(assietteJeh(1), 1);
+  assert.equal(assietteJeh(2.5), 2.5);
+  assert.equal(assietteJeh(0), 0);
 });
 
-test("le minimum d'une JEH ne s'applique pas à chaque personne", () => {
-  const resultat = validerBV({
-    lignes: [
-      { personneId: "p1", jeh: 0.25 },
-      { personneId: "p2", jeh: 0.25 },
-      { personneId: "p3", jeh: 0.5 },
-    ],
-  });
-  assert.equal(resultat.valide, true);
+test("un BV de moins d'une JEH est VALIDE (le minimum est une assiette, pas une interdiction)", () => {
+  const r = validerBV({ lignes: [{ personneId: "p1", jeh: 0.5 }] });
+  assert.equal(r.valide, true);
+  assert.equal(r.totalJeh, 0.5);
+  assert.deepEqual(r.assiettes, [{ personneId: "p1", jeh: 0.5, assietteJeh: 1 }]);
 });
 
-test("un BV inférieur à une JEH est invalide même si chaque ligne est valide", () => {
-  const resultat = validerBV({
-    lignes: [
-      { personneId: "p1", jeh: 0.25 },
-      { personneId: "p2", jeh: 0.5 },
-    ],
-  });
-  assert.equal(resultat.valide, false);
-  assert.ok(resultat.anomalies.includes("Le total du BV doit atteindre au moins 1 JEH"));
+test("l'assiette est calculée pour chaque personne, pas sur le total du BV", () => {
+  const r = validerBV({ lignes: [{ personneId: "p1", jeh: 0.25 }, { personneId: "p2", jeh: 0.75 }] });
+  assert.equal(r.valide, true);
+  assert.equal(r.totalJeh, 1);
+  assert.deepEqual(r.assiettes.map(x => x.assietteJeh), [1, 1]); // et non 1 au total
 });
 
 test("une personne ne peut apparaître qu'une fois sur le même BV", () => {
@@ -58,7 +45,7 @@ test("une personne ne peut apparaître qu'une fois sur le même BV", () => {
 test("les identifiants et quantités manquants sont signalés", () => {
   const resultat = validerBV({ lignes: [{ jeh: -0.2 }] });
   assert.equal(resultat.valide, false);
-  assert.equal(resultat.anomalies.length, 3);
+  assert.equal(resultat.anomalies.length, 2); // identifiant manquant + JEH invalide (plus de refus « < 1 JEH »)
 });
 
 test("valide des BV normalisés avec une ligne par membre", () => {
@@ -69,24 +56,17 @@ test("valide des BV normalisés avec une ligne par membre", () => {
     nombreLignes: 2,
     nombrePersonnes: 2,
     totalJeh: 1,
+    assiettes: [
+      { membreId: "membre_001", jeh: 0.25, assietteJeh: 1 },
+      { membreId: "membre_002", jeh: 0.75, assietteJeh: 1 },
+    ],
   }]);
 });
 
-test("contrôle le minimum global sur le BV, pas sur chaque ligne", () => {
-  const r = analyserCollectionBVs({
-    ...base,
-    lignesBV: base.lignesBV.map(l => ({ ...l, jeh: 0.5 })),
-  });
+test("BV normalisé de moins d'une JEH : valide, assiette de 1 JEH par membre", () => {
+  const r = analyserCollectionBVs({ ...base, lignesBV: base.lignesBV.map(l => ({ ...l, jeh: 0.25 })) });
   assert.equal(r.valide, true);
-});
-
-test("bloque un BV dont le total des lignes est inférieur à une JEH", () => {
-  const r = analyserCollectionBVs({
-    ...base,
-    lignesBV: base.lignesBV.map(l => ({ ...l, jeh: 0.25 })),
-  });
-  assert.equal(r.valide, false);
-  assert.ok(r.anomalies.some(a => a.raison.includes("au moins 1 JEH")));
+  assert.deepEqual(r.resume[0].assiettes.map(x => x.assietteJeh), [1, 1]);
 });
 
 test("signale une personne dupliquée sur le même BV", () => {
