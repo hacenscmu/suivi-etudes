@@ -9,6 +9,7 @@ const COLLECTIONS_ECRITURE = new Set([
 const COLLECTIONS_LECTURE = [...COLLECTIONS_ECRITURE, "temps"];
 const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;
 const OP_ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{7,127}$/;
+function idValidePour(collection, id) { return collection === "config" ? id === "main" : typeof id === "string" && ID_VALIDE.test(id); }
 
 function cloner(value) {
   return JSON.parse(JSON.stringify(value));
@@ -81,7 +82,7 @@ function creerServeurMemoireV3({
     if (!COLLECTIONS_ECRITURE.has(request.collection)) {
       return { code: COLLECTIONS_LECTURE.includes(request.collection) ? "READ_ONLY_COLLECTION" : "UNKNOWN_COLLECTION", message: "Collection non modifiable ou inconnue" };
     }
-    if (typeof request.id !== "string" || !ID_VALIDE.test(request.id)) {
+    if (!idValidePour(request.collection, request.id)) {
       return { code: "INVALID_REQUEST", message: "Identifiant absent ou invalide" };
     }
     if (typeof request.opId !== "string" || !OP_ID_VALIDE.test(request.opId)) {
@@ -90,6 +91,7 @@ function creerServeurMemoireV3({
     if (!Number.isSafeInteger(request.expectedVersion) || request.expectedVersion < (action === "delete" ? 1 : 0)) {
       return { code: "INVALID_REQUEST", message: "expectedVersion invalide" };
     }
+    if (action === "delete" && request.collection === "config") return { code: "INVALID_REQUEST", message: "La configuration principale ne peut pas être supprimée" };
     if (action === "save") {
       if (!objetSimple(request.record) || request.record.id !== request.id || request.record._deleted === true) {
         return { code: "INVALID_REQUEST", message: "Enregistrement invalide ou identifiant incohérent" };
