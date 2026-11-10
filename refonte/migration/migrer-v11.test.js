@@ -149,7 +149,7 @@ test("une étude sans client est bloquante pour la migration", () => {
 test("une formation peut être rattachée à un membre séparé par correspondance", () => {
   const r = migrerV11(exportV11(), {
     correspondances: {
-      tempsVersMembre: { t1: "mbr_alex_0001", t3: "mbr_alex_0002" },
+      tempsVersMembre: { t1: "mbr_alex_0001", t3: "mbr_alex_0002", t5: "mbr_alex_0001" },
       membres: { "Zoé": "mbr_zoe_000001" },
       nomsMembres: { mbr_alex_0001: "Alex Martin", mbr_alex_0002: "Alex Dupont", mbr_zoe_000001: "Zoé Durand" },
       formationVersMembre: { f_alex: "mbr_alex_0001" },
