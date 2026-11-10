@@ -1017,13 +1017,30 @@
     
     function resoudreRelation(client, etude = null) {
       const type = etude?.relationType ?? client?.relationType ?? "ponctuelle";
-      const cadenceFacturation = etude && Object.prototype.hasOwnProperty.call(etude, "cadenceFacturation")
-        ? etude.cadenceFacturation
-        : client?.cadenceFacturation ?? null;
-    
       if (!TYPES_RELATION.has(type)) {
         return { type: "invalide", cadenceFacturation: null, anomalie: "Type de relation absent ou inconnu" };
       }
+    
+      let cadenceFacturation;
+      if (etude && Object.prototype.hasOwnProperty.call(etude, "cadenceFacturationMode")) {
+        const mode = etude.cadenceFacturationMode;
+        if (mode === "client") cadenceFacturation = client?.cadenceFacturation ?? null;
+        else if (mode === "aucune") cadenceFacturation = null;
+        else if (mode === "personnalisee") {
+          cadenceFacturation = etude.cadenceFacturation ?? null;
+          if (!CADENCES.has(cadenceFacturation)) {
+            return { type, cadenceFacturation: null, anomalie: "Cadence personnalisée absente ou inconnue" };
+          }
+        } else {
+          return { type, cadenceFacturation: null, anomalie: "Mode de cadence absent ou inconnu" };
+        }
+      } else {
+        // Compatibilité des anciennes fiches : une cadence présente sur l'étude surcharge le client.
+        cadenceFacturation = etude && Object.prototype.hasOwnProperty.call(etude, "cadenceFacturation")
+          ? etude.cadenceFacturation
+          : client?.cadenceFacturation ?? null;
+      }
+    
       if (cadenceFacturation !== null && !CADENCES.has(cadenceFacturation)) {
         return { type, cadenceFacturation: null, anomalie: "Cadence de facturation inconnue" };
       }
