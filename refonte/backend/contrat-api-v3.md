@@ -64,7 +64,7 @@ Une intervention représente le temps attribué à **une personne** sur une étu
 
 - Une JEH correspond à 480 minutes individuelles.
 - Les statuts `Payé` et `Pas payé` correspondent à du travail réalisé ; `A venir` et `Non effectué` n'entrent pas dans les JEH travaillées.
-- `prixJehHt` est le prix HT par JEH ; il est distinct de la durée et du nombre de JEH.
+- `prixJehHt` est le prix HT par JEH versé à l’intervenant ; il est distinct de la durée et du nombre de JEH. Au-dessus de 300 € HT/JEH, le système émet une alerte HAC sans bloquer l’enregistrement. Cette limite ne s’applique pas au prix JEH client de l’étude, contrôlé séparément dans la fourchette CNJE 80–450 € HT.
 - Les anciennes lignes `temps` utilisent notamment `min`, `nb`, `prenom` et `etude`. Ne jamais supposer que `min` est individuelle ou convertir un prénom/numéro en identifiant sans correspondance explicite. Aucun regroupement automatique en BV.
 
 ## 5. Opérations
