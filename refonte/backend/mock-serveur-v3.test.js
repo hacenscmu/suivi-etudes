@@ -46,13 +46,13 @@ test("crée une fiche en version 1 puis l'incrémente à la modification", async
   const server = base();
   const create = body(await server.transport(req("save", {
     collection: "interventions", id: "interv_0001",
-    record: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", minutesIndividuelles: 240 },
+    record: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-11-10", statut: "Pas payé", minutesIndividuelles: 240 },
     opId: "op_create_0001", expectedVersion: 0,
   })));
   assert.equal(create.data._v, 1);
   const update = body(await server.transport(req("save", {
     collection: "interventions", id: "interv_0001",
-    record: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", minutesIndividuelles: 480 },
+    record: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-11-10", statut: "Pas payé", minutesIndividuelles: 480 },
     opId: "op_update_0001", expectedVersion: 1,
   })));
   assert.equal(update.data._v, 2);
@@ -201,4 +201,36 @@ test("ne publie jamais le marqueur interne opId, même pour les tombstones", asy
   }));
   const loaded = body(await server.transport(req("loadAll")));
   assert.equal("_opId" in loaded.data.membres.membre_0001, false);
+});
+
+test("valide les champs métier des interventions avant écriture", async () => {
+  const server = base();
+  const r = body(await server.transport(req("save", {
+    collection: "interventions", id: "interv_invalid_01",
+    record: { id: "interv_invalid_01", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-02-30", statut: "Pas payé", minutesIndividuelles: -5 },
+    opId: "op_intervention_bad_01", expectedVersion: 0,
+  })));
+  assert.equal(r.error.code, "INVALID_REQUEST");
+  assert.equal(server.lireRevision(), 0);
+});
+
+test("une ligne BV de 0,5 JEH reste valide : le minimum d'assiette est calculé ailleurs par personne", async () => {
+  const server = base();
+  const r = body(await server.transport(req("save", {
+    collection: "lignesBV", id: "ligne_bv_0001",
+    record: { id: "ligne_bv_0001", bvId: "bv_000001", membreId: "membre_0001", jeh: 0.5 },
+    opId: "op_ligne_bv_0001", expectedVersion: 0,
+  })));
+  assert.equal(r.ok, true);
+  assert.equal(r.data.jeh, 0.5);
+});
+
+test("refuse une facture sans étude stable ou avec un montant invalide", async () => {
+  const server = base();
+  const r = body(await server.transport(req("save", {
+    collection: "factures", id: "facture_0001",
+    record: { id: "facture_0001", etudeId: "bad", type: "Solde", etat: "Émise", montant: -1 },
+    opId: "op_facture_bad_01", expectedVersion: 0,
+  })));
+  assert.equal(r.error.code, "INVALID_REQUEST");
 });
