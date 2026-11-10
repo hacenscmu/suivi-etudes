@@ -7,7 +7,7 @@
  * exclusivement des factures liées par etudeId.
  */
 
-const { calculerJehTravaillees } = require("./jeh");
+const { analyserIntervention, agregerInterventions } = require("./interventions");
 const { analyserFacture } = require("./factures");
 
 function dateValide(value) {
@@ -66,7 +66,6 @@ function calculerTableauDeBord({
   let montantFacture = 0;
   let encaisse = 0;
   let facturesCompletes = true;
-  const facturesParEtude = new Map();
 
   factures.forEach((facture, index) => {
     if (!facture || typeof facture !== "object" || typeof facture.etudeId !== "string" || !etudeIds.has(facture.etudeId)) {
@@ -83,11 +82,10 @@ function calculerTableauDeBord({
     }
     montantFacture += montant;
     if (analyse.payee) encaisse += montant;
-    facturesParEtude.set(facture.etudeId, (facturesParEtude.get(facture.etudeId) || 0) + montant);
   });
 
-  const calculJeh = calculerJehTravaillees(interventions);
-  calculJeh.anomalies.forEach(a => anomalies.push({ collection: "interventions", ...a }));
+  const calculInterventions = agregerInterventions(interventions);
+  calculInterventions.anomalies.forEach(a => anomalies.push({ collection: "interventions", ...a }));
 
   const fin = new Date(dateFin + "T00:00:00.000Z");
   const debut = new Date(Date.UTC(fin.getUTCFullYear(), fin.getUTCMonth() - (nombreMois - 1), 1));
@@ -98,21 +96,11 @@ function calculerTableauDeBord({
     mois.push({ mois: key, jeh: 0 });
   }
   const moisIndex = new Map(mois.map((m, i) => [m.mois, i]));
-  const parMembre = new Map();
-
-  interventions.forEach((ligne, index) => {
-    if (!ligne || !["Payé", "Pas payé"].includes(ligne.statut)) return;
-    const jeh = montantValide(ligne.jeh);
-    if (jeh === null) return;
-    if (!dateValide(ligne.date)) {
-      anomalies.push({ collection: "interventions", index, raison: "Date d'intervention absente ou invalide" });
-    } else {
-      const idx = moisIndex.get(ligne.date.slice(0, 7));
-      if (idx !== undefined) mois[idx].jeh += jeh;
-    }
-    if (typeof ligne.membreId === "string" && ligne.membreId.trim()) {
-      parMembre.set(ligne.membreId, (parMembre.get(ligne.membreId) || 0) + jeh);
-    }
+  interventions.forEach(ligne => {
+    const analyse = analyserIntervention(ligne);
+    if (!analyse.valide || !analyse.statutTravaille) return;
+    const idx = moisIndex.get(ligne.date.slice(0, 7));
+    if (idx !== undefined) mois[idx].jeh += analyse.jeh;
   });
 
   return {
@@ -122,9 +110,9 @@ function calculerTableauDeBord({
     montantFacture: facturesCompletes ? montantFacture : null,
     encaisse: facturesCompletes ? encaisse : null,
     resteAEncaisser: facturesCompletes ? montantFacture - encaisse : null,
-    totalJehTravaillees: calculJeh.total,
-    jehParMois: mois,
-    jehParMembre: [...parMembre].map(([membreId, jeh]) => ({ membreId, jeh })),
+    totalJehTravaillees: calculInterventions.totalJehTravaillees,
+    jehParMois: calculInterventions.valide ? mois : null,
+    jehParMembre: calculInterventions.valide ? calculInterventions.parMembre : null,
     anomalies,
   };
 }
