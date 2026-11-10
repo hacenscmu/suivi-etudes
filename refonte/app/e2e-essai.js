@@ -1,5 +1,5 @@
-// Test navigateur du mode essai (Playwright, hors CI) : python3 -m http.server 8766 à la racine, puis node refonte/app/e2e-essai.js
-const {chromium}=require('playwright');const ok=(n,c)=>console.log((c?'✔ ':'✘ ')+n);
+// Test navigateur du mode essai (Chromium, CI et local) : python3 -m http.server 8766 à la racine, puis node refonte/app/e2e-essai.js
+const {chromium}=require('playwright');let failures=0;const ok=(n,c)=>{if(!c)failures++;console.log((c?'✔ ':'✘ ')+n);};
 (async()=>{const b=await chromium.launch();const p=await b.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));p.on('dialog',d=>d.accept());
 let net=0;p.on('request',r=>{if(!r.url().startsWith('http://localhost'))net++});
 await p.goto('http://localhost:8766/refonte/app/index.html');await p.click('#essai');await p.waitForTimeout(600);
@@ -17,4 +17,4 @@ await p.click('[data-reglage="alertes"]');await p.selectOption('dialog [name=tem
 await p.selectOption('#mandatSel','2025-2026');await p.click('#tabs [data-page="Études"]');await p.click('[data-filtre="Toutes"]');ok('filtre mandat : aucune étude en 2025-2026',(await p.textContent('#content')).includes('Toutes (0)'));
 await p.selectOption('#mandatSel','2026-2027');ok('filtre mandat 2026-2027 : 2 études',(await p.textContent('#content')).includes('Toutes (2)'));
 const dl=p.waitForEvent('download');await p.click('#tabs [data-page="Réglages"]');await p.click('#exportJson');ok('export JSON téléchargé',(await dl).suggestedFilename().startsWith('hac-sauvegarde-'));
-ok('aucun appel réseau externe',net===0);ok('aucune erreur JS',errs.length===0||console.log(errs));await b.close()})();
+ok('aucun appel réseau externe',net===0);ok('aucune erreur JS',errs.length===0||console.log(errs));await b.close();if(failures)process.exitCode=1})();
