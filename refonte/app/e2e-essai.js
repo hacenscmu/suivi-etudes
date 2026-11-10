@@ -9,4 +9,12 @@ await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="É
 ok('modification conservée après rechargement',(await p.textContent('#content')).includes('Devis signé'));
 await p.click('#tabs [data-page="Équipe"]');ok('paie : Lucas à verser',(await p.textContent('#content')).includes('À verser'));
 await p.click('[data-payer="membre_0002"]');await p.waitForTimeout(500);ok('BV créé, lignes passées à Payé',(await p.textContent('#content')).includes('Personne à payer')||!(await p.locator('[data-payer="membre_0002"]').count()));
+await p.click('#tabs [data-page="Réglages"]');await p.click('[data-reglage="mandat"]');await p.fill('dialog [name=nom]','2026-2027');await p.fill('dialog [name=debut]','2026-09-01');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
+await p.click('[data-reglage="mandat"]');await p.fill('dialog [name=nom]','2025-2026');await p.fill('dialog [name=debut]','2025-09-01');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
+ok('mandats ajoutés au sélecteur',(await p.locator('#mandatSel option').count())===3);
+await p.click('[data-reglage="tva"]');await p.fill('dialog [name=relance1]','5');await p.click('dialog [data-ok]');await p.waitForTimeout(400);ok('relance modifiée',(await p.textContent('#content')).includes('1re relance à 5 j'));
+await p.click('[data-reglage="alertes"]');await p.selectOption('dialog [name=temps]','non');await p.click('dialog [data-ok]');await p.waitForTimeout(400);ok('une alerte désactivée',(await p.textContent('#content')).includes('21 activées sur 22'));
+await p.selectOption('#mandatSel','2025-2026');await p.click('#tabs [data-page="Études"]');await p.click('[data-filtre="Toutes"]');ok('filtre mandat : aucune étude en 2025-2026',(await p.textContent('#content')).includes('Toutes (0)'));
+await p.selectOption('#mandatSel','2026-2027');ok('filtre mandat 2026-2027 : 2 études',(await p.textContent('#content')).includes('Toutes (2)'));
+const dl=p.waitForEvent('download');await p.click('#tabs [data-page="Réglages"]');await p.click('#exportJson');ok('export JSON téléchargé',(await dl).suggestedFilename().startsWith('hac-sauvegarde-'));
 ok('aucun appel réseau externe',net===0);ok('aucune erreur JS',errs.length===0||console.log(errs));await b.close()})();

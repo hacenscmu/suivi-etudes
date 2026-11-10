@@ -2,9 +2,9 @@
 (() => {
   "use strict";
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
-  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, EN_COURS, calculerPaie } = window.HAC;
+  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, EN_COURS, ALERTES, calculerPaie } = window.HAC;
   let filtreEtudes = "En cours";
-  const alertesParEtude = () => calculerAlertes({ etudes: data.etudes, factures: data.factures, interventions: data.interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
+  const alertesParEtude = () => calculerAlertes({ etudes: donneesVues().etudes, factures: donneesVues().factures, interventions: donneesVues().interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
   // ---- Mode essai : un serveur v3 simulé sur ce téléphone, avec des données d'exemple. Aucune donnée réelle. ----
   const JETON_ESSAI = "essai-local-hac-v3";
   const v1 = o => Object.fromEntries(o.map(x => [x.id, { ...x, _v: 1 }]));
@@ -41,7 +41,22 @@
   let recherche = "";
   const money = n => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n || 0);
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const view = () => construireVueApplication(data, { dateFin: aujourdHui(), nombreMois: 6, tva: synchro?.lireConfig()?.tva ?? 0.2 });
+  // ---- Mandats : la fin d'un mandat = veille du suivant (comme en v12) ----
+  let mandatSel = (() => { try { return localStorage.getItem("hac.v3.mandat") || "Tous les mandats"; } catch { return "Tous les mandats"; } })();
+  const mandats = () => [...(synchro?.lireConfig()?.mandats || [])].filter(m => m && m.nom && m.debut).sort((a, b) => a.debut.localeCompare(b.debut));
+  const mandatDe = date => { if (!date) return ""; let r = ""; for (const m of mandats()) if (date >= m.debut && (!m.fin || date <= m.fin)) r = m.nom; return r; };
+  // Vue d'un mandat : ses études, avec leurs factures et interventions (liens toujours cohérents).
+  const donneesVues = () => {
+    if (mandatSel === "Tous les mandats" || !mandats().some(m => m.nom === mandatSel)) return data;
+    const ids = new Set(data.etudes.filter(e => mandatDe(e.date) === mandatSel).map(e => e.id));
+    return { ...data, etudes: data.etudes.filter(e => ids.has(e.id)), factures: data.factures.filter(f => ids.has(f.etudeId)), interventions: data.interventions.filter(i => ids.has(i.etudeId)) };
+  };
+  function selecteurMandat() {
+    const el = document.getElementById("mandatSel"); if (!el) return;
+    el.innerHTML = ["Tous les mandats", ...mandats().map(m => m.nom)].map(n => '<option' + (n === mandatSel ? " selected" : "") + ">" + escapeHtml(n) + "</option>").join("");
+    el.onchange = () => { mandatSel = el.value; try { localStorage.setItem("hac.v3.mandat", mandatSel); } catch {} render(); };
+  }
+  const view = () => construireVueApplication(donneesVues(), { dateFin: aujourdHui(), nombreMois: 6, tva: synchro?.lireConfig()?.tva ?? 0.2 });
 
   function nav() {
     ["tabs", "mobileTabs"].forEach(id => {
@@ -82,7 +97,7 @@
         " · " + money(intervention?.prixJehHt) + " HT/JEH</small></div></div>";
     }).join("");
     const AL = alertesParEtude();
-    const parEtude = data.etudes.map(e => ({ e, a: AL.get(e.id)?.alertes || [] })).filter(x => x.a.length);
+    const parEtude = donneesVues().etudes.map(e => ({ e, a: AL.get(e.id)?.alertes || [] })).filter(x => x.a.length);
     const alerts = parEtude.map(({ e, a }) => '<button type="button" class="alert invoice-button" data-etude="' + e.id + '"><div class="alert-icon">' + a.length + '</div><div><strong>' +
       escapeHtml(nomEtude(e)) + "</strong><small>" + a.map(x => escapeHtml(x.texte)).join(" · ") + "</small></div></button>").join("");
     return '<div class="stats">' +
@@ -193,13 +208,75 @@
   }
 
   function settings() {
-    const e = etatSynchro;
-    return heading("Réglages", "Connexion et synchronisation") +
-      '<section class="listbox rows"><div class="item"><div class="item-main"><strong>Serveur</strong><small>' + escapeHtml(connexion?.essai ? "Mode essai (serveur simulé sur ce téléphone)" : connexion?.url ? "Connecté" : "Non connecté") + '</small></div></div>' +
-      '<div class="item"><div class="item-main"><strong>Données affichées</strong><small>' + (e.source === "serveur" ? "À jour avec le serveur" : e.source === "cache" ? "Dernière version gardée sur cet appareil (hors ligne)" : "Aucune") + '</small></div></div>' +
-      '<div class="item"><div class="item-main"><strong>Modifications en attente d’envoi</strong><small>' + e.enAttente + '</small></div><button class="ghost action" id="syncNow">Synchroniser</button></div>' +
-      '<div class="item"><div class="item-main"><strong>Taux de TVA</strong><small>' + Math.round((synchro?.lireConfig()?.tva ?? 0.2) * 100) + ' %</small></div></div>' +
-      '<div class="item"><div class="item-main"><strong>Se déconnecter de cet appareil</strong><small>Efface l’adresse, le jeton et les données gardées sur ce téléphone</small></div><button class="ghost action" id="logout">Déconnexion</button></div></section>';
+    const e = etatSynchro, c = synchro?.lireConfig() || {};
+    const ligne = (titre, detail, bouton) => '<div class="item"><div class="item-main"><strong>' + titre + "</strong><small>" + detail + "</small></div>" + (bouton || "") + "</div>";
+    const btn = (id, txt) => '<button class="ghost action" data-reglage="' + id + '">' + txt + "</button>";
+    const pc = x => (Math.round(Number(x || 0) * 10000) / 100).toLocaleString("fr-FR") + " %";
+    const tot = o => Object.values(o || {}).reduce((s, v) => s + Number(v || 0), 0);
+    const off = c.alertesOff || {};
+    return heading("Réglages", "Paramètres partagés par toute l’équipe") +
+      '<section class="listbox rows">' +
+      ligne("Mandats", mandats().map(m => escapeHtml(m.nom) + " (dès le " + escapeHtml(m.debut) + ")").join(" · ") || "Aucun mandat", btn("mandat", "＋ Mandat")) +
+      ligne("TVA et relances", "TVA " + pc(c.tva ?? 0.2) + " · 1re relance à " + (c.relance1 ?? 3) + " j · 2e relance après " + (c.relance2 ?? 10) + " j", btn("tva", "Modifier")) +
+      ligne("Règles CNJE", c.cnje?.date ? "Depuis le " + escapeHtml(c.cnje.date) + " · JEH client " + (c.cnje.min ?? 80) + "–" + (c.cnje.max ?? 450) + " € · intervenant ≤ " + (c.cnje.maxInt ?? 300) + " €" : "Aucune règle appliquée", btn("cnje", "Modifier")) +
+      ligne("Cotisations", "SMIC " + (c.smic ?? 12.02) + " € · salariales " + pc(c.cot ? tot(c.cot) : 0.183) + " · patronales " + pc(c.patr ? tot(c.patr) : 0.3014) + " · chômage " + pc(c.chomage ?? 0), btn("cot", "Modifier")) +
+      ligne("Alertes", c.alertesOn === false ? "Toutes désactivées" : (ALERTES.length - ALERTES.filter(a => off[a[0]]).length) + " activées sur " + ALERTES.length, btn("alertes", "Choisir")) +
+      "</section>" + heading("Synchronisation", "Cet appareil") + '<section class="listbox rows">' +
+      ligne("Serveur", escapeHtml(connexion?.essai ? "Mode essai (serveur simulé sur ce téléphone)" : connexion?.url ? "Connecté" : "Non connecté")) +
+      ligne("Données affichées", e.source === "serveur" ? "À jour avec le serveur" : e.source === "cache" ? "Dernière version gardée sur cet appareil (hors ligne)" : "Aucune") +
+      ligne("Modifications en attente d’envoi", String(e.enAttente), '<button class="ghost action" id="syncNow">Synchroniser</button>') +
+      ligne("Exporter", "Télécharger une sauvegarde complète (.json)", '<button class="ghost action" id="exportJson">Exporter</button>') +
+      ligne("Se déconnecter de cet appareil", "Efface l’adresse, le jeton et les données gardées sur ce téléphone", '<button class="ghost action" id="logout">Déconnexion</button>') +
+      "</section>";
+  }
+  async function sauverConfig(modifs) {
+    const r = await synchro.enregistrerConfig({ ...(synchro.lireConfig() || {}), ...modifs });
+    if (!r.valide) return r.anomalies.join(" · ");
+    await majStatut(); return null;
+  }
+  const pourcent = x => Math.round(Number(x || 0) * 10000) / 100;
+  const versTaux = x => (x === null || x === "" ? 0 : Number(x) / 100);
+  function ouvrirReglage(cle) {
+    const c = synchro.lireConfig() || {};
+    if (cle === "mandat") return formulaire({ titre: "Nouveau mandat", valeurs: {}, champs: [
+      { name: "nom", label: "Nom (ex. 2026-2027)", required: true },
+      { name: "debut", label: "Date de début", type: "date", required: true, aide: "La fin est la veille du mandat suivant." },
+    ], onValider: d => mandats().some(m => m.nom === d.nom) ? "Ce mandat existe déjà." : sauverConfig({ mandats: [...mandats(), { nom: d.nom, debut: d.debut }] }) });
+    if (cle === "tva") return formulaire({ titre: "TVA et relances", valeurs: { tva: pourcent(c.tva ?? 0.2), relance1: c.relance1 ?? 3, relance2: c.relance2 ?? 10 }, champs: [
+      { name: "tva", label: "TVA (%)", type: "number", required: true },
+      { name: "relance1", label: "1re relance (jours après l’échéance)", type: "number", required: true },
+      { name: "relance2", label: "2e relance (au-delà de … jours)", type: "number", required: true },
+    ], onValider: d => sauverConfig({ tva: versTaux(d.tva), relance1: Math.round(d.relance1), relance2: Math.round(d.relance2) }) });
+    if (cle === "cnje") return formulaire({ titre: "Règles CNJE", valeurs: { date: c.cnje?.date || "", min: c.cnje?.min ?? 80, max: c.cnje?.max ?? 450, maxInt: c.cnje?.maxInt ?? 300 }, champs: [
+      { name: "date", label: "Appliquer aux études créées depuis le", type: "date", aide: "Vide = aucune alerte CNJE." },
+      { name: "min", label: "JEH client minimum HT (€)", type: "number", required: true },
+      { name: "max", label: "JEH client maximum HT (€)", type: "number", required: true },
+      { name: "maxInt", label: "JEH intervenant maximum HT (€)", type: "number", required: true },
+    ], onValider: d => sauverConfig({ cnje: { date: d.date, min: d.min, max: d.max, maxInt: d.maxInt } }) });
+    if (cle === "cot") {
+      const cot = c.cot || { maladie: 0.013, retraiteP: 0.069, retraiteD: 0.004, csgD: 0.068, csgND: 0.029 };
+      const patr = c.patr || { maladie: 0.13, at: 0.0123, retraiteP: 0.0855, retraiteD: 0.0211, famille: 0.0525, autres: 0 };
+      const champs = [{ name: "smic", label: "SMIC horaire brut (€)", type: "number", required: true }, { name: "chomage", label: "Chômage (%)", type: "number" }]
+        .concat(Object.keys(cot).map(k => ({ name: "cot_" + k, label: "Salariale · " + k + " (%)", type: "number" })))
+        .concat(Object.keys(patr).map(k => ({ name: "patr_" + k, label: "Patronale · " + k + " (%)", type: "number" })));
+      const valeurs = { smic: c.smic ?? 12.02, chomage: pourcent(c.chomage ?? 0) };
+      Object.keys(cot).forEach(k => { valeurs["cot_" + k] = pourcent(cot[k]); }); Object.keys(patr).forEach(k => { valeurs["patr_" + k] = pourcent(patr[k]); });
+      return formulaire({ titre: "Cotisations", valeurs, champs, onValider: d => {
+        const nc = {}, np = {}; Object.keys(cot).forEach(k => { nc[k] = versTaux(d["cot_" + k]); }); Object.keys(patr).forEach(k => { np[k] = versTaux(d["patr_" + k]); });
+        return sauverConfig({ smic: d.smic, chomage: versTaux(d.chomage), cot: nc, patr: np });
+      } });
+    }
+    if (cle === "alertes") {
+      const off = c.alertesOff || {};
+      return formulaire({ titre: "Alertes affichées", valeurs: { tout: c.alertesOn === false ? "non" : "oui", ...Object.fromEntries(ALERTES.map(a => [a[0], off[a[0]] ? "non" : "oui"])) }, champs: [
+        { name: "tout", label: "Toutes les alertes", type: "select", required: true, options: [["oui", "Activées"], ["non", "Désactivées"]] },
+        ...ALERTES.map(a => ({ name: a[0], label: a[1], type: "select", required: true, options: [["oui", "Oui"], ["non", "Non"]], aide: a[2] })),
+      ], onValider: d => sauverConfig({ alertesOn: d.tout === "oui", alertesOff: Object.fromEntries(ALERTES.filter(a => d[a[0]] === "non").map(a => [a[0], true])) }) });
+    }
+  }
+  function exporter() {
+    const blob = new Blob([JSON.stringify({ format: "hac-v3", exporteLe: new Date().toISOString(), config: synchro.lireConfig(), donnees: data }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "hac-sauvegarde-" + aujourdHui() + ".json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   // ---------- Formulaires ----------
@@ -320,6 +397,7 @@
 
   function render() {
     const v = view();
+    selecteurMandat();
     nav();
     banniere();
     const content = document.getElementById("content");
@@ -349,6 +427,8 @@
     brancher("[data-etude]", el => ouvrirEtude(el.dataset.etude));
     brancher("[data-filtre]", el => { filtreEtudes = el.dataset.filtre; render(); });
     brancher("[data-payer]", el => creerBVPour(el.dataset.payer));
+    brancher("[data-reglage]", el => ouvrirReglage(el.dataset.reglage));
+    brancher("#exportJson", () => exporter());
     brancher("[data-client]", el => ouvrirClient(el.dataset.client));
     brancher("[data-invoice]", el => ouvrirFacture(el.dataset.invoice));
     brancher("[data-membre]", el => ouvrirMembre(el.dataset.membre));

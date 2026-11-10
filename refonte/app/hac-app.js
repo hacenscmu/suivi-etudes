@@ -1917,6 +1917,19 @@
     
         synchroniser,
     
+        /** Enregistre la fiche unique de réglages (config/main), versionnée comme les autres fiches. */
+        async enregistrerConfig(nouvelle) {
+          if (!nouvelle || typeof nouvelle !== "object" || Array.isArray(nouvelle)) return { valide: false, anomalies: ["Réglages invalides"] };
+          const attendue = Number.isSafeInteger(config?._v) ? config._v : 0;
+          const record = { ...sansChampsServeur(nouvelle), id: "main" };
+          await file.ajouter({ type: "save", collection: "config", id: "main", record, opId: creerOpId(), expectedVersion: attendue });
+          config = { ...record, _v: attendue + 1 };
+          await memoriser();
+          let envoi;
+          try { envoi = await synchroniser(); } catch (e) { if (e?.code !== "NETWORK_ERROR") throw e; envoi = { restantes: (await file.inspecter()).length }; }
+          return { valide: true, envoi };
+        },
+    
         /** Conflit : abandonner les modifications en attente et repartir de la version du serveur. */
         async abandonnerEtRecharger() {
           for (const op of await file.inspecter()) await file.abandonner(op.opId);
