@@ -81,6 +81,21 @@ function creerFileHorsLigne({ stockage, api } = {}) {
     await stockage.ecrire(cloner(file));
   }
 
+  async function remplacerIncident_(opId, nouvelleOperation, etatAttendu) {
+    validerOperation(nouvelleOperation);
+    const file = await lire();
+    const index = file.findIndex(item => item.opId === opId);
+    if (index < 0 || file[index].etat !== etatAttendu) {
+      throw new ErreurFile("INCIDENT_NOT_FOUND", "Aucun incident de ce type à résoudre pour cet opId");
+    }
+    if (nouvelleOperation.opId === opId || file.some((item, i) => i !== index && item.opId === nouvelleOperation.opId)) {
+      throw new ErreurFile("DUPLICATE_OPERATION", "La résolution doit utiliser un nouvel opId");
+    }
+    file[index] = { ...cloner(nouvelleOperation), etat: "en_attente", erreur: null };
+    await ecrire(file);
+    return { resolu: true, nombre: file.length };
+  }
+
   return Object.freeze({
     async inspecter() {
       return lire();
@@ -107,8 +122,8 @@ function creerFileHorsLigne({ stockage, api } = {}) {
       let bloquePar = null;
       while (file.length) {
         const operation = file[0];
-        if (operation.etat === "conflit") {
-          bloquePar = { opId: operation.opId, code: "VERSION_CONFLICT" };
+        if (operation.etat === "conflit" || operation.etat === "incident") {
+          bloquePar = { opId: operation.opId, code: operation.etat === "conflit" ? "VERSION_CONFLICT" : "OP_INTERRUPTED" };
           break;
         }
         try {
@@ -128,7 +143,7 @@ function creerFileHorsLigne({ stockage, api } = {}) {
           traitees += 1;
         } catch (error) {
           const code = typeof error?.code === "string" ? error.code : "UNKNOWN_ERROR";
-          operation.etat = code === "VERSION_CONFLICT" ? "conflit" : "en_attente";
+          operation.etat = code === "VERSION_CONFLICT" ? "conflit" : code === "OP_INTERRUPTED" ? "incident" : "en_attente";
           operation.erreur = { code, message: String(error?.message || "Échec de synchronisation") };
           await ecrire(file);
           bloquePar = { opId: operation.opId, code };
@@ -139,18 +154,11 @@ function creerFileHorsLigne({ stockage, api } = {}) {
     },
 
     async remplacerApresConflit(opId, nouvelleOperation) {
-      validerOperation(nouvelleOperation);
-      const file = await lire();
-      const index = file.findIndex(item => item.opId === opId);
-      if (index < 0 || file[index].etat !== "conflit") {
-        throw new ErreurFile("CONFLICT_NOT_FOUND", "Aucun conflit à résoudre pour cet opId");
-      }
-      if (nouvelleOperation.opId === opId || file.some((item, i) => i !== index && item.opId === nouvelleOperation.opId)) {
-        throw new ErreurFile("DUPLICATE_OPERATION", "La résolution doit utiliser un nouvel opId");
-      }
-      file[index] = { ...cloner(nouvelleOperation), etat: "en_attente", erreur: null };
-      await ecrire(file);
-      return { resolu: true, nombre: file.length };
+      return remplacerIncident_(opId, nouvelleOperation, "conflit");
+    },
+
+    async remplacerApresIncident(opId, nouvelleOperation) {
+      return remplacerIncident_(opId, nouvelleOperation, "incident");
     },
 
     async abandonner(opId) {
