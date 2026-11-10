@@ -368,7 +368,7 @@ button.b.ghost:disabled{opacity:.4}
 
 /* v13 : KPI JEH étudiants */
 .jehk .jehbig{font-size:56px;line-height:1.05;font-weight:800;letter-spacing:-2px;color:var(--acc);margin:10px 0 4px}.warnx{color:var(--warn);font-weight:600}
-.finseg{margin:4px 0 14px}.fin4{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))!important}.val.late{color:var(--bad)}
+.finseg{margin:4px 0 14px}.fin4{margin-top:0}.fin4 .ft b{font-size:17px}.ft.late b{color:var(--bad)}.finnet{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:10px;padding:10px 12px;border-radius:14px;background:var(--accsoft)}.finnet span{font-size:12.5px}.finnet b{font-size:18px;color:var(--acc)}
 
 /* v13 : cartes d'études */
 .ec2{position:relative;padding-left:18px;overflow:hidden}
@@ -380,3 +380,12 @@ button.b.ghost:disabled{opacity:.4}
 .etag.late{background:var(--accsoft);color:var(--bad);font-weight:600}.etag.bv{background:var(--accsoft);color:var(--acc);font-weight:600}
 .avs{display:inline-flex}.avs i{font-style:normal;width:24px;height:24px;border-radius:50%;background:var(--accsoft);color:var(--acc);font-size:10px;font-weight:700;display:inline-grid;place-items:center;border:2px solid var(--card);margin-left:-6px}.avs i:first-child{margin-left:0}
 .ec2 .emeta{margin-top:10px}.ec2 .eal{display:flex;gap:6px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
+
+/* v14 : fiches clients */
+.cch{display:flex;gap:10px;align-items:center;min-width:0}.cav{flex:none;width:38px;height:38px;border-radius:12px;background:var(--accsoft);color:var(--acc);font-weight:800;font-size:13px;display:grid;place-items:center}
+.cft{margin-top:10px;grid-template-columns:repeat(3,minmax(0,1fr))}.cft .ft b{font-size:14px}
+
+/* v14 : cartes étudiants (Paie) */
+.pc2 .pnet{text-align:right;flex:none}.pc2 .pnet b{display:block;font-size:20px;color:var(--acc);letter-spacing:-.5px}.pc2 .pnet small{font-size:11px;color:var(--mute)}
+.pc2.paid .pnet b{color:var(--mute)}.pc2 .et span{white-space:normal}
+.pdec{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}.pdec div{background:var(--card2);border-radius:12px;padding:8px 10px}.pdec small{display:block;font-size:11px;color:var(--mute)}.pdec b{font-size:13.5px}
