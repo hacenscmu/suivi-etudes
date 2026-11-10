@@ -115,20 +115,20 @@ test("un opId réutilisé avec un contenu différent est refusé", async () => {
 test("la suppression crée un tombstone versionné au lieu d'effacer la fiche", async () => {
   const server = base();
   const r = body(await server.transport(req("delete", {
-    collection: "clients", id: "client_0001", opId: "op_delete_0001", expectedVersion: 1,
+    collection: "membres", id: "membre_0001", opId: "op_delete_0001", expectedVersion: 1,
   })));
   assert.equal(r.data._deleted, true);
   assert.equal(r.data._v, 2);
-  assert.equal(server.lireDonnees().clients.client_0001._deleted, true);
+  assert.equal(server.lireDonnees().membres.membre_0001._deleted, true);
 });
 
 test("un conflit de suppression conserve la fiche active", async () => {
   const server = base();
   const r = body(await server.transport(req("delete", {
-    collection: "clients", id: "client_0001", opId: "op_delete_0002", expectedVersion: 2,
+    collection: "membres", id: "membre_0001", opId: "op_delete_0002", expectedVersion: 2,
   })));
   assert.equal(r.error.code, "VERSION_CONFLICT");
-  assert.equal(server.lireDonnees().clients.client_0001._deleted, undefined);
+  assert.equal(server.lireDonnees().membres.membre_0001._deleted, undefined);
 });
 
 test("refuse les écritures sur temps et les collections inconnues", async () => {
@@ -183,4 +183,22 @@ test("accepte uniquement config/main et protège la configuration contre la supp
     collection: "config", id: "main", opId: "op_config_del_01", expectedVersion: 1,
   })));
   assert.equal(del.error.code, "INVALID_REQUEST");
+});
+
+test("refuse de supprimer un parent encore référencé par une fiche active", async () => {
+  const server = base();
+  const r = body(await server.transport(req("delete", {
+    collection: "clients", id: "client_0001", opId: "op_delete_parent_01", expectedVersion: 1,
+  })));
+  assert.equal(r.error.code, "INVALID_REQUEST");
+  assert.equal(server.lireDonnees().clients.client_0001._deleted, undefined);
+});
+
+test("ne publie jamais le marqueur interne opId, même pour les tombstones", async () => {
+  const server = base();
+  await server.transport(req("delete", {
+    collection: "membres", id: "membre_0001", opId: "op_delete_internal_01", expectedVersion: 1,
+  }));
+  const loaded = body(await server.transport(req("loadAll")));
+  assert.equal("_opId" in loaded.data.membres.membre_0001, false);
 });
