@@ -21,7 +21,6 @@ Elle n'est pas encore branchée sur l'interface ni sur le backend de production.
 | `domain/interventions.js` | Modéliser les durées individuelles, convertir en JEH, distinguer travail réalisé et à venir, agréger par membre et étude |
 | `domain/bv.js` | Valider les BV et les lignes normalisées séparées, les identifiants stables, les liens membre/BV, l'unicité par personne et le minimum global d'une JEH |
 | `domain/factures.js` | Vérifier les états de factures et calculer l'encaissement complet d'une étude |
-| `domain/bv.js` | Valider les lignes d'un BV et le minimum global d'une JEH par bulletin |
 | `domain/clients.js` | Distinguer une relation ponctuelle d'une relation longue durée (type CDI) et séparer cette qualification de la cadence de facturation |
 | `domain/identites.js` | Valider les identifiants stables et les liens entre objets |
 | `domain/audit-migration.js` | Auditer les anciennes collections sans les modifier |
@@ -29,7 +28,7 @@ Elle n'est pas encore branchée sur l'interface ni sur le backend de production.
 
 ## Backend
 
-Le contrat cible est documenté dans [`backend/contrat-api-v3.md`](backend/contrat-api-v3.md). C'est une spécification de conception : aucun serveur ni aucune donnée n'ont été modifiés.
+Le contrat cible est documenté dans [`backend/contrat-api-v3.md`](backend/contrat-api-v3.md). L'audit du candidat v2.2 est dans [`backend/audit-compatibilite-v2.2.md`](backend/audit-compatibilite-v2.2.md) : il confirme que le candidat ne peut pas être raccordé tel quel au nouveau modèle (clients, membres, BV, identifiants stables et protocole). Ce sont des documents de conception ; aucun serveur ni aucune donnée n'ont été modifiés.
 
 ## Tests
 
