@@ -31,11 +31,13 @@ test("n'écrit rien et ne modifie pas l'export source", () => {
   assert.equal(JSON.stringify(src), copie);
 });
 
-test("minutes individuelles = min ÷ nb, prix intervenant = champ jeh", () => {
+test("minutes individuelles = min ÷ nb et le champ jeh v11 reste non qualifié par défaut", () => {
   const r = migrerV11(exportV11());
   const t1 = r.collections.interventions.find(i => i.sourceLegacyId === "t1");
   assert.equal(t1.minutesIndividuelles, 60);
-  assert.equal(t1.prixJehHt, 300);
+  assert.equal(t1.prixJehHt, null);
+  assert.equal(t1.jehV11, 300);
+  assert.ok(r.anomalies.some(a => a.type === "jeh_historique_non_qualifie"));
 });
 
 test("le prix JEH client et les frais de l'étude sont conservés", () => {
@@ -114,4 +116,48 @@ test("le rapport texte liste résumé, totaux et questions", () => {
   const t = rapportTexte(migrerV11(exportV11()));
   assert.match(t, /Questions pour Pauline/);
   assert.match(t, /jehTravailleesAvant/);
+});
+
+test("ne mappe le champ jeh v11 en prix intervenant qu'avec une correspondance explicite", () => {
+  const r = migrerV11(exportV11(), { correspondances: { jehTemps: "prix_intervenant_ht" } });
+  const t1 = r.collections.interventions.find(i => i.sourceLegacyId === "t1");
+  assert.equal(t1.prixJehHt, 300);
+  assert.equal(t1.jehV11, 300);
+  assert.equal(r.anomalies.some(a => a.type === "jeh_historique_non_qualifie"), false);
+});
+
+test("si jeh v11 est déclaré comme nombre de JEH, compare avec les minutes calculées", () => {
+  const r = migrerV11(exportV11(), { correspondances: { jehTemps: "nombre_jeh" } });
+  const t1 = r.collections.interventions.find(i => i.sourceLegacyId === "t1");
+  assert.equal(t1.jehDeclaree, 300);
+  assert.equal(t1.prixJehHt, null);
+  assert.ok(r.anomalies.some(a => a.type === "jeh_historique_ecart_minutes"));
+});
+
+test("un aperçu avec des questions ou anomalies non bloquantes reste à vérifier", () => {
+  assert.equal(migrerV11(exportV11()).statut, "apercu_a_verifier");
+});
+
+test("une étude sans client est bloquante pour la migration", () => {
+  const src = exportV11();
+  src.etudes.e1.client = "";
+  const r = migrerV11(src);
+  assert.equal(r.statut, "bloquee");
+  assert.ok(r.anomalies.some(a => a.type === "etude_sans_client" && a.gravite === "bloquante"));
+});
+
+test("une formation peut être rattachée à un membre séparé par correspondance", () => {
+  const r = migrerV11(exportV11(), {
+    correspondances: {
+      tempsVersMembre: { t1: "mbr_alex_0001", t3: "mbr_alex_0002" },
+      nomsMembres: { mbr_alex_0001: "Alex Martin", mbr_alex_0002: "Alex Dupont", mbr_zoe_000001: "Zoé Durand" },
+      formationVersMembre: { f_alex: "mbr_alex_0001" },
+    },
+  });
+  assert.equal(r.collections.formation[0].membreId, "mbr_alex_0001");
+  assert.equal(r.questions.some(q => q.type === "membre_a_confirmer"), false);
+});
+
+test("refuse une correspondance avec un identifiant instable", () => {
+  assert.throws(() => migrerV11(exportV11(), { correspondances: { membres: { Alex: "a1" } } }), /Identifiant de correspondance invalide/);
 });
