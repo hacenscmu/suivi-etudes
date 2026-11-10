@@ -288,3 +288,19 @@ test("protège les membres et études référencés par la grille Qualité forma
   assert.equal(delMember.error.code, "INVALID_REQUEST");
   assert.equal(delStudy.error.code, "INVALID_REQUEST");
 });
+
+test("refuse deux grilles Qualité formation pour un même membre côté serveur", async () => {
+  const server = base();
+  const first = body(await server.transport(req("save", {
+    collection: "formation", id: "formation_0001",
+    record: { id: "formation_0001", membreId: "membre_0001", nom: "Alex", niveaux: {} },
+    opId: "op_formation_unique_01", expectedVersion: 0,
+  })));
+  const second = body(await server.transport(req("save", {
+    collection: "formation", id: "formation_0002",
+    record: { id: "formation_0002", membreId: "membre_0001", nom: "Alex", niveaux: {} },
+    opId: "op_formation_unique_02", expectedVersion: 0,
+  })));
+  assert.equal(first.ok, true);
+  assert.equal(second.error.code, "INVALID_REQUEST");
+});
