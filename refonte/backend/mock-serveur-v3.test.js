@@ -178,7 +178,7 @@ test("accepte uniquement config/main et protège la configuration contre la supp
     collection: "config", id: "main", record: { id: "main", tva: 0.2 },
     opId: "op_config_save_01", expectedVersion: 0,
   })));
-  assert.equal(save.ok, true);
+  assert.equal(save.ok, true, JSON.stringify(save));
   const del = body(await server.transport(req("delete", {
     collection: "config", id: "main", opId: "op_config_del_01", expectedVersion: 1,
   })));
