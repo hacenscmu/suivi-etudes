@@ -16,10 +16,11 @@ function dateValide(value) {
   return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
 }
 
-function analyserIntervention(intervention) {
+function analyserIntervention(intervention, { plafondJehHt = 300 } = {}) {
   const anomalies = [];
+  const alertes = [];
   if (!intervention || typeof intervention !== "object" || Array.isArray(intervention)) {
-    return { valide: false, anomalies: ["Intervention invalide"] };
+    return { valide: false, anomalies: ["Intervention invalide"], alertes };
   }
   for (const champ of ["id", "etudeId", "membreId"]) {
     if (typeof intervention[champ] !== "string" || !intervention[champ].trim()) {
@@ -41,11 +42,16 @@ function analyserIntervention(intervention) {
     anomalies.push("Prix HT/JEH invalide");
   }
 
+  if (prixJehHt !== null && Number.isFinite(prixJehHt) && plafondJehHt !== null && prixJehHt > plafondJehHt) {
+    alertes.push("Prix de la JEH intervenant supérieur au plafond HAC de " + plafondJehHt + " € HT");
+  }
+
   const jeh = minutes !== null && Number.isFinite(minutes) && minutes > 0 ? minutes / 480 : null;
   const travaille = STATUTS_TRAVAILLE.has(intervention.statut);
   return {
     valide: anomalies.length === 0,
     anomalies,
+    alertes,
     minutesIndividuelles: minutes,
     jeh,
     jehTravaillees: travaille && jeh !== null ? jeh : 0,
@@ -54,16 +60,18 @@ function analyserIntervention(intervention) {
   };
 }
 
-function agregerInterventions(interventions) {
+function agregerInterventions(interventions, options = {}) {
   if (!Array.isArray(interventions)) {
-    return { valide: false, totalJehTravaillees: null, parMembre: [], parEtude: [], anomalies: ["La liste des interventions doit être un tableau"] };
+    return { valide: false, totalJehTravaillees: null, parMembre: [], parEtude: [], anomalies: ["La liste des interventions doit être un tableau"], alertes: [] };
   }
   const parMembre = new Map();
   const parEtude = new Map();
   let totalJehTravaillees = 0;
   const anomalies = [];
+  const alertes = [];
   interventions.forEach((intervention, index) => {
-    const analyse = analyserIntervention(intervention);
+    const analyse = analyserIntervention(intervention, options);
+    analyse.alertes.forEach(raison => alertes.push({ index, raison }));
     analyse.anomalies.forEach(raison => anomalies.push({ index, raison }));
     if (!analyse.valide || !analyse.statutTravaille) return;
     totalJehTravaillees += analyse.jehTravaillees;
@@ -76,6 +84,7 @@ function agregerInterventions(interventions) {
     parMembre: [...parMembre].map(([membreId, jeh]) => ({ membreId, jeh })),
     parEtude: [...parEtude].map(([etudeId, jeh]) => ({ etudeId, jeh })),
     anomalies,
+    alertes,
   };
 }
 
