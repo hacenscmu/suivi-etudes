@@ -74,3 +74,18 @@ test("ignore les identifiants client/membre invalides et les signale", () => {
   assert.equal(r.statut, "a_completer");
   assert.deepEqual(r.correspondancesManquantes.map(x => x.type), ["client", "membre"]);
 });
+
+test("refuse une collection historique mal formée au lieu de la traiter comme vide", () => {
+  assert.throws(() => adaptateurHistorique({ etudes: [], createId: ids }), /Collection historique invalide : etudes/);
+  assert.throws(() => adaptateurHistorique({ factures: null, createId: ids }), /Collection historique invalide : factures/);
+  assert.throws(() => adaptateurHistorique({ temps: "invalide", createId: ids }), /Collection historique invalide : temps/);
+});
+
+test("refuse un générateur qui réutilise un identifiant", () => {
+  const r = adaptateurHistorique({
+    etudes: { etude0001: { num: "A-1", client: "Client" } },
+    factures: { facture01: { etude: "A-1", montant: 10, etat: "Payée" } },
+    createId: () => "identifiant_reutilise",
+  });
+  assert.throws(() => r, /identifiant stable/);
+});
