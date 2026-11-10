@@ -369,3 +369,14 @@ button.b.ghost:disabled{opacity:.4}
 /* v13 : KPI JEH étudiants */
 .jehk .jehbig{font-size:56px;line-height:1.05;font-weight:800;letter-spacing:-2px;color:var(--acc);margin:10px 0 4px}.warnx{color:var(--warn);font-weight:600}
 .finseg{margin:4px 0 14px}.fin4{grid-template-columns:repeat(auto-fit,minmax(130px,1fr))!important}.val.late{color:var(--bad)}
+
+/* v13 : cartes d'études */
+.ec2{position:relative;padding-left:18px;overflow:hidden}
+.ec2:before{content:"";position:absolute;left:0;top:0;bottom:0;width:5px;background:var(--stc,var(--acc))}
+.ec2[data-st="s1"]{--stc:var(--s1)}.ec2[data-st="s2"]{--stc:var(--s2)}.ec2[data-st="s3"]{--stc:var(--s3)}.ec2[data-st="s4"]{--stc:var(--s4)}.ec2[data-st="s5"]{--stc:var(--s5)}.ec2[data-st="s6"]{--stc:var(--s6)}.ec2[data-st="arch"]{--stc:var(--arch)}.ec2[data-st="ref"]{--stc:var(--ink)}
+.ec2 .et span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:62vw}
+.eprog{margin-top:12px}.eph{display:flex;justify-content:space-between;font-size:12.5px;color:var(--mute);margin-bottom:6px}.eph b{color:var(--ink)}
+.etags{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.etag{font-size:11.5px;padding:3px 9px;border-radius:99px;background:var(--card2);color:var(--ink)}
+.etag.late{background:var(--accsoft);color:var(--bad);font-weight:600}.etag.bv{background:var(--accsoft);color:var(--acc);font-weight:600}
+.avs{display:inline-flex}.avs i{font-style:normal;width:24px;height:24px;border-radius:50%;background:var(--accsoft);color:var(--acc);font-size:10px;font-weight:700;display:inline-grid;place-items:center;border:2px solid var(--card);margin-left:-6px}.avs i:first-child{margin-left:0}
+.ec2 .emeta{margin-top:10px}.ec2 .eal{display:flex;gap:6px;align-items:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}

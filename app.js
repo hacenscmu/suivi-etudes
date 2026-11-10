@@ -433,12 +433,18 @@ function etudeOK(e,f){
   const q=f.q.trim().toLowerCase();return !q||[e.client,e.num,e.resume,e.statut,e.mandat].join(' ').toLowerCase().includes(q);
 }
 function cardEtude(e){
-  const m=num(e.montant),pct=m>0?Math.min(100,Math.round(e.K/m*100)):0,n=e.alerts.length;
-  return `<button class="card ecard" data-open="${e.id}"><div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>${esc(e.num)||'N° à saisir'}</span></div>${pill(e.statut,stCls(e.statut))}</div>
-  ${e.resume?`<div class="er">${esc(e.resume)}</div>`:''}
-  ${m>0?`<div class="ef3" style="margin-top:8px"><span>${ic('euro',14)}${eur0(m)} TTC</span><span>encaissé ${eur0(e.K)}</span><span>reste ${e.L===null?'—':eur0(e.L)}</span></div>`:'<div class="small" style="margin-top:8px">Montant non renseigné</div>'}
-  <div class="emeta"><span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span>${n?`<span class="al">${ic('warn',13)}${n}</span>`:''}</div>
-  ${n?`<div class="eal">${esc(e.alerts[0])}${n>1?' · +'+(n-1)+' autre'+(n>2?'s':''):''}</div>`:''}</button>`;
+  const m=num(e.montant),pct=m>0?Math.min(100,Math.round(e.K/m*100)):0,n=e.alerts.length,cls=stCls(e.statut);
+  const ech=e.echeance?dnum(e.echeance):null,late=ech!==null&&ech<TODAY;
+  const pers=[...new Set(e.lines.map(t=>t.prenom).filter(Boolean))];
+  const ini=p=>esc(p.split(/[\s-]+/).map(x=>x[0]||'').join('').slice(0,2).toUpperCase());
+  const jf=num(e.J),jr=num(e.R),jeh=(jf>0||jr>0)?`<span title="JEH réalisées sur JEH facturées">${ic('clock',13)}${nf1.format(Math.round(jr*10)/10)} JEH réalisées sur ${nf1.format(Math.round(jf*10)/10)}</span>`:'';
+  return `<button class="card ecard ec2" data-open="${e.id}" data-st="${cls}">
+  <div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>N° ${esc(e.num)||'à saisir'}${e.resume?' · '+esc(e.resume):''}</span></div>${pill(e.statut||'Sans statut',cls)}</div>
+  ${m>0?`<div class="eprog"><div class="eph"><span><b>${eur0(e.K)}</b> encaissés sur ${eur0(m)} TTC</span><b>${pct} %</b></div><div class="svt"><i style="width:${pct}%"></i></div></div>`:'<div class="small" style="margin-top:10px">Montant non renseigné</div>'}
+  <div class="etags">${e.facture?`<span class="etag">${esc(e.facture)}</span>`:''}${ech!==null?`<span class="etag${late?' late':''}">${late?'En retard · ':'Échéance '}${fdate(ech)}</span>`:''}${e.N==='À payer'?'<span class="etag bv">BV à payer</span>':''}${e.collab==='Récurrente'?`<span class="etag">Récurrente${e.cadence?' · '+esc(e.cadence.toLowerCase()):''}</span>`:''}</div>
+  <div class="emeta"><span class="ef3">${pers.length?`<span class="avs">${pers.slice(0,4).map(p=>`<i title="${esc(p)}">${ini(p)}</i>`).join('')}${pers.length>4?`<i>+${pers.length-4}</i>`:''}</span>`:''}${jeh}<span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span></span></div>
+  ${n?`<div class="eal">${ic('warn',13)} ${esc(e.alerts[0])}${n>1?` <b>+${n-1}</b>`:''}</div>`:''}
+  </button>`;
 }
 function listEtudes(D){
   const L=D.etudes.filter(e=>etudeOK(e,FLT.etudes)).sort((a,b)=>(b.d||0)-(a.d||0));
@@ -601,6 +607,9 @@ function ct(label,path,val,ph){return `<div class="pr"><label>${label}</label><d
 function cf(label,path,val,pct,unit){return `<div class="pr"><label>${label}</label><div class="pin"><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}"><span>${pct?'%':(unit||'')}</span></div></div>`}
 function listEd(k,arr,ph){return `<div class="led">${arr.map((v,i)=>`<div class="li"><span class="hdl" data-k="${k}" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><input data-li="${k}" data-i="${i}" value="${esc(v)}"><button class="x" data-lidel="${k}:${i}" aria-label="Supprimer">✕</button></div>`).join('')}</div><button class="b ghost addl" data-liadd="${k}">+ ${ph}</button>`}
 const PIC={
+ dash:'<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>',
+ alert:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
+ help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.6 2.6 0 0 1 5 1c0 1.7-2.5 2.2-2.5 3.8"/><path d="M12 17.5h.01"/>',
  fact:'<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
  sync:'<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8"/><path d="M4 3v5h5"/><path d="M4 13a8 8 0 0 0 14.3 4.9L20 16"/><path d="M20 21v-5h-5"/>',
  imp:'<path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/>',
@@ -805,7 +814,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=13;
+const VERSION=14;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,config:S.cfg||null}));
