@@ -5,6 +5,7 @@ on:
     branches: [Refonte]
     paths:
       - "refonte/domain/**"
+      - "refonte/application/**"
       - "refonte/demo/**"
       - "refonte/README.md"
       - ".github/workflows/refonte-tests.yml"
@@ -12,6 +13,7 @@ on:
     branches: [Refonte]
     paths:
       - "refonte/domain/**"
+      - "refonte/application/**"
       - "refonte/demo/**"
       - ".github/workflows/refonte-tests.yml"
 
@@ -31,4 +33,4 @@ jobs:
       - name: Vérifier le prototype isolé
         run: node refonte/demo/validate-demo.mjs
       - name: Exécuter tous les tests métier
-        run: node --test refonte/domain/*.test.js
+        run: node --test refonte/domain/*.test.js refonte/application/*.test.js
