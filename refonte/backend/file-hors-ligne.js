@@ -43,12 +43,13 @@ function validerOperation(operation) {
   if (operation.collection === "temps") {
     throw new ErreurFile("READ_ONLY_COLLECTION", "Les anciennes lignes temps sont en lecture seule ; utiliser interventions");
   }
-  if (typeof operation.id !== "string" || !ID_VALIDE.test(operation.id)) {
+  if (typeof operation.id !== "string" || (operation.collection === "config" ? operation.id !== "main" : !ID_VALIDE.test(operation.id))) {
     throw new ErreurFile("INVALID_OPERATION", "Identifiant absent ou invalide");
   }
   if (typeof operation.opId !== "string" || !OP_ID_VALIDE.test(operation.opId)) {
     throw new ErreurFile("INVALID_OPERATION", "opId stable absent ou invalide");
   }
+  if (operation.collection === "config" && operation.type === "delete") throw new ErreurFile("READ_ONLY_COLLECTION", "La configuration principale ne peut pas être supprimée");
   const minimum = operation.type === "delete" ? 1 : 0;
   if (!Number.isSafeInteger(operation.expectedVersion) || operation.expectedVersion < minimum) {
     throw new ErreurFile("INVALID_OPERATION", "Version attendue invalide");
