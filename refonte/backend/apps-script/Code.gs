@@ -149,7 +149,7 @@ function valider_(q) {
 
 // Mutation récupérable : 1) Journal « pending »  2) fiche écrite avec _opId  3) Journal « committed » + réponse.
 // Une panne entre deux étapes est résolue au prochain accès à la fiche ou au rejeu de l'opération :
-// si la fiche porte _opId, l'écriture a eu lieu ; sinon l'opération est close en INTERNAL_ERROR (rien écrit).
+// si la fiche porte _opId, l'écriture a eu lieu ; sinon l'opération est close en OP_INTERRUPTED (rien écrit).
 function journal_() { var sh = feuille_('Journal'); return {sh: sh, v: lignes_(sh)}; }
 function clore_(J, i, rep) { J.sh.getRange(i + 2, 3).setValue(JSON.stringify(rep)); J.sh.getRange(i + 2, 5).setValue('committed'); J.v[i][2] = JSON.stringify(rep); J.v[i][4] = 'committed'; return rep; }
 function resoudre_(J, I, c, id) {
@@ -157,7 +157,7 @@ function resoudre_(J, I, c, id) {
     var r = J.v[i]; if (r[4] !== 'pending' || r[5] !== c || r[6] !== id) continue;
     var o = fiche_(I, c, id), faite = !!o && o._opId === r[0];
     clore_(J, i, faite ? reponse_(true, sansInterne_(o), null, {revision: revision_()})
-                       : reponse_(false, null, {code: 'INTERNAL_ERROR', message: 'Opération interrompue, rien n’a été écrit'}, {revision: revision_()}));
+                       : reponse_(false, null, {code: 'OP_INTERRUPTED', message: 'Opération interrompue, rien n’a été écrit : créer une nouvelle opération avec un nouvel opId'}, {revision: revision_()}));
   }
 }
 function trouver_(J, opId) {

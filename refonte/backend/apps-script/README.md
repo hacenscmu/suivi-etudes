@@ -29,3 +29,7 @@ Ces tests sont simulés : ils ne remplacent pas un essai sur un vrai projet Apps
 3. Propriétés du script : `SSID` = identifiant de la copie. Créer les feuilles `Données` (déjà présente), `Journal` et `Quarantaine` avec leurs en-têtes.
 4. Générer chaque jeton hors d'Apps Script (console du navigateur, `crypto.getRandomValues`), puis `enregistrerJeton('membre', '<empreinte sha256>')` depuis l'éditeur.
 5. Déployer en application Web (exécuter en tant que : moi ; accès : tout le monde — le jeton fait le contrôle d'accès).
+
+## Deux candidats dans le dépôt
+
+`refonte/backend/Code-v3-candidat.gs` (écrit en parallèle) échoue à **18 des 34** tests du contrat quand on le fait passer par le même simulateur (`HAC_CODE_GS=refonte/backend/Code-v3-candidat.gs node --test refonte/backend/apps-script/code-gs.test.js`). La cause principale : il exige des jetons au format `membre.secret`, alors que le contrat et le client acceptent tout jeton non vide. Ce `Code.gs` passe les 34. Proposition : ne garder que celui-ci.
