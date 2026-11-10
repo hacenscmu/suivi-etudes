@@ -17,8 +17,8 @@
 
 `simulateur.js` exécute le vrai `Code.gs` dans Node avec de faux services Google.
 
-- `code-gs.test.js` rejoue **contre Code.gs** les suites écrites pour le faux serveur (`mock-serveur-v3`, `integration-v3`, `file-hors-ligne`) : 34 tests.
-- `code-gs-robustesse.test.js` : pannes entre écritures, doublons, corruption, jetons, configuration : 10 tests.
+- `code-gs.test.js` rejoue **contre Code.gs** les suites complètes du faux serveur, de l’intégration client/serveur et de la file hors ligne.
+- `code-gs-robustesse.test.js` : pannes entre écritures, doublons, corruption, jetons, configuration, tombstones privés et dépendances à la suppression.
 
 Ces tests sont simulés : ils ne remplacent pas un essai sur un vrai projet Apps Script (quotas, temps de réponse, concurrence réelle).
 
