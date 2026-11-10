@@ -27,8 +27,9 @@ var ENUM_CADENCE = {t:'e', values:['mensuelle','trimestrielle','semestrielle','a
 
 var SCHEMAS = {
   etudes: {
-    date:DATE, client:TXT, clientId:ID, num:TXT, resume:TXT, statut:TXT,
-    facture:TXT, jeh:NUM, montant:NUM, echeance:DATE, ord:ORD,
+    date:{t:'d',req:1}, client:TXT, clientId:ID, num:{t:'s',req:1}, resume:TXT,
+    statut:{t:'e',req:1,values:['Faisabilité','Devis envoyé','Devis signé','Convention envoyée','Convention signée','Convention étudiant avant réalisation','En réalisation','Archivée','Refusé / sans suite']},
+    facture:TXT, jeh:NUM, montant:{t:'n',req:1,min:0}, echeance:DATE, ord:ORD,
     relationType:ENUM_RELATION, cadenceFacturation:ENUM_CADENCE, dateProchaineFacture:DATE
   },
   clients: {
@@ -269,6 +270,13 @@ function validateRecord_(col,id,record){
   for(var required in schema){
     if(schema[required].req&&(record[required]===undefined||record[required]===null||record[required]===''))
       return 'champ requis : '+required;
+  }
+  if(col==='etudes'){
+    if(!(typeof record.client==='string'&&record.client.trim())&&!record.clientId)
+      return 'client ou clientId requis';
+    var signed=['Devis signé','Convention signée','Convention étudiant avant réalisation','En réalisation','Archivée'];
+    if(signed.indexOf(record.statut)>=0&&!(typeof record.jeh==='number'&&isFinite(record.jeh)&&record.jeh>0))
+      return 'prix unitaire HT de la JEH client requis pour une étude signée';
   }
   return '';
 }
