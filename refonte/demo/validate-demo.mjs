@@ -8,8 +8,10 @@ const sources = [...html.matchAll(/<script\s+src="\.\/([^"]+)"\s*><\/script>/gi)
 assert.deepEqual(sources, ["hac-core.js", "app.js"], "L'interface doit charger le cœur métier puis l'application.");
 assert.equal([...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].length, 0, "Aucun script inline : le code doit rester modulaire.");
 
+const fichiers = Object.create(null);
 for (const source of sources) {
   const content = readFileSync(new URL("./" + source, import.meta.url), "utf8");
+  fichiers[source] = content;
   new Function(content);
   assert.ok(!/\b(fetch|XMLHttpRequest)\s*\(/.test(content), source + " ne doit pas effectuer de requête réseau.");
   assert.ok(!/localStorage|sessionStorage/.test(content), source + " ne doit pas utiliser de stockage local.");
@@ -24,7 +26,7 @@ const vueVide = contexte.HAC.construireVueApplication(etatVide, { dateFin: "2026
 assert.equal(vueVide.valide, true, "Le bundle doit assembler un état vide valide.");
 
 for (const label of ["Accueil", "Études", "Finances", "Équipe", "Réglages"]) {
-  assert.ok(html.includes(label), "Onglet manquant : " + label);
+  assert.ok(fichiers["app.js"].includes(label), "Onglet manquant : " + label);
 }
 assert.ok(html.includes("données entièrement fictives"), "Le bandeau de données fictives doit rester visible.");
 assert.ok(html.includes("Aucune connexion à la base HAC"), "La séparation de la production doit être explicite.");
