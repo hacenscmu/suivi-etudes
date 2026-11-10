@@ -113,7 +113,7 @@ function chargerTout_() {
   Object.keys(I.idx).forEach(function (k) {
     var e = I.idx[k]; if (e.corrompu || e.doublon) return; // une clé ambiguë n'est jamais publiée
     var p = k.split('\u0001'), o = cloner_(e.o);
-    if (o._deleted !== true) delete o._opId;
+    delete o._opId;
     data[p[0]][p[1]] = o;
   });
   return reponse_(true, data, null, {revision: revision_(), schemaVersion: API, anomalies: I.anomalies});
@@ -167,7 +167,26 @@ function trouver_(J, opId) {
   if (t.length > 1) throw new ConfigErr('Journal : opId en double');
   return t.length ? t[0] : -1;
 }
-function sansInterne_(o) { var c = cloner_(o); if (c._deleted !== true) delete c._opId; return c; }
+function sansInterne_(o) { var c = cloner_(o); delete c._opId; return c; }
+
+function dependance_(I, c, id) {
+  var references = {
+    clients:[['etudes','clientId']],
+    etudes:[['factures','etudeId'],['interventions','etudeId']],
+    membres:[['interventions','membreId'],['lignesBV','membreId']],
+    bvs:[['lignesBV','bvId']]
+  }[c] || [];
+  for (var i=0;i<references.length;i++) {
+    var collection=references[i][0], field=references[i][1], prefix=collection+'\\u0001';
+    var trouve=Object.keys(I.idx).some(function(key) {
+      var e=I.idx[key];
+      return key.indexOf(prefix)===0 && e.o && !e.corrompu && !e.doublon &&
+        e.o._deleted!==true && e.o[field]===id;
+    });
+    if (trouve) return 'Suppression refusée : des fiches '+collection+' référencent encore cet élément';
+  }
+  return '';
+}
 
 function muter_(q, qui) {
   var inv = valider_(q); if (inv) return erreur_(inv[0], inv[1]);
@@ -185,6 +204,7 @@ function muter_(q, qui) {
   if (q.expectedVersion !== version || (q.action === 'save' && courant && courant._deleted === true))
     return erreur_('VERSION_CONFLICT', 'La fiche a changé depuis sa dernière lecture', {currentVersion: version});
   if (q.action === 'delete' && (!courant || courant._deleted === true)) return erreur_('NOT_FOUND', 'Fiche introuvable');
+  if (q.action === 'delete') { var dependance=dependance_(I,q.collection,q.id); if (dependance) return erreur_('INVALID_REQUEST',dependance); }
   var suivant;
   if (q.action === 'save') {
     var rel = relation_(I, q.collection, q.record); if (rel) return erreur_('INVALID_REQUEST', rel);
