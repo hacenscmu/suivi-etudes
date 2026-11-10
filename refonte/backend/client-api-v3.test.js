@@ -28,7 +28,10 @@ test("loadAll exige un token et retourne les collections et métadonnées", asyn
   const c = client(async r => { request = r; return succes({ etudes: {}, interventions: {}, temps: {} }); });
   const r = await c.loadAll();
   assert.equal(request.token, "token-test");
-  assert.deepEqual(r.collections, { etudes: {}, interventions: {}, temps: {} });
+  assert.deepEqual(r.collections.etudes, []);
+  assert.deepEqual(r.collections.interventions, []);
+  assert.deepEqual(r.legacyTemps, {});
+  assert.deepEqual(r.tombstones.etudes, {});
   assert.equal(r.meta.revision, "r1");
 });
 
@@ -126,4 +129,26 @@ test("refuse une enveloppe invalide ou une réponse de succès sans data", async
   await assert.rejects(c.loadAll(), e => e.code === "INVALID_RESPONSE");
   const c2 = client(async () => ({ ok: true, apiVersion: 3 }));
   await assert.rejects(c2.loadAll(), e => e.code === "INVALID_RESPONSE");
+});
+
+test("normalise les collections indexées en tableaux et sépare les tombstones", async () => {
+  const c = client(async () => succes({
+    etudes: {
+      etude_0001: { id: "etude_0001", num: "A-1", _v: 2 },
+      etude_0002: { id: "etude_0002", _deleted: true, _v: 3 },
+    },
+    clients: {}, membres: {}, factures: {}, interventions: {}, bvs: {}, lignesBV: {},
+    formation: {}, appareils: {}, config: { main: { id: "main", tva: 0.2 } },
+    temps: { temps_0001: { prenom: "Alex", min: 60 } },
+  }));
+  const r = await c.loadAll();
+  assert.deepEqual(r.collections.etudes, [{ id: "etude_0001", num: "A-1", _v: 2 }]);
+  assert.deepEqual(r.tombstones.etudes, { etude_0002: 3 });
+  assert.equal(r.config.id, "main");
+  assert.equal(r.legacyTemps.temps_0001.prenom, "Alex");
+});
+
+test("refuse une collection active absente ou mal formée dans loadAll", async () => {
+  const c = client(async () => succes({ etudes: {} }));
+  await assert.rejects(c.loadAll(), e => e.code === "INVALID_RESPONSE" && e.message.includes("clients"));
 });
