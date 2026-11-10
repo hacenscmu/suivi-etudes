@@ -26,6 +26,7 @@ Cette arborescence contient le nouveau socle métier, isolé de l'application de
 | `domain/adaptateur-historique.js` | Produire un aperçu de migration sans écriture, avec correspondances client/membre explicites |
 | `application/lecture.js` | Assembler les collections validées, vérifier les références et fournir un modèle de lecture unifié à l'interface |
 | `application/commandes.js` | Préparer et appliquer des ajouts/modifications immuables en mémoire, après validation structurelle et métier |
+| `backend/Code-v3-candidat.gs` | Candidat Apps Script v3 non déployé, à tester uniquement sur une copie dédiée |
 | `backend/client-api-v3.js` | Parler au contrat v3 via un transport injecté, avec versions, opId et erreurs explicites |
 | `backend/file-hors-ligne.js` | Conserver les opérations tant que le serveur n'a pas confirmé le succès ; arbitrage explicite des conflits |
 | `backend/mock-serveur-v3.js` | Simuler le serveur v3 en mémoire pour tester versions, idempotence et tombstones |
@@ -33,7 +34,7 @@ Cette arborescence contient le nouveau socle métier, isolé de l'application de
 
 ## Backend
 
-Le contrat cible est documenté dans [`backend/contrat-api-v3.md`](backend/contrat-api-v3.md). Il distingue désormais `interventions` (modèle actif, une personne par ligne) de `temps` (lecture historique seule pendant la migration). L'audit du candidat v2.2 est dans [`backend/audit-compatibilite-v2.2.md`](backend/audit-compatibilite-v2.2.md) : il confirme que le candidat ne peut pas être raccordé tel quel au nouveau modèle (clients, membres, BV, identifiants stables et protocole). Ce sont des documents de conception ; aucun serveur ni aucune donnée n'ont été modifiés.
+Le contrat cible est documenté dans [`backend/contrat-api-v3.md`](backend/contrat-api-v3.md). Il distingue désormais `interventions` (modèle actif, une personne par ligne) de `temps` (lecture historique seule pendant la migration). L'audit du candidat v2.2 est dans [`backend/audit-compatibilite-v2.2.md`](backend/audit-compatibilite-v2.2.md) : il confirme que le candidat ne peut pas être raccordé tel quel au nouveau modèle (clients, membres, BV, identifiants stables et protocole). Ce sont des documents de conception ; Le candidat `Code-v3-candidat.gs` reste un fichier de travail non déployé ; aucun serveur ni aucune donnée de production n'ont été modifiés.
 
 ## Tests
 
