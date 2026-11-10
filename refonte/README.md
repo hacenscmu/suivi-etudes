@@ -21,7 +21,7 @@ Elle n'est pas encore branchée sur l'interface ni sur le backend de production.
 | `domain/clients.js` | Définir une relation ponctuelle/récurrente et une cadence explicite |
 | `domain/identites.js` | Valider les identifiants stables et les liens entre objets |
 | `domain/audit-migration.js` | Auditer les anciennes collections sans les modifier |
-| `domain/adaptateur-historique.js` | Produire un aperçu de migration sans écriture, avec correspondances client/membre explicites |
+| `domain/adaptateur-historique.js` | Produire un aperçu de migration sans écriture, avec correspondances client/membre explicites |\n\n## Backend\n\nLe contrat cible est documenté dans [`backend/contrat-api-v3.md`](backend/contrat-api-v3.md). C'est une spécification de conception : aucun serveur ni aucune donnée n'ont été modifiés.
 
 ## Tests
 
