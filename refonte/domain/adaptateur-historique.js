@@ -16,7 +16,7 @@ function entries(collection) {
   }));
 }
 
-function adaptateurHistorique({
+const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;\n\nfunction adaptateurHistorique({
   etudes = {},
   factures = {},
   temps = {},
@@ -49,7 +49,7 @@ function adaptateurHistorique({
   const ids = new Set();
   const attribuerId = (sourceId, prefixe) => {
     let id = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/.test(sourceId) ? sourceId : createId(prefixe);
-    if (typeof id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/.test(id) || ids.has(id)) {
+    if (typeof id !== "string" || !ID_VALIDE.test(id) || ids.has(id)) {
       throw new Error("createId doit produire un identifiant stable, valide et unique.");
     }
     ids.add(id);
@@ -60,7 +60,7 @@ function adaptateurHistorique({
   const etudesCibles = E.map(({ sourceId, data }) => {
     const id = attribuerId(sourceId, "etu");
     idEtudeParSource.set(sourceId, id);
-    const clientId = clientIdParEtudeSource[sourceId] ?? null;
+    const clientBrut = clientIdParEtudeSource[sourceId] ?? null;\n    const clientId = typeof clientBrut === "string" && ID_VALIDE.test(clientBrut) ? clientBrut : null;
     return { ...data, id, sourceLegacyId: sourceId, clientId };
   });
 
@@ -84,7 +84,7 @@ function adaptateurHistorique({
       id: attribuerId(sourceId, "tmp"),
       sourceLegacyId: sourceId,
       etudeId: idEtudeParNumero.get(data.etude),
-      membreId: membreIdParTempsSource[sourceId] ?? null,
+      membreId: typeof membreIdParTempsSource[sourceId] === "string" && ID_VALIDE.test(membreIdParTempsSource[sourceId])\n        ? membreIdParTempsSource[sourceId] : null,
       bvId: null,
       statutMigrationBV: "a_regrouper_manuellement",
     };
