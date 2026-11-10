@@ -48,4 +48,77 @@ function validerBV(bv) {
   return { valide: anomalies.length === 0, totalJeh, anomalies };
 }
 
-module.exports = { validerBV };
+
+function analyserCollectionBVs({ bvs = [], lignesBV = [], membres = [] } = {}) {
+  const anomalies = [];
+  if (![bvs, lignesBV, membres].every(Array.isArray)) {
+    return { valide: false, resume: [], anomalies: ["Les collections BV, lignesBV et membres doivent être des tableaux"] };
+  }
+
+  const membresIds = new Set(membres.map(m => m?.id).filter(id => typeof id === "string" && id.trim()));
+  const bvsParId = new Map();
+  bvs.forEach((bv, index) => {
+    if (!bv || typeof bv !== "object" || typeof bv.id !== "string" || !bv.id.trim()) {
+      anomalies.push({ collection: "bvs", index, raison: "Identifiant de BV absent ou invalide" });
+      return;
+    }
+    if (bvsParId.has(bv.id)) {
+      anomalies.push({ collection: "bvs", index, raison: "Identifiant de BV dupliqué", id: bv.id });
+      return;
+    }
+    bvsParId.set(bv.id, { bv, index, lignes: [] });
+  });
+
+  const ligneIds = new Set();
+  lignesBV.forEach((ligne, index) => {
+    if (!ligne || typeof ligne !== "object") {
+      anomalies.push({ collection: "lignesBV", index, raison: "Ligne invalide" });
+      return;
+    }
+    if (typeof ligne.id !== "string" || !ligne.id.trim()) {
+      anomalies.push({ collection: "lignesBV", index, raison: "Identifiant de ligne absent ou invalide" });
+    } else if (ligneIds.has(ligne.id)) {
+      anomalies.push({ collection: "lignesBV", index, raison: "Identifiant de ligne dupliqué", id: ligne.id });
+    } else {
+      ligneIds.add(ligne.id);
+    }
+
+    const parent = bvsParId.get(ligne.bvId);
+    if (!parent) {
+      anomalies.push({ collection: "lignesBV", index, raison: "BV parent introuvable" });
+    } else {
+      parent.lignes.push({ ligne, index });
+    }
+    if (typeof ligne.membreId !== "string" || !membresIds.has(ligne.membreId)) {
+      anomalies.push({ collection: "lignesBV", index, raison: "Membre lié introuvable" });
+    }
+    const jeh = Number(ligne.jeh);
+    if (ligne.jeh === "" || ligne.jeh == null || !Number.isFinite(jeh) || jeh < 0) {
+      anomalies.push({ collection: "lignesBV", index, raison: "Nombre de JEH absent ou invalide" });
+    }
+  });
+
+  const resume = [];
+  for (const [bvId, entry] of bvsParId) {
+    const personnes = new Set();
+    let totalJeh = 0;
+    entry.lignes.forEach(({ ligne, index }) => {
+      if (typeof ligne.membreId === "string" && personnes.has(ligne.membreId)) {
+        anomalies.push({ collection: "lignesBV", index, raison: "Une personne apparaît plusieurs fois sur le même BV" });
+      }
+      if (typeof ligne.membreId === "string") personnes.add(ligne.membreId);
+      const jeh = Number(ligne.jeh);
+      if (ligne.jeh !== "" && ligne.jeh != null && Number.isFinite(jeh) && jeh >= 0) totalJeh += jeh;
+    });
+    if (entry.lignes.length === 0) {
+      anomalies.push({ collection: "bvs", index: entry.index, raison: "Le BV ne contient aucune ligne" });
+    } else if (totalJeh < 1) {
+      anomalies.push({ collection: "bvs", index: entry.index, raison: "Le total du BV doit atteindre au moins 1 JEH" });
+    }
+    resume.push({ bvId, nombreLignes: entry.lignes.length, nombrePersonnes: personnes.size, totalJeh });
+  }
+
+  return { valide: anomalies.length === 0, resume, anomalies };
+}
+
+module.exports = { validerBV, analyserCollectionBVs };
