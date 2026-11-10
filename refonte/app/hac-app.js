@@ -1759,6 +1759,9 @@
         }
         if (collection === "formation") {
           if (!collections.membres[record.membreId] || collections.membres[record.membreId]._deleted) return "Membre de formation introuvable";
+          const autreGrille = Object.values(collections.formation).some(f =>
+            f && f._deleted !== true && f.id !== record.id && f.membreId === record.membreId);
+          if (autreGrille) return "Une grille Qualité formation existe déjà pour ce membre";
           for (const etudeId of Object.keys(record.niveaux || {})) {
             if (!collections.etudes[etudeId] || collections.etudes[etudeId]._deleted) return "Étude de formation introuvable";
           }
