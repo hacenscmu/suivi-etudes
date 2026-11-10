@@ -24,6 +24,7 @@ Cette arborescence contient le nouveau socle métier, isolé de l'application de
 | `domain/identites.js` | Valider les identifiants stables et les liens entre objets, dont interventions → étude/membre |
 | `domain/audit-migration.js` | Auditer les anciennes collections sans les modifier |
 | `domain/adaptateur-historique.js` | Produire un aperçu de migration sans écriture, avec correspondances client/membre explicites |
+| `migration/migrer-v11.js` | Transformer un export JSON v11 en aperçu v3, comparer les totaux et signaler les champs historiques à qualifier sans rien importer |
 | `application/lecture.js` | Assembler les collections validées, vérifier les références et fournir un modèle de lecture unifié à l'interface |
 | `application/commandes.js` | Préparer et appliquer des ajouts/modifications immuables en mémoire, après validation structurelle et métier |
 | `backend/apps-script/Code.gs` | Serveur Apps Script v3 candidat, testé dans un simulateur Node et non déployé |
@@ -41,7 +42,7 @@ Le contrat cible est documenté dans [`backend/contrat-api-v3.md`](backend/contr
 Depuis la racine du dépôt, avec Node.js :
 
 ```sh
-node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js
+node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js refonte/migration/*.test.js
 ```
 
 Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 250 tests : domaine, application, client API v3, serveur simulé, intégration client/serveur et file hors ligne. Le dernier run complet vérifié : 250 réussis, 0 échec ; le workflow vérifie aussi la reproductibilité du bundle navigateur.
