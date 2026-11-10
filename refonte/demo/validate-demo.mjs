@@ -6,7 +6,7 @@ const dossier = new URL("./", import.meta.url);
 const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
 const sources = [...html.matchAll(/<script\s+src="\.\/([^"]+)"\s*><\/script>/gi)].map(m => m[1]);
 assert.deepEqual(sources, ["hac-core.js", "app.js"], "L'interface doit charger le cœur métier puis l'application.");
-assert.equal([...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)].length, 0, "Aucun script inline : le code doit rester modulaire.");
+assert.equal([...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)].length, 0, "Aucun script inline : le code doit rester modulaire.");
 
 for (const source of sources) {
   const content = readFileSync(new URL("./" + source, import.meta.url), "utf8");
