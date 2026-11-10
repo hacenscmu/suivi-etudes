@@ -41,7 +41,7 @@ test("panne après le Journal « pending » : rien écrit, rejeu déterministe, 
   assert.equal(r1.error.code, "INTERNAL_ERROR");
   assert.equal(s.lireDonnees().clients.client_0001.raisonSociale, "A");
   const r2 = await body(s, save("client_0001", { raisonSociale: "B" }, 1, "op_panne1_0001"));
-  assert.equal(r2.error.code, "INTERNAL_ERROR");
+  assert.equal(r2.error.code, "OP_INTERRUPTED");
   assert.deepEqual(await body(s, save("client_0001", { raisonSociale: "B" }, 1, "op_panne1_0001")), r2);
   assert.equal((await body(s, save("client_0001", { raisonSociale: "B" }, 1, "op_panne1_0002"))).data._v, 2);
 });

@@ -8,7 +8,7 @@ const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
-const SOURCE = fs.readFileSync(path.join(__dirname, "Code.gs"), "utf8");
+const SOURCE = fs.readFileSync(process.env.HAC_CODE_GS || path.join(__dirname, "Code.gs"), "utf8");
 
 function feuille(entetes, crochets) {
   const rows = [entetes.slice()];
@@ -28,9 +28,9 @@ function feuille(entetes, crochets) {
 
 function creerServeurAppsScriptSimule({ token, donnees = {}, maxBytes, membre = "membre_test", crochets = {} } = {}) {
   if (typeof token !== "string" || token.trim() === "") throw new TypeError("Le serveur simulé exige un token non vide");
-  const noms = { "Données": ["collection", "id", "json"], "Journal": ["opId", "empreinte", "reponse", "date", "etat", "collection", "id", "membre"], "Quarantaine": ["date", "ligne", "collection", "id", "brut"] };
+  const noms = { "Données": ["collection", "id", "json"], "Journal": ["opId", "empreinte", "reponse", "date", "etat", "collection", "id", "membre", "reserve1", "reserve2"], "Quarantaine": ["date", "ligne", "collection", "id", "brut"] };
   const feuilles = Object.fromEntries(Object.entries(noms).map(([n, e]) => [n, feuille(e, crochets)(n)]));
-  const props = { SSID: "copie-de-test", TOKENS: JSON.stringify({ [membre]: { h: crypto.createHash("sha256").update(token, "utf8").digest("hex"), active: true } }) };
+  const props = { SSID: "copie-de-test", TOKENS: JSON.stringify({ [membre]: { h: crypto.createHash("sha256").update(token, "utf8").digest("hex"), hash: crypto.createHash("sha256").update(token, "utf8").digest("hex"), active: true } }) };
   for (const [col, fiches] of Object.entries(donnees)) for (const [id, o] of Object.entries(fiches || {})) feuilles["Données"].rows.push([col, id, JSON.stringify(o)]);
   const journaux = [];
   const G = {
@@ -46,7 +46,7 @@ function creerServeurAppsScriptSimule({ token, donnees = {}, maxBytes, membre = 
     console: { log: (...a) => journaux.push(a.join(" ")) },
   };
   const src = maxBytes ? SOURCE.replace(/MAX_FICHE = \d+/, "MAX_FICHE = " + Number(maxBytes)) : SOURCE;
-  const api = new Function(...Object.keys(G), src + "\n;return { doPost, enregistrerJeton, revoquerJeton, mettreEnQuarantaine };")(...Object.values(G));
+  const api = new Function(...Object.keys(G), src + "\n;return { doPost, enregistrerJeton: typeof enregistrerJeton!=='undefined'?enregistrerJeton:null, revoquerJeton, mettreEnQuarantaine: typeof mettreEnQuarantaine!=='undefined'?mettreEnQuarantaine:null };")(...Object.values(G));
 
   async function transport(requete) {
     const body = JSON.parse(api.doPost({ postData: { contents: JSON.stringify(requete) } }));
