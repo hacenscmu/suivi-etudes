@@ -18,6 +18,7 @@ Elle n'est pas encore branchée sur l'interface ni sur le backend de production.
 | `domain/jeh.js` | Distinguer les JEH travaillées des interventions à venir ou non effectuées |
 | `domain/tableau-de-bord.js` | Calculer les agrégats du tableau de bord sans mélanger CA signé, facturation, encaissement et JEH réellement travaillées |
 | `domain/etudes.js` | Valider le cycle de vie d'une étude, calculer son CA HT signé et son prix HT/JEH, contrôler les factures liées et signaler les alertes métier |
+| `domain/interventions.js` | Modéliser les durées individuelles, convertir en JEH, distinguer travail réalisé et à venir, agréger par membre et étude |
 | `domain/factures.js` | Vérifier les états de factures et calculer l'encaissement complet d'une étude |
 | `domain/bv.js` | Valider les lignes d'un BV et le minimum global d'une JEH par bulletin |
 | `domain/clients.js` | Définir une relation ponctuelle/récurrente et une cadence explicite |
@@ -37,7 +38,7 @@ Depuis la racine du dépôt, avec Node.js :
 node --test refonte/domain/*.test.js
 ```
 
-Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 65 tests après l'ajout des tests du tableau de bord et du cycle de vie des études. Le dernier run complet vérifié : 53 réussis, 0 échec ; le nouveau run doit confirmer les 65 tests.
+Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 75 tests après l'ajout du modèle d'interventions individuelles. Le dernier run complet vérifié : 65 réussis, 0 échec ; le nouveau run doit confirmer les 75 tests.
 
 ## État d'intégration
 
@@ -45,7 +46,7 @@ L'audit historique est en lecture seule : il relève les numéros d'étude dupli
 
 L’adaptateur historique produit uniquement un aperçu : il bloque les références d’étude ambiguës, exige un générateur d’identifiants explicite, signale les correspondances client/membre absentes ou invalides et ne regroupe jamais automatiquement les lignes de temps en BV. Il ne réalise aucune écriture.
 
-Les modules sont actuellement autonomes. Le module études distingue les statuts qui contribuent au CA signé HT, calcule le prix HT/JEH à partir des montants historiques TTC et signale le dépassement du plafond de gestion HAC de 300 € HT/JEH (ce plafond est une règle interne configurable, pas une règle légale générale). Il contrôle aussi les factures liées par identifiant stable et les situations d'archivage/refus. Le calcul du tableau de bord sépare le CA signé (études), le facturé et l'encaissé (factures liées par identifiant stable), et les JEH réellement travaillées (interventions aux statuts Payé/Pas payé). En cas de données financières incohérentes, les totaux concernés sont renvoyés à `null` plutôt que présentés comme fiables. Les formats d'entrée constituent le modèle cible de travail, pas encore un contrat de données migré. Les tests sont exécutés automatiquement dans GitHub Actions. La prochaine étape est d'appliquer l'aperçu à une copie des données réelles et d'arbitrer les correspondances manuelles. Aucun raccordement à `app.js` ni aucune migration n'est autorisé à ce stade. Les calculs actuels de production restent inchangés.
+Les modules sont actuellement autonomes. Le module interventions utilise une durée explicitement individuelle (`minutesIndividuelles`) pour éviter de deviner la répartition d'une ancienne durée collective ; une JEH correspond à 480 minutes individuelles. Il exclut les statuts `A venir` et `Non effectué` des JEH travaillées, tout en comptant `Payé` et `Pas payé`. L'agrégateur bloque les totaux complets si une ligne est invalide. Le module études distingue les statuts qui contribuent au CA signé HT, calcule le prix HT/JEH à partir des montants historiques TTC et signale le dépassement du plafond de gestion HAC de 300 € HT/JEH (ce plafond est une règle interne configurable, pas une règle légale générale). Il contrôle aussi les factures liées par identifiant stable et les situations d'archivage/refus. Le calcul du tableau de bord sépare le CA signé (études), le facturé et l'encaissé (factures liées par identifiant stable), et les JEH réellement travaillées (interventions aux statuts Payé/Pas payé). En cas de données financières incohérentes, les totaux concernés sont renvoyés à `null` plutôt que présentés comme fiables. Les formats d'entrée constituent le modèle cible de travail, pas encore un contrat de données migré. Les tests sont exécutés automatiquement dans GitHub Actions. La prochaine étape est d'appliquer l'aperçu à une copie des données réelles et d'arbitrer les correspondances manuelles. Aucun raccordement à `app.js` ni aucune migration n'est autorisé à ce stade. Les calculs actuels de production restent inchangés.
 
 
 ## Aperçu d'interface
