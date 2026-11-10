@@ -94,7 +94,7 @@ function creerServeurMemoireV3({
   }
 
   function dateValide(value) {
-    if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+    if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
     const [y, mo, d] = value.split("-").map(Number);
     const date = new Date(Date.UTC(y, mo - 1, d));
     return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
