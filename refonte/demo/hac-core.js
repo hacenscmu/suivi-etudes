@@ -227,10 +227,10 @@
     /**
      * HAC refonte — analyse d'une étude.
      *
-     * Les montants historiques de l'application sont TTC. Le CA et le prix
-     * unitaire de JEH sont donc ramenés en HT via le taux de TVA fourni.
-     * Le plafond de 300 € HT/JEH est une règle de gestion HAC configurable,
-     * pas une règle légale générale.
+     * Compatibilité historique : le champ « jeh » de l'étude contient le
+     * PRIX UNITAIRE HT de la JEH client, et non un nombre de JEH.
+     * Le nombre de JEH facturées est donc montant HT / prix unitaire HT.
+     * Les montants d'étude historiques sont TTC.
      */
     const STATUTS_ETUDE = Object.freeze([
       "Faisabilité",
@@ -287,11 +287,13 @@
       if (!dateValide(etude.date)) anomalies.push("Date de création absente ou invalide");
     
       const montantTtc = nombreValide(etude.montant);
-      const jeh = nombreValide(etude.jeh, { zero: false });
+      const prixJehHt = nombreValide(etude.jeh, { zero: false });
       const tauxTva = nombreValide(tva);
       if (montantTtc === null) anomalies.push("Montant TTC absent ou invalide");
       if (tauxTva === null || tauxTva > 1) anomalies.push("Taux de TVA invalide");
-      if (STATUTS_CA_SIGNE.has(etude.statut) && jeh === null) anomalies.push("Nombre de JEH client absent ou invalide");
+      if (STATUTS_CA_SIGNE.has(etude.statut) && prixJehHt === null) {
+        anomalies.push("Prix unitaire HT de la JEH client absent ou invalide");
+      }
     
       const liees = factures.filter(f => f && f.etudeId === etude.id);
       const situation = require("./factures").calculerSituationEtude(liees);
@@ -307,7 +309,7 @@
       }
     
       const montantHt = montantTtc !== null && tauxTva !== null ? montantTtc / (1 + tauxTva) : null;
-      const prixJehHt = montantHt !== null && jeh !== null ? montantHt / jeh : null;
+      const nombreJehFacturees = montantHt !== null && prixJehHt !== null ? montantHt / prixJehHt : null;
       if (prixJehHt !== null && plafondJehHt !== null && prixJehHt > plafondJehHt) {
         alertes.push("Prix de JEH supérieur au plafond HAC de " + plafondJehHt + " € HT");
       }
@@ -319,7 +321,7 @@
         caSigneHt: STATUTS_CA_SIGNE.has(etude.statut) ? montantHt : 0,
         montantHt,
         prixJehHt,
-        nombreJeh: jeh,
+        nombreJehFacturees,
         situationFactures: situation,
       };
     }
