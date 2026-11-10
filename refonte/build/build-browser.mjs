@@ -7,7 +7,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const racine = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const modules = [
+// Deux bundles : la démo (modules métier seuls) et l'application réelle (+ client API v3, file hors ligne, synchro).
+const MODULES_DEMO = [
   "domain/identites.js",
   "domain/factures.js",
   "domain/etudes.js",
@@ -17,7 +18,9 @@ const modules = [
   "application/lecture.js",
   "application/commandes.js",
 ];
+const MODULES_APP = [...MODULES_DEMO, "backend/client-api-v3.js", "backend/file-hors-ligne.js", "app/synchro.js"];
 
+async function construire(modules, exportes, sortieRel) {
 const definitions = [];
 for (const id of modules) {
   const source = await readFile(path.join(racine, id), "utf8");
@@ -65,13 +68,16 @@ ${definitions.map((d, i) => "    " + d.replaceAll("\n", "\n    ") + (i < definit
   }
 
   global.HAC = Object.freeze({
-    ...charger("application/lecture.js"),
-    ...charger("application/commandes.js")
+${exportes.map(m => "    ...charger(" + JSON.stringify(m) + ")").join(",\n")}
   });
 })(globalThis);
 `;
 
-const sortie = path.join(racine, "demo", "hac-core.js");
+const sortie = path.join(racine, sortieRel);
 await mkdir(path.dirname(sortie), { recursive: true });
 await writeFile(sortie, bundle, "utf8");
 process.stdout.write("Bundle HAC généré : " + path.relative(process.cwd(), sortie) + "\n");
+}
+
+await construire(MODULES_DEMO, ["application/lecture.js", "application/commandes.js"], "demo/hac-core.js");
+await construire(MODULES_APP, ["application/lecture.js", "application/commandes.js", "backend/client-api-v3.js", "app/synchro.js"], "app/hac-app.js");

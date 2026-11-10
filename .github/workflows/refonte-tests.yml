@@ -38,10 +38,10 @@ jobs:
       - name: Générer le bundle navigateur
         run: node refonte/build/build-browser.mjs
       - name: Vérifier que le bundle commité est à jour
-        run: git diff --exit-code -- refonte/demo/hac-core.js
+        run: git diff --exit-code -- refonte/demo/hac-core.js refonte/app/hac-app.js
       - name: Vérifier l’interface isolée
         run: node refonte/demo/validate-demo.mjs
       - name: Vérifier la syntaxe du candidat Apps Script v3
         run: node --check < refonte/backend/apps-script/Code.gs
       - name: Exécuter tous les tests métier
-        run: node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js refonte/migration/*.test.js
+        run: node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js refonte/migration/*.test.js refonte/app/*.test.js
