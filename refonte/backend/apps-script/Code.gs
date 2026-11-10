@@ -73,10 +73,14 @@ function index_() {
     if (!r[0] && !r[1] && !r[2]) return;
     var c = String(r[0]), id = String(r[1]), k = c + '\u0001' + id, ligne = i + 2;
     if (COLLECTIONS_LECTURE.indexOf(c) < 0) { anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'collection'}); return; }
+    if (c === 'config' ? id !== 'main' : !ID_VALIDE.test(id)) { anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'id'}); return; }
     if (idx[k]) { idx[k].lignes.push(ligne); idx[k].doublon = true; anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'doublon'}); return; }
     var o = null; try { o = JSON.parse(r[2]); } catch (x) {}
     if (!simple_(o)) { idx[k] = {ligne: ligne, lignes: [ligne], corrompu: true}; anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'json'}); return; }
-    idx[k] = {ligne: ligne, lignes: [ligne], o: o, v: typeof o._v === 'number' ? o._v : 0};
+    if (o.id !== undefined && o.id !== id) { idx[k] = {ligne: ligne, lignes: [ligne], corrompu: true}; anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'id_mismatch'}); return; }
+    if (o._v !== undefined && (!Number.isSafeInteger(o._v) || o._v < 1)) { idx[k] = {ligne: ligne, lignes: [ligne], corrompu: true}; anomalies.push({collection: c, id: id, ligne: ligne, erreur: 'version'}); return; }
+    o.id = id;
+    idx[k] = {ligne: ligne, lignes: [ligne], o: o, v: o._v || 0};
   });
   Object.keys(idx).forEach(function (k) { if (idx[k].doublon) { var p = k.split('\u0001'); anomalies.push({collection: p[0], id: p[1], ligne: idx[k].ligne, erreur: 'doublon'}); } });
   return {sh: sh, idx: idx, anomalies: anomalies};
