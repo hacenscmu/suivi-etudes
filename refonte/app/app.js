@@ -147,7 +147,7 @@
         const prochaine = alerte.prochaineEcheance ? " · prochaine échéance " + dateFr(alerte.prochaineEcheance) : alerte.anomalie ? " · date de référence à renseigner" : "";
         return '<button type="button" class="item invoice-button" data-client="' + c.id + '"><div class="item-main"><strong>' + escapeHtml(c.raisonSociale) + '</strong><small>' +
           (c.relationType === "longue_duree" ? "Relation longue durée" + cadence + prochaine : "Mission ponctuelle") + " · " + data.etudes.filter(e => e.clientId === c.id).length + " étude(s)</small></div></button>";
-      }).join("") + "</section>";</section>";
+      }).join("") + "</section>";
   }
 
   function finances(v) {
