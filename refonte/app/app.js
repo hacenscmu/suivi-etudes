@@ -2,7 +2,7 @@
 (() => {
   "use strict";
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
-  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, EN_COURS } = window.HAC;
+  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, EN_COURS, calculerPaie } = window.HAC;
   let filtreEtudes = "En cours";
   const alertesParEtude = () => calculerAlertes({ etudes: data.etudes, factures: data.factures, interventions: data.interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
   // ---- Mode essai : un serveur v3 simulé sur ce téléphone, avec des données d'exemple. Aucune donnée réelle. ----
@@ -155,12 +155,41 @@
         return '<button type="button" class="item invoice-button" data-interv="' + i.id + '"><div class="item-main"><strong>' + escapeHtml(nomMembre(i.membreId)) + " · " + escapeHtml(e?.num || "") +
           '</strong><small>' + escapeHtml(i.date) + " · " + escapeHtml(i.statut) + '</small></div><div class="amount">' + (Number(i.minutesIndividuelles || 0) / 480).toLocaleString("fr-FR", { maximumFractionDigits: 3 }) + " JEH</div></button>";
       }).join("") || '<div class="empty">Aucune intervention.</div>') + "</section>" +
+      paieHtml() +
       heading("Bulletins de versement", data.bvs.length + " BV", '<button class="action" id="addBV">＋ BV</button>') +
       '<section class="listbox rows">' + (data.lignesBV.map(l => {
         const bv = data.bvs.find(b => b.id === l.bvId), jeh = Number(l.jeh) || 0;
         return '<div class="item"><div class="item-main"><strong>' + escapeHtml(nomMembre(l.membreId)) + " · " + escapeHtml(bv?.reference || bv?.date || "") + '</strong><small>' + escapeHtml(bv?.date || "") +
           (jeh > 0 && jeh < 1 ? " · cotisations calculées sur 1 JEH" : "") + '</small></div><div class="amount">' + jeh.toLocaleString("fr-FR") + " JEH</div></div>";
       }).join("") || '<div class="empty">Aucun BV.</div>') + "</section>";
+  }
+
+  function paieHtml() {
+    const P = calculerPaie({ interventions: data.interventions, membres: data.membres, config: synchro?.lireConfig() || {} });
+    const aVerser = P.lignes.filter(r => r.jehAPayer > 0);
+    const f3 = n => n.toLocaleString("fr-FR", { maximumFractionDigits: 3 });
+    return heading("À verser (prochain BV)", money(P.total.net) + " net en tout · coût Junior " + money(P.total.cout)) +
+      '<section class="listbox rows">' + (aVerser.map(r => '<div class="item"><div class="item-main"><strong>' + escapeHtml(r.nom) + " · " + money(r.net) + ' net</strong><small>' +
+        f3(r.jehAPayer) + " JEH · brut " + money(r.brut) + " · coût Junior " + money(r.cout) + (r.assiette > r.jehAPayer ? " · cotisé sur 1 JEH" : "") +
+        (r.sansPrix ? ' · <span class="accent">prix JEH intervenant manquant</span>' : "") + " · déjà payé " + money(r.dejaPaye) +
+        '</small></div><button class="action" data-payer="' + r.membreId + '">Créer le BV</button></div>').join("") || '<div class="empty">Personne à payer pour le moment.</div>') + "</section>" +
+      '<details class="sub" style="margin-top:8px"><summary>Comment c’est calculé ?</summary>Pour chaque personne : les interventions « Fait, pas encore payé ». Brut = JEH × prix JEH intervenant. Net = brut − cotisations salariales ; coût Junior = brut + charges patronales. Base d’une JEH : 4 h de SMIC. En dessous de 1 JEH, cotisations et charges sont calculées sur 1 JEH. « Créer le BV » enregistre le bulletin et passe ces lignes à « Payé ».</details>';
+  }
+  async function creerBVPour(membreId) {
+    const P = calculerPaie({ interventions: data.interventions, membres: data.membres, config: synchro?.lireConfig() || {} });
+    const r = P.lignes.find(x => x.membreId === membreId);
+    if (!r || !(r.jehAPayer > 0)) return;
+    if (!confirm("Créer le BV de " + r.nom + " (" + money(r.net) + " net) et passer ses lignes à « Payé » ?")) return;
+    const bvId = nouvelId("bv"), ligneId = nouvelId("ligne");
+    const bv = { id: bvId, date: aujourdHui(), reference: "BV " + r.nom + " " + aujourdHui(), brut: Math.round(r.brut * 100) / 100, net: Math.round(r.net * 100) / 100, coutJunior: Math.round(r.cout * 100) / 100 };
+    const commandes = [
+      { type: "ajouter", collection: "bvs", id: bvId, enregistrement: bv },
+      { type: "ajouter", collection: "lignesBV", id: ligneId, enregistrement: { id: ligneId, bvId, membreId, jeh: Math.round(r.jehAPayer * 1e6) / 1e6 } },
+      ...data.interventions.filter(i => i.membreId === membreId && i.statut === "Pas payé").map(i => ({ type: "modifier", collection: "interventions", id: i.id, modifications: { statut: "Payé", bvId } })),
+    ];
+    const res = await synchro.executerPlusieurs(commandes);
+    if (!res.valide) { alert(res.anomalies.map(a => a.raison || a).join("\n")); return; }
+    data = synchro.lireEtat(); await majStatut(); render();
   }
 
   function settings() {
@@ -319,6 +348,7 @@
     brancher("#addBV", () => ouvrirBV());
     brancher("[data-etude]", el => ouvrirEtude(el.dataset.etude));
     brancher("[data-filtre]", el => { filtreEtudes = el.dataset.filtre; render(); });
+    brancher("[data-payer]", el => creerBVPour(el.dataset.payer));
     brancher("[data-client]", el => ouvrirClient(el.dataset.client));
     brancher("[data-invoice]", el => ouvrirFacture(el.dataset.invoice));
     brancher("[data-membre]", el => ouvrirMembre(el.dataset.membre));
