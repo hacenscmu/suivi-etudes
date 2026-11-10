@@ -6,7 +6,7 @@ e1:{client:'B+T Environnement',num:'1',statut:'En réalisation',montant:1428,jeh
 e2:{client:'b+t environnement',num:'5',statut:'Archivée',montant:2400,jeh:400,date:'2025-11-01'},
 e3:{client:'Soléa Industrie',num:'2',statut:'Convention signée',montant:5040,jeh:400,date:'2026-10-04'}},
 factures:{f1:{etude:'1',type:'Acompte',etat:'Payée',montant:500,date:'2026-09-02'},f2:{etude:'5',type:'Solde',etat:'Payée',montant:2400,date:'2025-12-01',datePaiement:'2025-12-20'}},
-temps:{t1:{prenom:'Alex',etude:'1',min:240,nb:1,jeh:300,statut:'Pas payé',date:'2026-09-05'},t2:{prenom:'Zoé',etude:'1',min:960,nb:1,jeh:300,statut:'Pas payé',date:'2026-09-05'},t3:{prenom:'Zoé',etude:'5',min:480,nb:1,jeh:300,statut:'Payé',date:'2025-11-05'}},formation:{},
+temps:{t1:{prenom:'Alex.M',etude:'1',min:240,nb:1,jeh:300,statut:'Pas payé',date:'2026-09-05'},t2:{prenom:'Zoé.B',etude:'1',min:960,nb:1,jeh:300,statut:'Pas payé',date:'2026-09-05'},t3:{prenom:'Zoé.B',etude:'5',min:480,nb:1,jeh:300,statut:'Payé',date:'2025-11-05'}},formation:{},
 config:null}));localStorage.setItem('suivi.tab','etudes')});
 await p.goto('http://localhost:8766/index.html');await p.waitForTimeout(1200);
 await p.click('[data-eseg="clients"]');await p.waitForTimeout(300);let t=await p.innerText('#view');
