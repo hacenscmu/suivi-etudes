@@ -4,11 +4,12 @@
  * Entrée : l'export JSON de l'app v11 (menu « Exporter ») : { etudes, factures, temps, formation, config }.
  * Sortie : les collections v3 proposées + un rapport lisible. AUCUNE écriture : ni Sheet, ni serveur, ni fichier source.
  *
- * Règles appliquées (toutes confirmées dans les échanges HAC) :
- *  - clients : un client par nom (comparaison sans casse ni espaces en trop) ; à confirmer par Pauline ;
- *  - membres : un membre par prénom (v11 ne connaît que le prénom) ; homonymes à séparer à la main ;
- *  - interventions : minutesIndividuelles = min ÷ nb (règle v11 : 120 min à 2 personnes = 60 min chacun) ;
- *    prixJehHt = champ « jeh » de la ligne (tarif intervenant, pas un nombre de JEH) ;
+ * Règles confirmées et points non résolus :
+ *  - clients : un client par nom normalisé, fusion à confirmer ;
+ *  - membres : v11 ne connaît que le prénom ; homonymes à séparer manuellement ;
+ *  - interventions : minutesIndividuelles = min ÷ nb (confirmé : 120 min collectives à 2 = 60 min chacune) ;
+ *  - temps.jeh : signification non confirmée ; valeur conservée dans jehV11, jamais convertie par défaut ;
+ *  - un mapping explicite peut qualifier temps.jeh comme prix intervenant HT ou nombre de JEH ;
  *  - études : « jeh » = prix HT de la JEH client ; « frais » (v12) conservé ;
  *  - factures : liées à l'étude par numéro → identifiant ; un état absent est signalé (v11 le supposait « Payée ») ;
  *  - BV : aucun BV inventé ; les anciennes lignes « Payé » sont signalées « historique non ventilé ».
@@ -36,7 +37,34 @@ function lireExport(brut) {
 
 function migrerV11(exportV11, { correspondances = {} } = {}) {
   const src = lireExport(exportV11);
-  const C = { clients: correspondances.clients || {}, membres: correspondances.membres || {}, tempsVersMembre: correspondances.tempsVersMembre || {} };
+  const mapping = (nom) => {
+    const valeur = correspondances[nom] ?? {};
+    if (!simple(valeur)) throw new Error("Correspondance invalide : " + nom + " doit être un objet.");
+    return valeur;
+  };
+  const C = {
+    clients: mapping("clients"),
+    membres: mapping("membres"),
+    tempsVersMembre: mapping("tempsVersMembre"),
+    formationVersMembre: mapping("formationVersMembre"),
+    nomsMembres: mapping("nomsMembres"),
+    jehTemps: correspondances.jehTemps ?? "non_qualifie",
+  };
+  if (!["non_qualifie", "prix_intervenant_ht", "nombre_jeh"].includes(C.jehTemps)) {
+    throw new Error("jehTemps doit valoir non_qualifie, prix_intervenant_ht ou nombre_jeh.");
+  }
+  for (const nom of ["clients", "membres", "tempsVersMembre", "formationVersMembre"]) {
+    for (const [cleSource, id] of Object.entries(C[nom])) {
+      if (!cleSource || typeof id !== "string" || !ID_VALIDE.test(id)) {
+        throw new Error("Identifiant de correspondance invalide dans " + nom + " : " + cleSource);
+      }
+    }
+  }
+  for (const [id, nomComplet] of Object.entries(C.nomsMembres)) {
+    if (!ID_VALIDE.test(id) || typeof nomComplet !== "string" || !nomComplet.trim()) {
+      throw new Error("Correspondance nomsMembres invalide pour " + id);
+    }
+  }
   const questions = [], anomalies = [];
   const E = Object.entries(src.etudes), F = Object.entries(src.factures), T = Object.entries(src.temps);
 
@@ -61,7 +89,7 @@ function migrerV11(exportV11, { correspondances = {} } = {}) {
     if (e?.num && numsVus.get(e.num) === 1) idEtudeParNum.set(e.num, id);
     const o = { id, sourceLegacyId: sid, num: e?.num ?? "", date: e?.date ?? "", statut: e?.statut ?? "", client: e?.client ?? "",
       clientId: e?.client ? clientDe(e.client) : null, resume: e?.resume ?? "", montant: num(e?.montant), jeh: num(e?.jeh), frais: num(e?.frais) };
-    if (!e?.client) anomalies.push({ type: "etude_sans_client", sourceLegacyId: sid, num: o.num, gravite: "a_verifier" });
+    if (!e?.client && !o.clientId) anomalies.push({ type: "etude_sans_client", sourceLegacyId: sid, num: o.num, gravite: "bloquante" });
     if (o.jeh !== null && (o.jeh < 80 || o.jeh > 450)) anomalies.push({ type: "prix_jeh_client_hors_cnje", sourceLegacyId: sid, num: o.num, valeur: o.jeh, gravite: "a_verifier" });
     return o;
   });
@@ -78,13 +106,22 @@ function migrerV11(exportV11, { correspondances = {} } = {}) {
 
   // ---- Membres et interventions ----
   const membres = new Map();
+  const assurerMembre = (id, prenom) => {
+    const k = "corr:" + id;
+    if (!membres.has(k)) membres.set(k, {
+      id,
+      nomComplet: C.nomsMembres[id] || String(prenom).trim(),
+      prenomSource: cle(prenom),
+      lignes: 0,
+      aConfirmer: !C.nomsMembres[id],
+    });
+    return membres.get(k);
+  };
   const membreDe = (prenom, sid) => {
-    const forcé = C.tempsVersMembre[sid] || C.membres[prenom];
-    const k = forcé ? "corr:" + forcé : cle(prenom);
-    if (!k) return null;
-    if (!membres.has(k)) membres.set(k, { id: forcé || idStable("mbr", k), nomComplet: String(prenom).trim(), lignes: 0 });
-    membres.get(k).lignes++;
-    return membres.get(k).id;
+    const id = C.tempsVersMembre[sid] || C.membres[prenom] || idStable("mbr", cle(prenom));
+    const membre = assurerMembre(id, prenom);
+    membre.lignes++;
+    return membre.id;
   };
   const interventions = [];
   T.forEach(([sid, t]) => {
@@ -93,18 +130,43 @@ function migrerV11(exportV11, { correspondances = {} } = {}) {
     const statut = STATUTS_TEMPS.has(t?.statut) ? t.statut : null;
     const o = { id: garderId("int", sid), sourceLegacyId: sid, etudeId, membreId, date: t?.date ?? "", statut,
       minutesIndividuelles: min !== null && nb !== null && nb >= 1 ? Math.round((min / nb) * 1000) / 1000 : null,
-      prixJehHt: num(t?.jeh), note: t?.note ?? "" };
+      jehV11: num(t?.jeh),
+      prixJehHt: C.jehTemps === "prix_intervenant_ht" ? num(t?.jeh) : null,
+      jehDeclaree: C.jehTemps === "nombre_jeh" ? num(t?.jeh) : null,
+      note: t?.note ?? "" };
     if (!t?.statut) anomalies.push({ type: "intervention_sans_statut", sourceLegacyId: sid, prenom: t?.prenom ?? null, gravite: "a_verifier", detail: "v11 la comptait « Pas payé » ; à classer" });
     else if (!statut) anomalies.push({ type: "intervention_statut_inconnu", sourceLegacyId: sid, valeur: t.statut, gravite: "a_verifier" });
     if (o.minutesIndividuelles === null) anomalies.push({ type: "intervention_minutes_ou_nb_manquants", sourceLegacyId: sid, min: t?.min ?? null, nb: t?.nb ?? null, gravite: "a_verifier" });
-    if (o.prixJehHt !== null && o.prixJehHt > 300) anomalies.push({ type: "prix_jeh_intervenant_sup_300", sourceLegacyId: sid, valeur: o.prixJehHt, gravite: "a_verifier" });
+    if (C.jehTemps === "non_qualifie" && o.jehV11 !== null) {
+      anomalies.push({ type: "jeh_historique_non_qualifie", sourceLegacyId: sid, valeur: o.jehV11, gravite: "a_verifier" });
+    }
+    if (C.jehTemps === "prix_intervenant_ht" && o.prixJehHt !== null && o.prixJehHt > 300) {
+      anomalies.push({ type: "prix_jeh_intervenant_sup_300", sourceLegacyId: sid, valeur: o.prixJehHt, gravite: "a_verifier" });
+    }
+    if (C.jehTemps === "nombre_jeh" && o.jehDeclaree !== null && o.minutesIndividuelles !== null) {
+      const calculee = o.minutesIndividuelles / 480;
+      if (Math.abs(o.jehDeclaree - calculee) > 0.001) anomalies.push({
+        type: "jeh_historique_ecart_minutes", sourceLegacyId: sid, valeurV11: o.jehDeclaree,
+        valeurCalculee: arrondi(calculee), gravite: "a_verifier"
+      });
+    }
     if (statut === "Payé") o.bvHistorique = "non_ventile";
     interventions.push(o);
   });
 
   // ---- Formation : rattachée au membre par prénom ----
   const formation = Object.entries(src.formation).map(([sid, f]) => {
-    const membreId = f?.nom ? (membres.get(C.membres[f.nom] ? "corr:" + C.membres[f.nom] : cle(f.nom))?.id ?? null) : null;
+    let membreId = null;
+    if (f?.nom) {
+      const mapped = C.formationVersMembre[sid] || C.membres[f.nom];
+      if (mapped) membreId = assurerMembre(mapped, f.nom).id;
+      else {
+        const candidats = [...membres.values()].filter(m => m.prenomSource === cle(f.nom));
+        if (candidats.length === 1) membreId = candidats[0].id;
+        else if (candidats.length > 1) anomalies.push({ type: "formation_membre_ambigu", sourceLegacyId: sid, nom: f.nom, gravite: "a_verifier" });
+        else membreId = assurerMembre(idStable("mbr", cle(f.nom)), f.nom).id;
+      }
+    }
     if (!membreId) anomalies.push({ type: "formation_sans_membre", sourceLegacyId: sid, nom: f?.nom ?? null, gravite: "a_verifier" });
     const niveaux = {};
     Object.entries(simple(f?.niveaux) ? f.niveaux : {}).forEach(([numEtude, n]) => { const eid = idEtudeParNum.get(numEtude); if (eid) niveaux[eid] = n; else anomalies.push({ type: "formation_etude_introuvable", sourceLegacyId: sid, etude: numEtude, gravite: "a_verifier" }); });
@@ -116,7 +178,10 @@ function migrerV11(exportV11, { correspondances = {} } = {}) {
   const proches = new Map();
   [...clients.values()].forEach(c => { const k = cle(c.raisonSociale).replace(/[^a-z0-9]/g, ""); proches.set(k, [...(proches.get(k) || []), c.raisonSociale]); });
   [...proches.values()].filter(v => v.length > 1).forEach(v => questions.push({ type: "clients_proches", question: "Ces clients sont-ils le même ?", valeurs: v }));
-  [...membres.values()].forEach(m => questions.push({ type: "membre_a_confirmer", question: "Nom complet de ce membre (et y a-t-il plusieurs personnes avec ce prénom ?)", prenom: m.nomComplet, lignes: m.lignes }));
+  [...membres.values()].filter(m => m.aConfirmer).forEach(m => questions.push({ type: "membre_a_confirmer", question: "Nom complet de ce membre (et y a-t-il plusieurs personnes avec ce prénom ?)", prenom: m.nomComplet, lignes: m.lignes, membreId: m.id }));
+  if (C.jehTemps === "non_qualifie" && T.some(([, t]) => num(t?.jeh) !== null)) {
+    questions.push({ type: "jeh_historique", question: "Dans les anciennes lignes Temps, le champ jeh représente-t-il le prix HT de la JEH intervenant ou un nombre de JEH ? Il est conservé sans conversion tant que ce point n'est pas tranché." });
+  }
   if (interventions.some(i => i.bvHistorique)) questions.push({ type: "bv_historiques", question: "Les anciens BV payés ne sont pas reconstitués (aucune date de BV dans v11). Faut-il les ressaisir depuis les justificatifs du Drive, ou les garder comme historique non ventilé ?" });
 
   // ---- Comparaison des totaux avant / après ----
@@ -135,13 +200,14 @@ function migrerV11(exportV11, { correspondances = {} } = {}) {
 
   const collections = {
     clients: [...clients.values()].map(({ variantes, ...c }) => c),
-    membres: [...membres.values()].map(({ lignes, ...m }) => m),
+    membres: [...membres.values()].map(({ lignes, aConfirmer, prenomSource, ...m }) => m),
     etudes, factures, interventions, formation, bvs: [], lignesBV: [],
     config: src.config ? { id: "main", ...src.config } : null,
   };
   const bloquantes = anomalies.filter(a => a.gravite === "bloquante").length;
+  const aVerifier = anomalies.filter(a => a.gravite === "a_verifier").length;
   return {
-    statut: bloquantes ? "bloquee" : "apercu_pret",
+    statut: bloquantes ? "bloquee" : (aVerifier || questions.length) ? "apercu_a_verifier" : "apercu_pret",
     resume: { clients: collections.clients.length, membres: collections.membres.length, etudes: etudes.length, factures: factures.length, interventions: interventions.length, formation: formation.length, anomaliesBloquantes: bloquantes, aVerifier: anomalies.length - bloquantes, questions: questions.length },
     totaux, questions, anomalies, collections,
     avertissement: "Aperçu uniquement : rien n'a été écrit. La bascule nécessite la validation de Pauline et un essai sur une copie.",
