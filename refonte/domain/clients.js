@@ -11,7 +11,9 @@ const CADENCES = new Set(["mensuelle", "trimestrielle", "semestrielle", "annuell
 
 function resoudreRelation(client, etude = null) {
   const type = etude?.relationType ?? client?.relationType ?? "ponctuelle";
-  const cadenceFacturation = etude?.cadenceFacturation ?? client?.cadenceFacturation ?? null;
+  const cadenceFacturation = etude && Object.prototype.hasOwnProperty.call(etude, "cadenceFacturation")
+    ? etude.cadenceFacturation
+    : client?.cadenceFacturation ?? null;
 
   if (!TYPES_RELATION.has(type)) {
     return { type: "invalide", cadenceFacturation: null, anomalie: "Type de relation absent ou inconnu" };
