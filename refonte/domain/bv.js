@@ -6,6 +6,8 @@
  * ni au cumul annuel d'une personne.
  */
 
+const { estIdValide } = require("./identites");
+
 function validerBV(bv) {
   const anomalies = [];
   if (!bv || typeof bv !== "object") {
@@ -58,7 +60,7 @@ function analyserCollectionBVs({ bvs = [], lignesBV = [], membres = [] } = {}) {
   const membresIds = new Set(membres.map(m => m?.id).filter(id => typeof id === "string" && id.trim()));
   const bvsParId = new Map();
   bvs.forEach((bv, index) => {
-    if (!bv || typeof bv !== "object" || typeof bv.id !== "string" || !bv.id.trim()) {
+    if (!bv || typeof bv !== "object" || !estIdValide(bv.id)) {
       anomalies.push({ collection: "bvs", index, raison: "Identifiant de BV absent ou invalide" });
       return;
     }
@@ -75,7 +77,7 @@ function analyserCollectionBVs({ bvs = [], lignesBV = [], membres = [] } = {}) {
       anomalies.push({ collection: "lignesBV", index, raison: "Ligne invalide" });
       return;
     }
-    if (typeof ligne.id !== "string" || !ligne.id.trim()) {
+    if (!estIdValide(ligne.id)) {
       anomalies.push({ collection: "lignesBV", index, raison: "Identifiant de ligne absent ou invalide" });
     } else if (ligneIds.has(ligne.id)) {
       anomalies.push({ collection: "lignesBV", index, raison: "Identifiant de ligne dupliqué", id: ligne.id });
@@ -83,13 +85,13 @@ function analyserCollectionBVs({ bvs = [], lignesBV = [], membres = [] } = {}) {
       ligneIds.add(ligne.id);
     }
 
-    const parent = bvsParId.get(ligne.bvId);
+    const parent = estIdValide(ligne.bvId) ? bvsParId.get(ligne.bvId) : null;
     if (!parent) {
       anomalies.push({ collection: "lignesBV", index, raison: "BV parent introuvable" });
     } else {
       parent.lignes.push({ ligne, index });
     }
-    if (typeof ligne.membreId !== "string" || !membresIds.has(ligne.membreId)) {
+    if (!estIdValide(ligne.membreId) || !membresIds.has(ligne.membreId)) {
       anomalies.push({ collection: "lignesBV", index, raison: "Membre lié introuvable" });
     }
     const jeh = Number(ligne.jeh);
