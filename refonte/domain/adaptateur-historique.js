@@ -16,7 +16,9 @@ function entries(collection) {
   }));
 }
 
-const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;\n\nfunction adaptateurHistorique({
+const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;
+
+function adaptateurHistorique({
   etudes = {},
   factures = {},
   temps = {},
@@ -48,7 +50,7 @@ const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;\n\nfunction adaptateurHis
 
   const ids = new Set();
   const attribuerId = (sourceId, prefixe) => {
-    let id = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/.test(sourceId) ? sourceId : createId(prefixe);
+    let id = ID_VALIDE.test(sourceId) ? sourceId : createId(prefixe);
     if (typeof id !== "string" || !ID_VALIDE.test(id) || ids.has(id)) {
       throw new Error("createId doit produire un identifiant stable, valide et unique.");
     }
@@ -60,7 +62,8 @@ const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;\n\nfunction adaptateurHis
   const etudesCibles = E.map(({ sourceId, data }) => {
     const id = attribuerId(sourceId, "etu");
     idEtudeParSource.set(sourceId, id);
-    const clientBrut = clientIdParEtudeSource[sourceId] ?? null;\n    const clientId = typeof clientBrut === "string" && ID_VALIDE.test(clientBrut) ? clientBrut : null;
+    const clientBrut = clientIdParEtudeSource[sourceId] ?? null;
+    const clientId = typeof clientBrut === "string" && ID_VALIDE.test(clientBrut) ? clientBrut : null;
     return { ...data, id, sourceLegacyId: sourceId, clientId };
   });
 
@@ -68,7 +71,6 @@ const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;\n\nfunction adaptateurHis
   E.forEach(({ sourceId, data }) => idEtudeParNumero.set(data.num, idEtudeParSource.get(sourceId)));
 
   const facturesCibles = F.map(({ sourceId, data }) => {
-    const etude = E.find(x => x.data.num === data.etude);
     return {
       ...data,
       id: attribuerId(sourceId, "fac"),
@@ -84,7 +86,8 @@ const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;\n\nfunction adaptateurHis
       id: attribuerId(sourceId, "tmp"),
       sourceLegacyId: sourceId,
       etudeId: idEtudeParNumero.get(data.etude),
-      membreId: typeof membreIdParTempsSource[sourceId] === "string" && ID_VALIDE.test(membreIdParTempsSource[sourceId])\n        ? membreIdParTempsSource[sourceId] : null,
+      membreId: typeof membreIdParTempsSource[sourceId] === "string" && ID_VALIDE.test(membreIdParTempsSource[sourceId])
+        ? membreIdParTempsSource[sourceId] : null,
       bvId: null,
       statutMigrationBV: "a_regrouper_manuellement",
     };
