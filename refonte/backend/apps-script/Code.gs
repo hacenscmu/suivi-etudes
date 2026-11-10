@@ -177,7 +177,7 @@ function dependance_(I, c, id) {
     bvs:[['lignesBV','bvId']]
   }[c] || [];
   for (var i=0;i<references.length;i++) {
-    var collection=references[i][0], field=references[i][1], prefix=collection+'\\u0001';
+    var collection=references[i][0], field=references[i][1], prefix=collection+'\u0001';
     var trouve=Object.keys(I.idx).some(function(key) {
       var e=I.idx[key];
       return key.indexOf(prefix)===0 && e.o && !e.corrompu && !e.doublon &&
