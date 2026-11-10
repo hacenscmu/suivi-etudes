@@ -26,6 +26,9 @@ Cette arborescence contient le nouveau socle métier, isolé de l'application de
 | `domain/adaptateur-historique.js` | Produire un aperçu de migration sans écriture, avec correspondances client/membre explicites |
 | `application/lecture.js` | Assembler les collections validées, vérifier les références et fournir un modèle de lecture unifié à l'interface |
 | `application/commandes.js` | Préparer et appliquer des ajouts/modifications immuables en mémoire, après validation structurelle et métier |
+| `backend/client-api-v3.js` | Parler au contrat v3 via un transport injecté, avec versions, opId et erreurs explicites |
+| `backend/file-hors-ligne.js` | Conserver les opérations tant que le serveur n'a pas confirmé le succès ; arbitrage explicite des conflits |
+| `backend/mock-serveur-v3.js` | Simuler le serveur v3 en mémoire pour tester versions, idempotence et tombstones |
 | `build/build-browser.mjs` | Construire un bundle navigateur sans dépendance externe à partir des modules CommonJS testés |
 
 ## Backend
@@ -40,7 +43,7 @@ Depuis la racine du dépôt, avec Node.js :
 node --test refonte/domain/*.test.js refonte/application/*.test.js
 ```
 
-Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 108 tests (90 tests domaine + 18 tests applicatifs : lecture et commandes). Le dernier run complet vérifié : 108 réussis, 0 échec ; la CI doit reconfirmer les 108 tests et la reproductibilité du bundle.
+Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 155 tests : domaine, application, client API v3, serveur simulé, intégration client/serveur et file hors ligne. Le dernier run complet vérifié : 155 réussis, 0 échec ; le workflow vérifie aussi la reproductibilité du bundle navigateur.
 
 ## État d'intégration
 
