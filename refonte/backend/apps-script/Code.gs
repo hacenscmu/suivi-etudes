@@ -133,6 +133,40 @@ function relation_(I, c, r) {
   return null;
 }
 
+function dateValide_(s) {
+  if(typeof s!=='string') return false;
+  var m=/^(\\d{4})-(\\d{2})-(\\d{2})$/.exec(s); if(!m) return false;
+  var d=new Date(Date.UTC(+m[1],+m[2]-1,+m[3]));
+  return d.getUTCFullYear()==+m[1]&&d.getUTCMonth()==+m[2]-1&&d.getUTCDate()==+m[3];
+}
+function texte_(v){return typeof v==='string'&&v.trim()!=='';}
+function nombreNonNegatif_(v){return typeof v==='number'&&isFinite(v)&&v>=0;}
+function nombrePositif_(v){return typeof v==='number'&&isFinite(v)&&v>0;}
+function validerMetier_(c,r) {
+  if(Object.keys(r).length>100) return 'Trop de champs dans la fiche';
+  if(c==='clients'&&!texte_(r.raisonSociale)&&!texte_(r.nom)&&!texte_(r.name)) return 'Nom du client requis';
+  if(c==='membres'&&!texte_(r.nomComplet)&&!texte_(r.nom)&&!texte_(r.prenom)) return 'Nom du membre requis';
+  if(c==='etudes'){
+    if(!dateValide_(r.date)||!texte_(r.num)||!texte_(r.statut)||!nombreNonNegatif_(r.montant)) return 'Étude : date, numéro, statut ou montant invalide';
+    if(!texte_(r.client)&&!r.clientId) return 'Étude : client ou clientId requis';
+    if(r.clientId&&(typeof r.clientId!=='string'||!ID_VALIDE.test(r.clientId))) return 'Étude : clientId invalide';
+    var signe=['Devis signé','Convention signée','Convention étudiant avant réalisation','En réalisation','Archivée'];
+    if(signe.indexOf(r.statut)>=0&&!nombrePositif_(r.jeh)) return 'Étude signée : prix unitaire JEH client HT positif requis';
+  }
+  if(c==='factures'&&(typeof r.etudeId!=='string'||!ID_VALIDE.test(r.etudeId)||!texte_(r.type)||!texte_(r.etat)||!nombreNonNegatif_(r.montant)))
+    return 'Facture : étude, type, état ou montant invalide';
+  if(c==='interventions'){
+    if(typeof r.etudeId!=='string'||!ID_VALIDE.test(r.etudeId)||typeof r.membreId!=='string'||!ID_VALIDE.test(r.membreId)||
+       !dateValide_(r.date)||['Payé','Pas payé','A venir','Non effectué'].indexOf(r.statut)<0||
+       !nombrePositif_(r.minutesIndividuelles)||(r.prixJehHt!==undefined&&r.prixJehHt!==null&&!nombreNonNegatif_(r.prixJehHt)))
+      return 'Intervention : étude, membre, date, statut, durée ou prix invalide';
+  }
+  if(c==='lignesBV'&&(typeof r.bvId!=='string'||!ID_VALIDE.test(r.bvId)||typeof r.membreId!=='string'||!ID_VALIDE.test(r.membreId)||!nombreNonNegatif_(r.jeh)))
+    return 'Ligne BV : BV, membre ou nombre de JEH invalide';
+  if(c==='formation'&&!texte_(r.nom)) return 'Nom de formation requis';
+  return '';
+}
+
 function valider_(q) {
   if (COLLECTIONS_ECRITURE.indexOf(q.collection) < 0)
     return COLLECTIONS_LECTURE.indexOf(q.collection) >= 0 ? ['READ_ONLY_COLLECTION', 'Collection en lecture seule'] : ['UNKNOWN_COLLECTION', 'Collection inconnue'];
@@ -144,6 +178,7 @@ function valider_(q) {
     return ['INVALID_REQUEST', 'expectedVersion invalide'];
   if (q.action === 'save') {
     if (!simple_(q.record) || q.record.id !== q.id || q.record._deleted === true) return ['INVALID_REQUEST', 'Enregistrement invalide ou identifiant incohérent'];
+    var metier=validerMetier_(q.collection,q.record); if(metier) return ['INVALID_REQUEST',metier];
     if (octets_(JSON.stringify(q.record)) > MAX_FICHE) return ['PAYLOAD_TOO_LARGE', 'Enregistrement trop volumineux'];
   }
   return null;
