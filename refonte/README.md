@@ -48,7 +48,7 @@ Depuis la racine du dépôt, avec Node.js :
 node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js refonte/migration/*.test.js
 ```
 
-Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite Node.js compte 276 tests unitaires : domaine, application, client API v3, serveur simulé, intégration client/serveur, file hors ligne et préparation de migration. Le workflow exécute aussi 36 contrôles navigateur Playwright dans Chromium (20 parcours de l'application connectée au Code.gs simulé et 16 en mode essai). Dernier run complet vérifié : 276/276 tests unitaires et 36/36 contrôles navigateur réussis, 0 échec (run 42921557563, commit `6c81133`) ; les bundles sont vérifiés comme reproductibles.
+Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite Node.js compte 280 tests unitaires : domaine, application, client API v3, serveur simulé, intégration client/serveur, file hors ligne et préparation de migration. Le workflow exécute aussi 37 contrôles navigateur Playwright dans Chromium (21 parcours de l'application connectée au Code.gs simulé et 16 en mode essai). Dernier run complet vérifié : 280/280 tests unitaires et 37/37 contrôles navigateur réussis, 0 échec (run 42922229849, commit `56703bd`) ; les bundles sont vérifiés comme reproductibles.
 
 ## État d'intégration
 
