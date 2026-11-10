@@ -1,5 +1,5 @@
 // Test de bout en bout dans un vrai navigateur (Playwright requis, hors CI) :
-// (cd refonte && python3 -m http.server 8766) puis node refonte/app/e2e-navigateur.js
+// (python3 -m http.server 8766, à la racine du dépôt) puis node refonte/app/e2e-navigateur.js
 // Le serveur Apps Script est le vrai Code.gs exécuté par le simulateur ; les appels réseau sont interceptés.
 const {chromium}=require('playwright');const path=require('path');
 const {creerServeurAppsScriptSimule}=require(path.join(__dirname,'..','backend','apps-script','simulateur.js'));
@@ -15,7 +15,7 @@ const ok=(n,c)=>console.log((c?'✔ ':'✘ ')+n);
 p.on('pageerror',e=>errs.push(e.message));p.on('dialog',d=>d.accept());
 let offline=false;
 await p.route('https://script.google.com/**',async r=>{if(offline)return r.abort();const res=await srv.transport(JSON.parse(r.request().postData()));r.fulfill({status:200,contentType:'application/json',body:JSON.stringify(res.body)})});
-await p.goto('http://localhost:8766/app/index.html');
+await p.goto('http://localhost:8766/refonte/app/index.html');
 ok('écran de connexion affiché',await p.isVisible('#loginForm'));
 await p.fill('input[name=url]','https://script.google.com/macros/s/TEST/exec');await p.fill('input[name=token]','mauvais-jeton');await p.click('#loginForm button');await p.waitForTimeout(400);
 ok('jeton refusé → message',(await p.textContent('#loginMsg')).includes('refusé'));
