@@ -136,7 +136,9 @@ function relation_(I, c, r) {
 function valider_(q) {
   if (COLLECTIONS_ECRITURE.indexOf(q.collection) < 0)
     return COLLECTIONS_LECTURE.indexOf(q.collection) >= 0 ? ['READ_ONLY_COLLECTION', 'Collection en lecture seule'] : ['UNKNOWN_COLLECTION', 'Collection inconnue'];
-  if (typeof q.id !== 'string' || !ID_VALIDE.test(q.id)) return ['INVALID_REQUEST', 'Identifiant absent ou invalide'];
+  // config est une fiche unique : seul l'identifiant « main » est accepté, et elle ne se supprime pas.
+  if (q.collection === 'config' ? q.id !== 'main' : (typeof q.id !== 'string' || !ID_VALIDE.test(q.id))) return ['INVALID_REQUEST', 'Identifiant absent ou invalide'];
+  if (q.action === 'delete' && q.collection === 'config') return ['INVALID_REQUEST', 'La configuration principale ne peut pas être supprimée'];
   if (typeof q.opId !== 'string' || !OP_ID_VALIDE.test(q.opId)) return ['INVALID_REQUEST', 'opId absent ou invalide'];
   if (typeof q.expectedVersion !== 'number' || q.expectedVersion % 1 !== 0 || q.expectedVersion < (q.action === 'delete' ? 1 : 0) || q.expectedVersion > 9007199254740991)
     return ['INVALID_REQUEST', 'expectedVersion invalide'];
