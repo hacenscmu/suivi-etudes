@@ -4,6 +4,7 @@
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
   const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, EN_COURS, ALERTES, calculerPaie } = window.HAC;
   let filtreEtudes = "En cours";
+  let etudeOuverte = null;
   const alertesParEtude = () => calculerAlertes({ etudes: donneesVues().etudes, factures: donneesVues().factures, interventions: donneesVues().interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
   // ---- Mode essai : un serveur v3 simulé sur ce téléphone, avec des données d'exemple. Aucune donnée réelle. ----
   const JETON_ESSAI = "essai-local-hac-v3";
@@ -67,7 +68,7 @@
       ).join("");
     });
     document.querySelectorAll("[data-page]").forEach(button => {
-      button.addEventListener("click", () => { current = button.dataset.page; render(); });
+      button.addEventListener("click", () => { current = button.dataset.page; etudeOuverte = null; render(); });
     });
   }
 
@@ -188,13 +189,62 @@
         return '<button type="button" class="item invoice-button" data-interv="' + i.id + '"><div class="item-main"><strong>' + escapeHtml(nomMembre(i.membreId)) + " · " + escapeHtml(e?.num || "") +
           '</strong><small>' + escapeHtml(i.date) + " · " + escapeHtml(i.statut) + '</small></div><div class="amount">' + (Number(i.minutesIndividuelles || 0) / 480).toLocaleString("fr-FR", { maximumFractionDigits: 3 }) + " JEH</div></button>";
       }).join("") || '<div class="empty">Aucune intervention.</div>') + "</section>" +
-      paieHtml() +
+      paieHtml() + formationHtml() +
       heading("Bulletins de versement", data.bvs.length + " BV", '<button class="action" id="addBV">＋ BV</button>') +
       '<section class="listbox rows">' + (data.lignesBV.map(l => {
         const bv = data.bvs.find(b => b.id === l.bvId), jeh = Number(l.jeh) || 0;
         return '<div class="item"><div class="item-main"><strong>' + escapeHtml(nomMembre(l.membreId)) + " · " + escapeHtml(bv?.reference || bv?.date || "") + '</strong><small>' + escapeHtml(bv?.date || "") +
           (jeh > 0 && jeh < 1 ? " · cotisations calculées sur 1 JEH" : "") + '</small></div><div class="amount">' + jeh.toLocaleString("fr-FR") + " JEH</div></div>";
       }).join("") || '<div class="empty">Aucun BV.</div>') + "</section>";
+  }
+
+  // ---------- Rapport d'étude ----------
+  function rapport(id) {
+    const e = data.etudes.find(x => x.id === id);
+    if (!e) { etudeOuverte = null; return studies(view()); }
+    const A = alertesParEtude().get(id) || calculerAlertes({ etudes: [e], factures: data.factures, interventions: data.interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() }).get(id);
+    const tva = synchro?.lireConfig()?.tva ?? 0.2, inv = data.factures.filter(f => f.etudeId === id), ls = data.interventions.filter(i => i.etudeId === id);
+    const f3 = n => (Math.round(Number(n || 0) * 1000) / 1000).toLocaleString("fr-FR");
+    const per = {}; ls.forEach(i => { const p = per[i.membreId] || (per[i.membreId] = { jeh: 0, brut: 0, aPayer: false }); if (i.statut === "Payé" || i.statut === "Pas payé") { const j = Number(i.minutesIndividuelles || 0) / 480; p.jeh += j; p.brut += j * Number(i.prixJehHt || 0); } if (i.statut === "Pas payé") p.aPayer = true; });
+    const nomM = mid => data.membres.find(m => m.id === mid)?.nomComplet || "?";
+    const niveaux = data.membres.map(m => [m, (data.formation || []).find(f => f.membreId === m.id)?.niveaux?.[id]]).filter(x => Number.isInteger(x[1]));
+    const tuile = (l, v) => '<div class="stat"><div class="label">' + l + "</div><strong>" + v + "</strong></div>";
+    return '<button class="ghost action" id="retourEtudes">‹ Études</button>' +
+      heading(escapeHtml(nomEtude(e)), escapeHtml(e.statut || "") + " · " + escapeHtml(A.facture || "—") + (mandatDe(e.date) ? " · " + escapeHtml(mandatDe(e.date)) : ""), '<button class="action" data-modifier-etude="' + id + '">Modifier</button>') +
+      (e.resume ? '<p class="sub">' + escapeHtml(e.resume) + "</p>" : "") +
+      (A.alertes.length ? '<section class="panel">' + A.alertes.map(a => '<div class="alert"><div class="alert-icon">!</div><div><strong>' + escapeHtml(a.texte) + "</strong></div></div>").join("") + "</section>" : "") +
+      heading("Finances", "") + '<div class="stats">' + tuile("Montant TTC", money(e.montant)) + tuile("Encaissé TTC", money(A.encaisse)) + tuile("Reste à encaisser", A.reste === null ? "—" : money(A.reste)) + tuile("Prochaine échéance", A.echeance || "—") + "</div>" +
+      '<p class="sub">' + money(Number(e.montant || 0) / (1 + tva)) + " HT · JEH client " + (e.jeh ? money(e.jeh) : "—") + (e.frais ? " · frais " + money(e.frais) + " HT" : "") + "</p>" +
+      heading("Factures", inv.length + " facture(s)", '<button class="action" data-facture-pour="' + id + '">＋ Facture</button>') +
+      '<section class="listbox rows">' + (inv.map(f => '<button type="button" class="item invoice-button" data-invoice="' + f.id + '"><div class="item-main"><strong>' + escapeHtml(f.type || "Facture") + "</strong><small>" + escapeHtml(f.date || "") + (f.echeance ? " · échéance " + escapeHtml(f.echeance) : "") + '</small></div><span class="pill ' + (f.etat === "Payée" ? "green" : "pink") + '">' + escapeHtml(f.etat) + '</span><div class="amount">' + money(f.montant) + " TTC</div></button>").join("") || '<div class="empty">Aucune facture.</div>') + "</section>" +
+      heading("JEH", "Facturées " + f3(A.jehFacturees) + " · rémunérées " + f3(A.jehRemunerees), '<button class="action" data-interv-pour="' + id + '">＋ Intervention</button>') +
+      '<section class="listbox rows">' + (Object.entries(per).map(([mid, p]) => '<div class="item"><div class="item-main"><strong>' + escapeHtml(nomM(mid)) + " · " + f3(p.jeh) + " JEH</strong><small>" + money(p.brut) + ' brut</small></div><span class="pill ' + (p.aPayer ? "pink" : "green") + '">' + (p.aPayer ? "À payer" : "Payé") + "</span></div>").join("") || '<div class="empty">Aucune intervention.</div>') + "</section>" +
+      (ls.length ? '<details class="sub" style="margin-top:8px"><summary>Voir les ' + ls.length + " lignes</summary>" + ls.map(i => '<button type="button" class="item invoice-button" data-interv="' + i.id + '"><div class="item-main"><strong>' + escapeHtml(nomM(i.membreId)) + "</strong><small>" + escapeHtml(i.date || "") + " · " + escapeHtml(i.statut || "") + '</small></div><div class="amount">' + f3(Number(i.minutesIndividuelles || 0) / 480) + " JEH</div></button>").join("") + "</details>" : "") +
+      (niveaux.length ? heading("Formation sur cette étude", "") + '<p class="sub">' + niveaux.map(([m, n]) => escapeHtml(m.nomComplet) + " · niveau " + n).join(" · ") + "</p>" : "");
+  }
+
+  // ---------- Qualité formation : niveau 0 à 4 par membre et par étude ----------
+  const NIVEAUX = ["0 · Non formé", "1 · Notions", "2 · Autonome avec appui", "3 · Autonome", "4 · Référent (peut former)"];
+  function formationHtml() {
+    const ouvertes = data.etudes.filter(e => e.statut !== "Archivée" && e.statut !== "Refusé / sans suite"), fermees = data.etudes.filter(e => !ouvertes.includes(e));
+    const cols = ouvertes.concat(fermees);
+    if (!data.membres.length || !cols.length) return "";
+    const niv = (mid, eid) => (data.formation || []).find(f => f.membreId === mid)?.niveaux?.[eid];
+    return heading("Qualité formation", "Niveau de 0 à 4 par intervenant et par étude") + '<div class="listbox" style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:8px">Intervenant</th>' +
+      cols.map(e => '<th style="padding:6px;' + (fermees.includes(e) ? "opacity:.6" : "") + '">' + escapeHtml(e.num || "?") + "</th>").join("") + "</tr></thead><tbody>" +
+      data.membres.map(m => "<tr><td style=\"padding:6px 8px;white-space:nowrap\"><b>" + escapeHtml(m.nomComplet) + "</b></td>" + cols.map(e => { const v = niv(m.id, e.id); return '<td><select data-niveau="' + m.id + "|" + e.id + '" aria-label="Niveau"><option value=""></option>' + [0, 1, 2, 3, 4].map(k => "<option" + (v === k ? " selected" : "") + ">" + k + "</option>").join("") + "</select></td>"; }).join("") + "</tr>").join("") +
+      '</tbody></table></div><details class="sub"><summary>Échelle</summary>' + NIVEAUX.join(" · ") + "</details>";
+  }
+  async function changerNiveau(mid, eid, valeur) {
+    const existant = (data.formation || []).find(f => f.membreId === mid);
+    const niveaux = { ...(existant?.niveaux || {}) };
+    if (valeur === "") delete niveaux[eid]; else niveaux[eid] = Number(valeur);
+    const cmd = existant ? { type: "modifier", collection: "formation", id: existant.id, modifications: { niveaux } }
+      : (() => { const id = nouvelId("formation"); return { type: "ajouter", collection: "formation", id, enregistrement: { id, membreId: mid, nom: data.membres.find(m => m.id === mid)?.nomComplet || "", niveaux } }; })();
+    if (!Array.isArray(data.formation)) data = { ...data, formation: [] };
+    const r = await synchro.executerPlusieurs([cmd]);
+    if (!r.valide) { alert(r.anomalies.map(a => a.raison || a).join("\n")); return; }
+    data = synchro.lireEtat(); await majStatut(); render();
   }
 
   function paieHtml() {
@@ -366,8 +416,8 @@
       return enregistrer("clients", id, d, "client");
     } });
   }
-  function ouvrirFacture(id) {
-    const f = id ? data.factures.find(x => x.id === id) : {};
+  function ouvrirFacture(id, preset = {}) {
+    const f = id ? data.factures.find(x => x.id === id) : preset;
     formulaire({ titre: id ? "Modifier la facture" : "Nouvelle facture", valeurs: { type: "Acompte", etat: "Émise", date: aujourdHui(), ...f }, champs: [
       { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
       { name: "type", label: "Type", type: "select", required: true, options: ["Acompte", "Intermédiaire", "Solde"] },
@@ -385,8 +435,8 @@
       { name: "role", label: "Rôle (facultatif)" },
     ], onValider: d => enregistrer("membres", id, d, "membre") });
   }
-  function ouvrirIntervention(id) {
-    const i = id ? data.interventions.find(x => x.id === id) : {};
+  function ouvrirIntervention(id, preset = {}) {
+    const i = id ? data.interventions.find(x => x.id === id) : preset;
     formulaire({ titre: id ? "Modifier l’intervention" : "Nouvelle intervention (JEH)", valeurs: { date: aujourdHui(), statut: "Pas payé", nb: 1, duree: i.minutesIndividuelles, ...i }, champs: [
       { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
       { name: "membreId", label: "Intervenant", type: "select", required: true, options: data.membres.map(m => [m.id, m.nomComplet]) },
@@ -432,7 +482,7 @@
     }
     content.innerHTML = ({
       Accueil: () => dashboard(v),
-      Études: () => studies(v),
+      Études: () => (etudeOuverte ? rapport(etudeOuverte) : studies(v)),
       Finances: () => finances(v),
       Équipe: () => team(v),
       Réglages: settings,
@@ -448,7 +498,12 @@
     brancher("#addMembre", () => ouvrirMembre());
     brancher("#addInterv", () => ouvrirIntervention());
     brancher("#addBV", () => ouvrirBV());
-    brancher("[data-etude]", el => ouvrirEtude(el.dataset.etude));
+    brancher("[data-etude]", el => { etudeOuverte = el.dataset.etude; current = "Études"; render(); window.scrollTo(0, 0); });
+    brancher("#retourEtudes", () => { etudeOuverte = null; render(); });
+    brancher("[data-modifier-etude]", el => ouvrirEtude(el.dataset.modifierEtude));
+    brancher("[data-facture-pour]", el => ouvrirFacture(null, { etudeId: el.dataset.facturePour }));
+    brancher("[data-interv-pour]", el => ouvrirIntervention(null, { etudeId: el.dataset.intervPour }));
+    document.querySelectorAll("[data-niveau]").forEach(el => el.addEventListener("change", () => { const [m, e] = el.dataset.niveau.split("|"); changerNiveau(m, e, el.value); }));
     brancher("[data-filtre]", el => { filtreEtudes = el.dataset.filtre; render(); });
     brancher("[data-payer]", el => creerBVPour(el.dataset.payer));
     brancher("[data-reglage]", el => ouvrirReglage(el.dataset.reglage));

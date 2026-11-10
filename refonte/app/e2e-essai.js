@@ -4,7 +4,7 @@ const {chromium}=require('playwright');let failures=0;const ok=(n,c)=>{if(!c)fai
 let net=0;p.on('request',r=>{if(!r.url().startsWith('http://localhost'))net++});
 await p.goto('http://localhost:8766/refonte/app/index.html');await p.click('#essai');await p.waitForTimeout(600);
 ok('alertes affichées à l’accueil',(await p.textContent('#content')).includes('Alertes à traiter'));ok('alerte de facturation récurrente affichée',(await p.textContent('#content')).includes('Facture périodique à émettre'));ok('mode essai démarré avec données d’exemple',(await p.textContent('#syncBanner')).includes('Mode essai')&&(await p.textContent('#content')).includes('JEH'));
-await p.click('#tabs [data-page="Études"]');await p.click('[data-etude="etude_0002"]');await p.selectOption('dialog [name=statut]','Devis signé');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
+await p.click('#tabs [data-page="Études"]');await p.click('[data-etude="etude_0002"]');await p.click('[data-modifier-etude]');await p.selectOption('dialog [name=statut]','Devis signé');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
 await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Études"]');
 ok('modification conservée après rechargement',(await p.textContent('#content')).includes('Devis signé'));
 await p.click('#tabs [data-page="Équipe"]');ok('paie : Lucas à verser',(await p.textContent('#content')).includes('À verser'));
@@ -17,4 +17,7 @@ await p.click('[data-reglage="alertes"]');await p.selectOption('dialog [name=tem
 await p.selectOption('#mandatSel','2025-2026');await p.click('#tabs [data-page="Études"]');await p.click('[data-filtre="Toutes"]');ok('filtre mandat : aucune étude en 2025-2026',(await p.textContent('#content')).includes('Toutes (0)'));
 await p.selectOption('#mandatSel','2026-2027');ok('filtre mandat 2026-2027 : 2 études',(await p.textContent('#content')).includes('Toutes (2)'));
 const dl=p.waitForEvent('download');await p.click('#tabs [data-page="Réglages"]');await p.click('#exportJson');ok('export JSON téléchargé',(await dl).suggestedFilename().startsWith('hac-sauvegarde-'));
+await p.click('#tabs [data-page="Équipe"]');await p.selectOption('[data-niveau="membre_0001|etude_0001"]','3');await p.waitForTimeout(400);
+ok('niveau de formation enregistré',(await p.locator('[data-niveau="membre_0001|etude_0001"]').inputValue())==='3');
+await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Équipe"]');ok('niveau conservé après rechargement',(await p.locator('[data-niveau="membre_0001|etude_0001"]').inputValue())==='3');
 ok('aucun appel réseau externe',net===0);ok('aucune erreur JS',errs.length===0||console.log(errs));await b.close();if(failures)process.exitCode=1})();
