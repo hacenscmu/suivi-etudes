@@ -15,10 +15,10 @@
       { id: "membre_0003", nomComplet: "Sarah Petit", role: "Consultante" },
     ],
     etudes: [
-      { id: "etude_0001", clientId: "client_0001", client: "Soléa Industrie", num: "HAC-2026-018", date: "2026-09-04", statut: "En réalisation", montant: 5040, jeh: 14 },
-      { id: "etude_0002", clientId: "client_0002", client: "Novalys", num: "HAC-2026-016", date: "2026-08-12", statut: "Convention signée", montant: 3360, jeh: 10 },
-      { id: "etude_0003", clientId: "client_0003", client: "Alsachim", num: "HAC-2026-014", date: "2026-06-20", statut: "Archivée", montant: 4320, jeh: 12 },
-      { id: "etude_0004", clientId: "client_0002", client: "Novalys", num: "HAC-2026-021", date: "2026-11-03", statut: "Devis envoyé", montant: 1800, jeh: 6 },
+      { id: "etude_0001", clientId: "client_0001", client: "Soléa Industrie", num: "HAC-2026-018", date: "2026-09-04", statut: "En réalisation", montant: 5040, jeh: 300 },
+      { id: "etude_0002", clientId: "client_0002", client: "Novalys", num: "HAC-2026-016", date: "2026-08-12", statut: "Convention signée", montant: 3360, jeh: 280 },
+      { id: "etude_0003", clientId: "client_0003", client: "Alsachim", num: "HAC-2026-014", date: "2026-06-20", statut: "Archivée", montant: 4320, jeh: 300 },
+      { id: "etude_0004", clientId: "client_0002", client: "Novalys", num: "HAC-2026-021", date: "2026-11-03", statut: "Devis envoyé", montant: 1800, jeh: 300 },
     ],
     factures: [
       { id: "facture_0001", etudeId: "etude_0001", montant: 2520, etat: "Payée", type: "Acompte" },
@@ -183,7 +183,7 @@
           date: "2026-11-10",
           statut: form.get("statut"),
           montant,
-          jeh: 0,
+          jeh: null,
         },
         creerId: () => id,
       });
