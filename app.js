@@ -544,18 +544,45 @@ function refFacture(f,e){
   const rang=Object.values(S.factures).filter(x=>x.etude===f.etude&&String(x.date||'')<=String(f.date||'9')).length;
   return p+'-'+cli+'-'+d+'-'+String(rang||1).padStart(2,'0');
 }
+// Détail d'une facture : prix d'une JEH (par défaut celui de l'étude) + lignes { lib, ht, frais, titre }.
+// Ligne de prestation : on saisit le montant TTC ; HT = TTC ÷ (1 + TVA) ; nombre de JEH = HT ÷ prix d'une JEH HT.
+// Ligne de frais : montant TTC, sans JEH. Titre de section : sans montant.
+function totauxFacture(f,D){
+  const e=D.etudes.find(x=>x.num===f.etude),tva=D.c.tva,prix=isNum(f.prixJeh)&&num(f.prixJeh)>0?num(f.prixJeh):num(e&&e.jeh);
+  const L=(Array.isArray(f.lignes)?f.lignes:[]).map(l=>{const m=l.titre?0:isNum(l.ttc)?num(l.ttc)/(1+tva):num(l.ht);return Object.assign({},l,{montant:m,jeh:l.titre||l.frais||!prix?0:m/prix})});
+  const jehTot=L.reduce((a,l)=>a+l.jeh,0),htBrut=L.reduce((a,l)=>a+l.montant,0);
+  const prec=f.type==='Solde'&&f.deduire!==false?D.fact.filter(x=>x.etude===f.etude&&x.id!==f.id&&(x.de||0)<=(f.de||0)).reduce((a,x)=>a+num(x.montant),0)/(1+tva):0;
+  const ht=htBrut-prec;return {lignes:L,jehTot,htBrut,prec,ht,tv:ht*tva,ttc:ht*(1+tva),prix};
+}
+function editeurLignes(r,D){
+  const T=totauxFacture(r,D),j3=n=>nf3.format(Math.round(n*1000)/1000);
+  const rows=T.lignes.map((l,i)=>l.titre
+    ?`<div class="lgn titre"><input data-ligne="${i}" data-lf="lib" value="${esc(l.lib||'')}" placeholder="Titre de section (ex. Échantillon 1)"><button type="button" class="lb" data-lact="dup:${i}" aria-label="Dupliquer la section">⧉</button><button type="button" class="lb" data-lact="del:${i}" aria-label="Supprimer">✕</button></div>`
+    :`<div class="lgn${l.frais?' frais':''}"><input class="ll" data-ligne="${i}" data-lf="lib" value="${esc(l.lib||'')}" placeholder="${l.frais?'Frais (ex. laboratoire)':'Phase (ex. Analyse)'}">
+      <div class="lnum"><label>Montant TTC<input type="number" step="any" inputmode="decimal" data-ligne="${i}" data-lf="ttc" value="${esc(l.ttc??'')}"></label>
+      <span class="lj"><span class="small">${nf2.format(l.montant)} € HT</span><br>${l.frais?'Frais (hors JEH)':`= <b>${j3(l.jeh)}</b> JEH`}</span><button type="button" class="lb" data-lact="dup:${i}" aria-label="Dupliquer">⧉</button><button type="button" class="lb" data-lact="del:${i}" aria-label="Supprimer">✕</button></div></div>`).join('');
+  return `<div class="fld"><label>Détail de la prestation</label>
+  <div class="lnum" style="margin-bottom:8px"><label>Prix d’une JEH HT (€)<input type="number" step="any" inputmode="decimal" data-fprix="${r.id}" value="${esc(isNum(r.prixJeh)?r.prixJeh:'')}" placeholder="${T.prix||'à saisir'}"></label></div>
+  <div class="lgns">${rows||'<div class="small">Ajoutez les phases de l’étude avec leur montant TTC : le HT et le nombre de JEH sont calculés. Ajoutez aussi les frais et, si besoin, des titres de section.</div>'}</div>
+  <div class="ladd"><button type="button" class="b ghost" data-lact="add:jeh">+ Prestation</button><button type="button" class="b ghost" data-lact="add:frais">+ Frais</button><button type="button" class="b ghost" data-lact="add:titre">+ Titre</button></div>
+  <div class="ltot" id="ltot">${totauxHtml(T,r)}</div></div>`;
+}
+function totauxHtml(T,r){const e2=n=>nf2.format(n)+' €';return T.lignes.length?`<span>${nf3.format(Math.round(T.jehTot*1000)/1000)} JEH${T.prix?' à '+e2(T.prix):''}</span><span>Total HT ${e2(T.htBrut)}</span>${T.prec>0?`<span>− factures précédentes ${e2(T.prec)}</span>`:''}<b>TTC ${e2(T.ttc)}</b>${!T.prix&&T.lignes.some(l=>!l.titre&&!l.frais)?'<span class="small warnx">Saisissez le prix d’une JEH pour calculer le nombre de JEH.</span>':''}<span class="small">Le montant TTC de la facture suit ce détail.</span>`:''}
 function genererFacture(id){
   const D=compute(),f=D.fact.find(x=>x.id===id);if(!f)return;
   const e=D.etudes.find(x=>x.num===f.etude),c=D.c,F=c.fact||{},tva=c.tva,e2=n=>nf2.format(n)+' €';
   const manque=['nom','adresse','siret','iban'].filter(k=>!F[k]);
   if(manque.length&&!confirm('Coordonnées de facturation incomplètes (Réglages → Facturation). Générer quand même ?'))return;
   const ref=refFacture(f,e);if(!S.factures[id].ref){S.factures[id].ref=ref;saveRow('factures',id)}
-  const prix=num(e&&e.jeh),L=[];
+  const prix=num(e&&e.jeh),L=[];const TL=totauxFacture(f,D);
+  if(TL.lignes.length){TL.lignes.forEach(l=>L.push(l.titre?['§'+(l.lib||''),'','',null]:l.frais?[l.lib||'Frais','0','0',l.montant]:[l.lib||'',nf3.format(Math.round(l.jeh*1000)/1000),e2(TL.prix),l.montant]))}
+  else{
   if(isNum(f.jehFact)&&num(f.jehFact)>0)L.push([f.prestation||(e&&e.resume)||'Prestation',nf3.format(num(f.jehFact)),e2(prix),num(f.jehFact)*prix]);
   if(isNum(f.fraisFact)&&num(f.fraisFact)>0)L.push(['Frais (laboratoire…)','','',num(f.fraisFact)]);
-  if(!L.length)L.push([f.prestation||(e&&e.resume)||'Prestation','','',num(f.montant)/(1+tva)]);
-  let ht=L.reduce((a,l)=>a+l[3],0);
-  if(f.type==='Solde'&&isNum(f.jehFact)){const prec=D.fact.filter(x=>x.etude===f.etude&&x.id!==id&&(x.de||0)<=(f.de||0)).reduce((a,x)=>a+num(x.montant),0)/(1+tva);if(prec>0){L.push(['Déduction des factures précédentes (HT)','','',-prec]);ht-=prec}}
+  if(!L.length)L.push([f.prestation||(e&&e.resume)||'Prestation','','',num(f.montant)/(1+tva)]);}
+  let ht=L.reduce((a,l)=>a+num(l[3]),0);
+  const jehTot=TL.lignes.length?TL.jehTot:num(f.jehFact);
+  if(f.type==='Solde'&&f.deduire!==false&&(TL.lignes.length||isNum(f.jehFact))){const prec=D.fact.filter(x=>x.etude===f.etude&&x.id!==id&&(x.de||0)<=(f.de||0)).reduce((a,x)=>a+num(x.montant),0)/(1+tva);if(prec>0){L.push(['Déduction des factures précédentes (HT)','','',-prec]);ht-=prec}}
   const tv=ht*tva,ttc=ht+tv,ecart=Math.abs(ttc-num(f.montant))>0.01;
   const ech=f.echeance?fdate(dnum(f.echeance)):(F.delai&&f.de!==null?fdate(f.de+num(F.delai)):'');
   const h=`<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${esc(ref)}</title><style>body{font:13px/1.45 system-ui,sans-serif;color:#111;margin:32px}h1{font-size:22px;margin:0 0 4px;color:#D5197F}table{width:100%;border-collapse:collapse;margin:18px 0}th,td{padding:7px 8px;border-bottom:1px solid #ddd;text-align:left}td.n,th.n{text-align:right}.tot td{border:0}.big{font-size:16px;font-weight:700}.g{display:flex;justify-content:space-between;gap:24px}.muted{color:#666;font-size:11px}.warn{background:#fff3cd;padding:8px;border-radius:6px;margin-bottom:12px}@media print{.warn,.np{display:none}}</style></head><body>
@@ -563,8 +590,8 @@ function genererFacture(id){
   <div class="g"><div><b>${esc(F.nom||'Association')}</b><br>${esc(F.mention||'')}<br>${esc(F.adresse||'')}<br>${esc(F.site||'')} ${esc(F.email||'')}<br><span class="muted">SIRET : ${esc(F.siret||'—')} · APE : ${esc(F.ape||'—')} · TVA intracom. : ${esc(F.tvaIntra||'—')}</span></div>
   <div style="text-align:right"><h1>Facture ${esc((f.type||'').toLowerCase()==='acompte'?'d’acompte':(f.type||'').toLowerCase()==='solde'?'de solde':'intermédiaire')}</h1>Réf. : <b>${esc(ref)}</b><br>Émise le ${f.de!==null?fdate(f.de):fdate(TODAY)}${ech?'<br>Échéance : '+ech:''}<br>Étude n° ${esc(f.etude||'')}</div></div>
   <p style="margin-top:22px">À l’attention de :<br><b>${esc((e&&e.client)||'')}</b><br>${esc((e&&e.adresse)||'')}</p>
-  <table><thead><tr><th>Désignation</th><th class="n">Nombre de JEH</th><th class="n">Prix unitaire HT</th><th class="n">Montant HT</th></tr></thead><tbody>${L.map(l=>`<tr><td>${esc(l[0])}</td><td class="n">${l[1]}</td><td class="n">${l[2]}</td><td class="n">${e2(l[3])}</td></tr>`).join('')}</tbody>
-  <tbody class="tot"><tr><td colspan="3" class="n">Total HT</td><td class="n">${e2(ht)}</td></tr><tr><td colspan="3" class="n">TVA (${nf2.format(tva*100).replace(/,00$/,'')} %) — TVA sur les encaissements</td><td class="n">${e2(tv)}</td></tr><tr><td colspan="3" class="n big">Total TTC à payer</td><td class="n big">${e2(ttc)}</td></tr></tbody></table>
+  <table><thead><tr><th>Désignation</th><th class="n">Nombre de JEH</th><th class="n">Prix unitaire HT</th><th class="n">Montant HT</th></tr></thead><tbody>${L.map(l=>l[3]===null?`<tr><td colspan="4"><b>${esc(l[0].slice(1))}</b></td></tr>`:`<tr><td>${esc(l[0])}</td><td class="n">${l[1]}</td><td class="n">${l[2]}</td><td class="n">${e2(l[3])}</td></tr>`).join('')}</tbody>
+  <tbody class="tot">${jehTot>0?`<tr><td colspan="3" class="n">Nombre total de JEH</td><td class="n">${nf3.format(Math.round(jehTot*1000)/1000)}</td></tr>`:''}<tr><td colspan="3" class="n">Total HT</td><td class="n">${e2(ht)}</td></tr><tr><td colspan="3" class="n">TVA (${nf2.format(tva*100).replace(/,00$/,'')} %) — TVA sur les encaissements</td><td class="n">${e2(tv)}</td></tr><tr><td colspan="3" class="n big">Total TTC à payer</td><td class="n big">${e2(ttc)}</td></tr></tbody></table>
   <p><b>Modalités de paiement</b>${F.contact?' : '+esc(F.contact):''}<br>Virement — IBAN : ${esc(F.iban||'—')} · BIC : ${esc(F.bic||'—')}${F.banque?' · '+esc(F.banque):''}${F.ordre?'<br>Chèques à l’ordre de '+esc(F.ordre):''}</p>
   <p class="muted">Aucun escompte n’est accordé pour paiement anticipé. En cas de retard de paiement, conformément à la loi 2008-776 du 4 août 2008, il sera appliqué des pénalités au taux de 3 fois le taux d’intérêt légal en vigueur et, en application des articles L441-3 et L441-6 du code de commerce, une indemnité forfaitaire de recouvrement de 40 euros. Cette pénalité court à compter de la date d’échéance jusqu’au jour du paiement complet des sommes dues.</p>
   <p class="np"><button onclick="print()">Imprimer / enregistrer en PDF</button></p></body></html>`;
@@ -663,7 +690,7 @@ function edBody(r,D){
   const c=ED.col,cf=D.c;
   if(c==='clients')return fld('Nom du client',inT(c,r,'nom'))+fld('Contact (nom, fonction)',inT(c,r,'contact'))+`<div class="f2">${fld('E-mail',inT(c,r,'email'))}${fld('Téléphone',inT(c,r,'tel'))}</div>`+fld('Adresse de facturation',inT(c,r,'adresse'))+fld('SIRET',inT(c,r,'siret'))+`<div class="f2">${fld('Collaboration',sel(c,r,'collab',['Ponctuelle','Récurrente']))}${fld('Facturation périodique',sel(c,r,'cadence',['Mensuelle','Trimestrielle','Semestrielle','Annuelle']))}</div>`+fld('Notes',inT(c,r,'notes'))+`<div class="small" style="margin-top:6px">Collaboration, facturation périodique et adresse s’appliquent aux études de ce client qui ne les précisent pas.</div>`;
   if(c==='etudes')return fld('Client',`<input list="cll" ${attr(c,r.id,'client')} value="${esc(r.client)}" autocomplete="off"><datalist id="cll">${D.clients.map(x=>`<option value="${esc(x.nom)}">`).join('')}</datalist>`)+fld('N° d’étude',inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut de l’étude',sel(c,r,'statut',cf.statuts))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div>`+fld('Dont frais HT (labo…, hors JEH)',inN(c,r,'frais'))+fld('Adresse de facturation du client',inT(c,r,'adresse'))+`<div class="f2">${fld('Collaboration',sel(c,r,'collab',['Ponctuelle','Récurrente']))}${fld('Facturation périodique',sel(c,r,'cadence',['Mensuelle','Trimestrielle','Semestrielle','Annuelle']))}</div>`+fld('Date de création',inD(c,r,'date'));
-  if(c==='factures')return fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Type',sel(c,r,'type',F_TYPES,false))}${fld('Montant TTC',inN(c,r,'montant'))}</div><div class="f2">${fld('Date d’émission',inD(c,r,'date'))}${fld('Échéance',inD(c,r,'echeance'))}</div><div class="f2">${fld('État',sel(c,r,'etat',F_ETATS,false))}${fld('Payée le',inD(c,r,'datePaiement'))}</div>`+fld('Prestation (texte de la facture)',inT(c,r,'prestation'))+`<div class="f2">${fld('JEH facturées sur cette facture',inN(c,r,'jehFact'))}${fld('Frais HT (labo…)',inN(c,r,'fraisFact'))}</div>`+(r.id?`<button class="b" type="button" data-pdf="${r.id}" style="margin-top:10px">Générer la facture (PDF)</button>`:'');
+  if(c==='factures')return fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Type',sel(c,r,'type',F_TYPES,false))}${fld('Montant TTC',inN(c,r,'montant'))}</div><div class="f2">${fld('Date d’émission',inD(c,r,'date'))}${fld('Échéance',inD(c,r,'echeance'))}</div><div class="f2">${fld('État',sel(c,r,'etat',F_ETATS,false))}${fld('Payée le',inD(c,r,'datePaiement'))}</div>`+editeurLignes(r,D)+(r.type==='Solde'?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" data-deduire="${r.id}" ${r.deduire===false?'':'checked'}> Déduire les factures précédentes de l’étude</label>`:'')+(r.id?`<button class="b" type="button" data-pdf="${r.id}" style="margin-top:10px">Générer la facture (PDF)</button>`:'');
   return fld('Prénom',`<input list="pl" ${attr(c,r.id,'prenom')} value="${esc(r.prenom)}" autocomplete="off"><datalist id="pl">${persons(D).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`)+fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Date',inD(c,r,'date'))}${fld('Statut',sel(c,{id:r.id,statut:r.stat},'statut',BV_STAT,false))}</div><div class="f2">${fld('Minutes travaillées',inN(c,r,'min'))}${fld('Nb de personnes',inN(c,r,'nb'))}</div>${fld('JEH intervenant HT',inN(c,r,'jeh'))}${fld('Note',inT(c,r,'note'))}`;
 }
 const ED_TITLE={clients:['Nouveau client','Fiche client'],etudes:['Nouvelle étude','Modifier l’étude'],factures:['Nouvelle facture','Modifier la facture'],temps:['Nouvelle ligne de temps','Modifier la ligne de temps']};
@@ -770,6 +797,24 @@ document.addEventListener('change',e=>{
   }
 });
 document.addEventListener('click',e=>{const x=e.target.closest('[data-ed]');if(x&&x.dataset.ed==='close'){closeEdit();return}});
+// Lignes de facture : saisie en direct, montant TTC recalculé
+function majMontantFacture(id){const D=compute(),f=D.fact.find(x=>x.id===id);if(!f||!Array.isArray(S.factures[id].lignes)||!S.factures[id].lignes.length)return;
+  const T=totauxFacture(f,D);S.factures[id].montant=Math.round(T.ttc*100)/100;saveRow('factures',id);
+  const box=$('#ltot');if(box)box.innerHTML=totauxHtml(T,f);const m=document.querySelector('#edit [data-f="montant"]');if(m)m.value=S.factures[id].montant;
+  document.querySelectorAll('#edit .lgn').forEach((el,i)=>{const j=el.querySelector('.lj b'),h=el.querySelector('.lj .small');if(T.lignes[i]){if(j)j.textContent=nf3.format(Math.round(T.lignes[i].jeh*1000)/1000);if(h)h.textContent=nf2.format(T.lignes[i].montant)+' € HT'}})}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.ligne!==undefined&&ED&&ED.col==='factures'){
+  const L=S.factures[ED.id].lignes,i=+t.dataset.ligne,k=t.dataset.lf;if(!L||!L[i])return;L[i][k]=t.type==='number'?(t.value===''?null:Number(t.value)):t.value;majMontantFacture(ED.id);return}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.fprix&&S.factures[t.dataset.fprix]){S.factures[t.dataset.fprix].prixJeh=t.value===''?null:Number(t.value);majMontantFacture(t.dataset.fprix);const T=totauxFacture(compute().fact.find(x=>x.id===t.dataset.fprix),compute());document.querySelectorAll('#edit .lgn').forEach((el,i)=>{const j=el.querySelector('.lj b');if(j&&T.lignes[i])j.textContent=nf3.format(Math.round(T.lignes[i].jeh*1000)/1000)})}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.deduire&&S.factures[t.dataset.deduire]){S.factures[t.dataset.deduire].deduire=t.checked;saveRow('factures',t.dataset.deduire);majMontantFacture(t.dataset.deduire);render()}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-lact]');if(!b||!ED||ED.col!=='factures')return;e.preventDefault();
+  const f=S.factures[ED.id];if(!Array.isArray(f.lignes))f.lignes=[];const [a,x]=b.dataset.lact.split(':'),L=f.lignes;
+  if(a==='add')L.push(x==='titre'?{titre:true,lib:''}:x==='frais'?{lib:'Frais de laboratoire',ttc:null,frais:true}:{lib:'',ttc:null});
+  if(a==='dup'){const i=+x;if(L[i].titre){let j=i+1;while(j<L.length&&!L[j].titre)j++;const bloc=JSON.parse(JSON.stringify(L.slice(i,j)));
+      const m=/^(.*?)(\d+)\s*$/.exec(bloc[0].lib||'');if(m)bloc[0].lib=m[1]+(+m[2]+1);L.splice(j,0,...bloc)} // section entière, numéro incrémenté (Échantillon 1 → 2)
+    else L.splice(i+1,0,JSON.parse(JSON.stringify(L[i])))}
+  if(a==='del')L.splice(+x,1);
+  saveRow('factures',ED.id);majMontantFacture(ED.id);openEdit(ED.col,ED.id,ED.isNew);render();
+  if(a==='add'){const ins=document.querySelectorAll('#edit [data-lf="lib"]');const z=ins[ins.length-1];if(z)z.focus()}});
 document.addEventListener('input',e=>{const t=e.target;if(t.id==='q'){FLT[t.dataset.q].q=t.value;const l=$('#lst');if(l)l.innerHTML=({etudes:listEtudes,factures:listFact,temps:listTemps})[t.dataset.q](compute())}});
 document.addEventListener('click',e=>{const g=e.target.closest('[data-pdf]');if(g){e.preventDefault();genererFacture(g.dataset.pdf)}});
 document.addEventListener('click',e=>{const h=e.target.closest('[data-fsort]');if(h){FSORT=FSORT===h.dataset.fsort?null:h.dataset.fsort;render()}});
