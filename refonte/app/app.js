@@ -155,10 +155,15 @@
     return heading("Études", data.etudes.length + " études",
       '<div class="toolbar"><input class="search" id="search" placeholder="Rechercher une étude…" value="' + escapeHtml(recherche) +
       '"><button class="ghost action" id="addClient">＋ Client</button><button class="action" id="addStudy">＋ Étude</button></div>') + puces +
-      '<section class="listbox rows">' + (rows.map(s => '<button type="button" class="item invoice-button" data-etude="' + s.id + '"><div class="item-main"><strong>' + escapeHtml(s.num) + " · " + escapeHtml(s.clientLibelle) +
-        '</strong><small>' + escapeHtml(AL.get(s.id)?.facture || "—") + (AL.get(s.id)?.alertes.length ? ' · <span class="accent">⚠ ' + escapeHtml(AL.get(s.id).alertes[0].texte) + (AL.get(s.id).alertes.length > 1 ? " (+" + (AL.get(s.id).alertes.length - 1) + ")" : "") + "</span>" : "") + '</small></div><span class="pill ' +
-        (s.statut === "Archivée" ? "green" : s.statut === "Devis envoyé" ? "pink" : "") + '">' + escapeHtml(s.statut) +
-        '</span><div class="amount">' + money(s.montant / 1.2) + " HT</div></button>").join("") || '<div class="empty">Aucune étude. Commencez par « ＋ Client » puis « ＋ Étude ».</div>') + "</section>" +
+      '<section class="listbox rows">' + (rows.map(s => {
+        const relation = resoudreRelation(data.clients.find(c => c.id === s.clientId), s);
+        const relationLabel = relation.anomalie ? "Relation à vérifier" : relation.type === "longue_duree" ? "Longue durée" : "Ponctuelle";
+        const relationInfo = relationLabel + (relation.cadenceFacturation ? " · " + relation.cadenceFacturation : "");
+        return '<button type="button" class="item invoice-button" data-etude="' + s.id + '"><div class="item-main"><strong>' + escapeHtml(s.num) + " · " + escapeHtml(s.clientLibelle) +
+          '</strong><small>' + escapeHtml(relationInfo) + " · " + escapeHtml(AL.get(s.id)?.facture || "—") + (AL.get(s.id)?.alertes.length ? ' · <span class="accent">⚠ ' + escapeHtml(AL.get(s.id).alertes[0].texte) + (AL.get(s.id).alertes.length > 1 ? " (+" + (AL.get(s.id).alertes.length - 1) + ")" : "") + "</span>" : "") + '</small></div><span class="pill ' +
+          (s.statut === "Archivée" ? "green" : s.statut === "Devis envoyé" ? "pink" : "") + '">' + escapeHtml(s.statut) +
+          '</span><div class="amount">' + money(s.montant / 1.2) + " HT</div></button>";
+      }).join("") || '<div class="empty">Aucune étude. Commencez par « ＋ Client » puis « ＋ Étude ».</div>') + "</section>" +
       heading("Clients", data.clients.length + " clients") + '<section class="listbox rows">' + data.clients.map(c => {
         const alerte = analyserAlerteClient(c);
         const cadence = c.cadenceFacturation ? " · " + ({ mensuelle: "mensuelle", trimestrielle: "trimestrielle", semestrielle: "semestrielle", annuelle: "annuelle" }[c.cadenceFacturation] || "cadence inconnue") : "";
