@@ -104,3 +104,38 @@ test("refuse les types de commandes non supportés sans toucher à l'état", () 
   assert.equal(r.valide, false);
   assert.equal(r.etat, initial);
 });
+
+test("refuse une modification qui invalide une règle métier", () => {
+  const initial = {
+    ...etatBase(),
+    membres: [{ id: "membre_001", nomComplet: "Alice" }],
+    etudes: [{
+      id: "etude_0001",
+      clientId: "client_001",
+      num: "HAC-001",
+      date: "2026-11-01",
+      client: "Alpha",
+      statut: "Convention signée",
+      montant: 1200,
+      jeh: 4,
+    }],
+    interventions: [{
+      id: "interv_001",
+      etudeId: "etude_0001",
+      membreId: "membre_001",
+      date: "2026-11-02",
+      statut: "Pas payé",
+      minutesIndividuelles: 480,
+      prixJehHt: 250,
+    }],
+  };
+  const commande = preparerModification({
+    etat: initial,
+    collection: "interventions",
+    id: "interv_001",
+    modifications: { statut: "Statut inconnu" },
+  }).commande;
+  const r = appliquerCommande(initial, commande);
+  assert.equal(r.valide, false);
+  assert.equal(r.etat, initial);
+});
