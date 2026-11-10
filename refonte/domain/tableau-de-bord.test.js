@@ -6,8 +6,8 @@ const base = {
   dateFin: "2026-11-10",
   nombreMois: 3,
   etudes: [
-    { id: "etude_0001", montant: 5000 },
-    { id: "etude_0002", montant: 2000 },
+    { id: "etude_0001", statut: "Convention signée", montant: 6000 },
+    { id: "etude_0002", statut: "Faisabilité", montant: 2400 },
   ],
   factures: [
     { id: "facture_001", etudeId: "etude_0001", montant: 2000, etat: "Payée" },
@@ -24,10 +24,10 @@ const base = {
 
 test("sépare CA signé, facturé et encaissé", () => {
   const r = calculerTableauDeBord(base);
-  assert.equal(r.caSigne, 7000);
-  assert.equal(r.montantFacture, 4500);
-  assert.equal(r.encaisse, 3500);
-  assert.equal(r.resteAEncaisser, 1000);
+  assert.equal(r.caSigne, 5000);
+  assert.equal(r.montantFacture, 3750);
+  assert.equal(r.encaisse, 2916.666666666667);
+  assert.equal(r.resteAEncaisser, 833.333333333333);
 });
 
 test("ne compte que les JEH réellement travaillées", () => {
@@ -67,13 +67,34 @@ test("signale une facture orpheline au lieu de l'ignorer", () => {
   assert.ok(r.anomalies.some(a => a.raison === "Facture sans lien d'étude valide"));
 });
 
-test("ne masque pas un montant d'étude absent", () => {
+test("ne masque pas un montant d'étude signée absent", () => {
   const r = calculerTableauDeBord({
     ...base,
-    etudes: [...base.etudes, { id: "etude_0003" }],
+    etudes: [...base.etudes, { id: "etude_0003", statut: "Convention signée" }],
   });
   assert.equal(r.caSigne, null);
   assert.equal(r.valide, false);
+});
+
+test("n'ajoute pas une étude non signée au CA signé", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    etudes: [
+      { ...base.etudes[0], statut: "Devis envoyé" },
+      base.etudes[1],
+    ],
+  });
+  assert.equal(r.caSigne, 0);
+});
+
+test("convertit les factures TTC en montants HT avec le taux de TVA", () => {
+  const r = calculerTableauDeBord({ ...base, tva: 0.1 });
+  assert.equal(r.montantFacture, 4090.909090909091);
+  assert.equal(r.encaisse, 3181.818181818182);
+});
+
+test("refuse un taux de TVA invalide", () => {
+  assert.equal(calculerTableauDeBord({ ...base, tva: 1.2 }).valide, false);
 });
 
 test("bloque les paramètres de période invalides", () => {
