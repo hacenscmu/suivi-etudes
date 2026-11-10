@@ -211,3 +211,13 @@ test("réessaie avec le même opId si la réponse réseau est perdue après écr
   assert.equal(serveur.lireRevision(), 1);
   assert.deepEqual(await file.inspecter(), []);
 });
+
+test("refuse de mettre en file une écriture dans la collection historique temps", async () => {
+  const store = stockage();
+  const file = creerFileHorsLigne({ stockage: store, api: apiOk() });
+  await assert.rejects(file.ajouter({
+    type: "save", collection: "temps", id: "temps_0001",
+    record: { id: "temps_0001" }, opId: "op_queue_temps_001", expectedVersion: 0,
+  }), e => e.code === "READ_ONLY_COLLECTION");
+  assert.deepEqual(store.valeur(), []);
+});
