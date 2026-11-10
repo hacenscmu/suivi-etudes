@@ -23,7 +23,7 @@ function setup() {
 test("le client et le serveur v3 dialoguent pour lire et modifier une fiche", async () => {
   const { client } = setup();
   const avant = await client.loadAll();
-  assert.equal(avant.collections.clients.client_0001.raisonSociale, "Client A");
+  assert.equal(avant.collections.clients[0].raisonSociale, "Client A");
   const saved = await client.save({
     collection: "clients",
     id: "client_0001",
@@ -33,7 +33,7 @@ test("le client et le serveur v3 dialoguent pour lire et modifier une fiche", as
   });
   assert.equal(saved.data._v, 2);
   const apres = await client.loadAll();
-  assert.equal(apres.collections.clients.client_0001.raisonSociale, "Client B");
+  assert.equal(apres.collections.clients[0].raisonSociale, "Client B");
 });
 
 test("le client reçoit un conflit sans écraser la version concurrente", async () => {
@@ -48,7 +48,7 @@ test("le client reçoit un conflit sans écraser la version concurrente", async 
     record: { id: "client_0001", raisonSociale: "Écrasement interdit" },
     opId: "op_integration_save_003", expectedVersion: 1,
   }), e => e.code === "VERSION_CONFLICT");
-  assert.equal((await client.loadAll()).collections.clients.client_0001.raisonSociale, "Version 2");
+  assert.equal((await client.loadAll()).collections.clients[0].raisonSociale, "Version 2");
 });
 
 test("le client propage un tombstone après suppression logique", async () => {
@@ -59,7 +59,8 @@ test("le client propage un tombstone après suppression logique", async () => {
   });
   assert.equal(deleted.data._deleted, true);
   const state = await client.loadAll();
-  assert.equal(state.collections.clients.client_0001._deleted, true);
+  assert.equal(state.tombstones.clients.client_0001, 2);
+  assert.equal(state.collections.clients.length, 0);
 });
 
 test("le client n'envoie jamais d'écriture dans temps historique", async () => {
