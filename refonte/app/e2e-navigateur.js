@@ -1,4 +1,4 @@
-// Test de bout en bout dans un vrai navigateur (Playwright requis, hors CI) :
+// Test de bout en bout dans Chromium (CI et local) :
 // (python3 -m http.server 8766, à la racine du dépôt) puis node refonte/app/e2e-navigateur.js
 // Le serveur Apps Script est le vrai Code.gs exécuté par le simulateur ; les appels réseau sont interceptés.
 const {chromium}=require('playwright');const path=require('path');
@@ -10,7 +10,7 @@ const srv=creerServeurAppsScriptSimule({token:TOKEN,donnees:{
  etudes:{etude_0001:{id:'etude_0001',clientId:'client_0001',client:'Soléa',num:'HAC-001',date:'2026-09-01',statut:'En réalisation',montant:1200,jeh:400,_v:1}},
  factures:{facture_0001:{id:'facture_0001',etudeId:'etude_0001',type:'Acompte',etat:'Émise',montant:600,_v:1}},
  interventions:{interv_0001:{id:'interv_0001',etudeId:'etude_0001',membreId:'membre_0001',date:'2026-10-01',statut:'Payé',minutesIndividuelles:960,prixJehHt:300,_v:1}}}});
-const ok=(n,c)=>console.log((c?'✔ ':'✘ ')+n);
+let failures=0;const ok=(n,c)=>{if(!c)failures++;console.log((c?'✔ ':'✘ ')+n);};
 (async()=>{const b=await chromium.launch();const ctx=await b.newContext();const p=await ctx.newPage();const errs=[];
 p.on('pageerror',e=>errs.push(e.message));p.on('dialog',d=>d.accept());
 let offline=false;
@@ -50,4 +50,4 @@ const fa=Object.values(D().factures).find(f=>f.etudeId===et.id);ok('facture cré
 await p.setViewportSize({width:390,height:800});await p.waitForTimeout(200);
 ok('pas de défilement horizontal sur téléphone',await p.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
 ok('aucune erreur JavaScript',errs.length===0||console.log(errs));
-await b.close();})();
+await b.close();if(failures)process.exitCode=1;})();
