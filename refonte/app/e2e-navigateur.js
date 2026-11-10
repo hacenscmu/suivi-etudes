@@ -1,4 +1,4 @@
-// Test de bout en bout dans un vrai navigateur (Playwright requis, hors CI) :
+// Test de bout en bout dans Chromium (CI et local) :
 // (python3 -m http.server 8766, à la racine du dépôt) puis node refonte/app/e2e-navigateur.js
 // Le serveur Apps Script est le vrai Code.gs exécuté par le simulateur ; les appels réseau sont interceptés.
 const {chromium}=require('playwright');const path=require('path');
@@ -10,7 +10,7 @@ const srv=creerServeurAppsScriptSimule({token:TOKEN,donnees:{
  etudes:{etude_0001:{id:'etude_0001',clientId:'client_0001',client:'Soléa',num:'HAC-001',date:'2026-09-01',statut:'En réalisation',montant:1200,jeh:400,_v:1}},
  factures:{facture_0001:{id:'facture_0001',etudeId:'etude_0001',type:'Acompte',etat:'Émise',montant:600,_v:1}},
  interventions:{interv_0001:{id:'interv_0001',etudeId:'etude_0001',membreId:'membre_0001',date:'2026-10-01',statut:'Payé',minutesIndividuelles:960,prixJehHt:300,_v:1}}}});
-const ok=(n,c)=>console.log((c?'✔ ':'✘ ')+n);
+let failures=0;const ok=(n,c)=>{if(!c)failures++;console.log((c?'✔ ':'✘ ')+n);};
 (async()=>{const b=await chromium.launch();const ctx=await b.newContext();const p=await ctx.newPage();const errs=[];
 p.on('pageerror',e=>errs.push(e.message));p.on('dialog',d=>d.accept());
 let offline=false;
@@ -33,11 +33,11 @@ ok('rechargement hors ligne : données du cache, modif en attente visible',(awai
 offline=false;await p.click('#tabs [data-page="Réglages"]');await p.click('#syncNow');await p.waitForTimeout(600);
 ok('retour réseau : modif envoyée',srv.lireDonnees().factures.facture_0001.etat==='Émise'&&srv.lireDonnees().factures.facture_0001._v===3);
 const D=()=>srv.lireDonnees();
-await p.click('#tabs [data-page="Études"]');await p.click('#addClient');await remplir({raisonSociale:'Novalys',relationType:'longue_duree'});
-const cli=Object.values(D().clients).find(c=>c.raisonSociale==='Novalys');ok('client créé (récurrent)',cli&&cli.relationType==='longue_duree');
+await p.click('#tabs [data-page="Études"]');await p.click('#addClient');await remplir({raisonSociale:'Novalys',relationType:'longue_duree',cadenceFacturation:'mensuelle',dateProchaineFacture:'2026-10-10'});
+const cli=Object.values(D().clients).find(c=>c.raisonSociale==='Novalys');ok('client créé (longue durée + cadence)',cli&&cli.relationType==='longue_duree'&&cli.cadenceFacturation==='mensuelle');await p.click('#tabs [data-page="Accueil"]');ok('alerte de facture périodique affichée',(await p.textContent('#content')).includes('Facture périodique à émettre'));await p.click('#tabs [data-page="Études"]');
 await p.click('#addStudy');await remplir({clientId:cli.id,num:'HAC-002',statut:'Convention signée',montant:1428,jeh:400,frais:70});
 const et=Object.values(D().etudes).find(e=>e.num==='HAC-002');ok('étude créée avec prix JEH et frais',et&&et.jeh===400&&et.frais===70&&et.clientId===cli.id);
-await p.click('[data-etude="'+et.id+'"]');await remplir({statut:'En réalisation'});ok('étude modifiée',D().etudes[et.id].statut==='En réalisation'&&D().etudes[et.id]._v===2);
+await p.click('[data-etude="'+et.id+'"]');ok('rapport d’étude affiché',(await p.textContent('#content')).includes('Finances'));await p.click('[data-modifier-etude]');await remplir({statut:'En réalisation'});ok('étude modifiée',D().etudes[et.id].statut==='En réalisation'&&D().etudes[et.id]._v===2);
 await p.click('#tabs [data-page="Équipe"]');await p.click('#addMembre');await remplir({nomComplet:'Lucas Bernard'});
 const mb=Object.values(D().membres).find(m=>m.nomComplet==='Lucas Bernard');ok('membre créé',!!mb);
 await p.click('#addInterv');await remplir({etudeId:et.id,membreId:mb.id,statut:'Pas payé',duree:120,nb:2,prixJehHt:300});
@@ -50,4 +50,4 @@ const fa=Object.values(D().factures).find(f=>f.etudeId===et.id);ok('facture cré
 await p.setViewportSize({width:390,height:800});await p.waitForTimeout(200);
 ok('pas de défilement horizontal sur téléphone',await p.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth));
 ok('aucune erreur JavaScript',errs.length===0||console.log(errs));
-await b.close();})();
+await b.close();if(failures)process.exitCode=1;})();

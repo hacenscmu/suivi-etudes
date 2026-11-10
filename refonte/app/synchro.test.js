@@ -116,3 +116,13 @@ test("BV et sa ligne enregistrés ensemble, dans l'ordre parent → enfant", asy
   assert.equal(r.envoi.restantes, 0);
   assert.equal(serveur.lireDonnees().lignesBV.ligne_00000001.jeh, 0.5);
 });
+
+test("réglages : config/main créée puis modifiée sur le serveur", async () => {
+  const { s, serveur } = monter();
+  await s.demarrer();
+  assert.equal((await s.enregistrerConfig({ tva: 0.2, mandats: [{ nom: "2026-2027", debut: "2026-09-01" }] })).valide, true);
+  assert.equal(serveur.lireDonnees().config.main.mandats[0].nom, "2026-2027");
+  await s.enregistrerConfig({ ...s.lireConfig(), relance1: 5 });
+  assert.equal(serveur.lireDonnees().config.main.relance1, 5);
+  assert.equal(serveur.lireDonnees().config.main._v, 2);
+});

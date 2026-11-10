@@ -2,12 +2,15 @@
 (() => {
   "use strict";
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
-  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3 } = window.HAC;
+  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, EN_COURS, ALERTES, calculerPaie } = window.HAC;
+  let filtreEtudes = "En cours";
+  let etudeOuverte = null;
+  const alertesParEtude = () => calculerAlertes({ etudes: donneesVues().etudes, factures: donneesVues().factures, interventions: donneesVues().interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
   // ---- Mode essai : un serveur v3 simulé sur ce téléphone, avec des données d'exemple. Aucune donnée réelle. ----
   const JETON_ESSAI = "essai-local-hac-v3";
   const v1 = o => Object.fromEntries(o.map(x => [x.id, { ...x, _v: 1 }]));
   const EXEMPLE = {
-    clients: v1([{ id: "client_0001", raisonSociale: "Soléa Industrie", relationType: "ponctuelle" }, { id: "client_0002", raisonSociale: "Novalys", relationType: "longue_duree" }]),
+    clients: v1([{ id: "client_0001", raisonSociale: "Soléa Industrie", relationType: "ponctuelle" }, { id: "client_0002", raisonSociale: "Novalys", relationType: "longue_duree", cadenceFacturation: "mensuelle", dateProchaineFacture: "2026-10-10" }]),
     membres: v1([{ id: "membre_0001", nomComplet: "Camille Martin", role: "Cheffe de projet" }, { id: "membre_0002", nomComplet: "Lucas Bernard" }]),
     etudes: v1([{ id: "etude_0001", clientId: "client_0001", client: "Soléa Industrie", num: "HAC-2026-018", date: "2026-09-04", statut: "En réalisation", montant: 5040, jeh: 400 },
       { id: "etude_0002", clientId: "client_0002", client: "Novalys", num: "HAC-2026-021", date: "2026-11-03", statut: "Devis envoyé", montant: 1800, jeh: 350 }]),
@@ -38,8 +41,24 @@
   let current = "Accueil";
   let recherche = "";
   const money = n => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n || 0);
+  const dateFr = s => s ? String(s).split("-").reverse().join("/") : "";
   const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const view = () => construireVueApplication(data, { dateFin: aujourdHui(), nombreMois: 6, tva: synchro?.lireConfig()?.tva ?? 0.2 });
+  // ---- Mandats : la fin d'un mandat = veille du suivant (comme en v12) ----
+  let mandatSel = (() => { try { return localStorage.getItem("hac.v3.mandat") || "Tous les mandats"; } catch { return "Tous les mandats"; } })();
+  const mandats = () => [...(synchro?.lireConfig()?.mandats || [])].filter(m => m && m.nom && m.debut).sort((a, b) => a.debut.localeCompare(b.debut));
+  const mandatDe = date => { if (!date) return ""; let r = ""; for (const m of mandats()) if (date >= m.debut && (!m.fin || date <= m.fin)) r = m.nom; return r; };
+  // Vue d'un mandat : ses études, avec leurs factures et interventions (liens toujours cohérents).
+  const donneesVues = () => {
+    if (mandatSel === "Tous les mandats" || !mandats().some(m => m.nom === mandatSel)) return data;
+    const ids = new Set(data.etudes.filter(e => mandatDe(e.date) === mandatSel).map(e => e.id));
+    return { ...data, etudes: data.etudes.filter(e => ids.has(e.id)), factures: data.factures.filter(f => ids.has(f.etudeId)), interventions: data.interventions.filter(i => ids.has(i.etudeId)) };
+  };
+  function selecteurMandat() {
+    const el = document.getElementById("mandatSel"); if (!el) return;
+    el.innerHTML = ["Tous les mandats", ...mandats().map(m => m.nom)].map(n => '<option' + (n === mandatSel ? " selected" : "") + ">" + escapeHtml(n) + "</option>").join("");
+    el.onchange = () => { mandatSel = el.value; try { localStorage.setItem("hac.v3.mandat", mandatSel); } catch {} render(); };
+  }
+  const view = () => construireVueApplication(donneesVues(), { dateFin: aujourdHui(), nombreMois: 6, tva: synchro?.lireConfig()?.tva ?? 0.2 });
 
   function nav() {
     ["tabs", "mobileTabs"].forEach(id => {
@@ -49,7 +68,7 @@
       ).join("");
     });
     document.querySelectorAll("[data-page]").forEach(button => {
-      button.addEventListener("click", () => { current = button.dataset.page; render(); });
+      button.addEventListener("click", () => { current = button.dataset.page; etudeOuverte = null; render(); });
     });
   }
 
@@ -79,7 +98,21 @@
         escapeHtml(member?.nomComplet || "Intervenant") + " · " + escapeHtml(study?.num || "Étude") +
         " · " + money(intervention?.prixJehHt) + " HT/JEH</small></div></div>";
     }).join("");
-    const alerts = alertesFactures + alertesJeh;
+    const AL = alertesParEtude();
+    const parEtude = donneesVues().etudes.map(e => ({ e, a: AL.get(e.id)?.alertes || [] })).filter(x => x.a.length);
+    const alertsEtudes = parEtude.map(({ e, a }) => '<button type="button" class="alert invoice-button" data-etude="' + e.id + '"><div class="alert-icon">' + a.length + '</div><div><strong>' +
+      escapeHtml(nomEtude(e)) + "</strong><small>" + a.map(x => escapeHtml(x.texte)).join(" · ") + "</small></div></button>").join("");
+    const alertesClients = data.clients.flatMap(client => {
+      const r = analyserAlerteClient(client);
+      if (r.anomalie) return [{ client, texte: "Renseigner la date de référence de facturation" }];
+      if (r.alerteActivable && r.prochaineEcheance <= aujourdHui()) {
+        return [{ client, texte: "Facture périodique à émettre · échéance du " + dateFr(r.prochaineEcheance) }];
+      }
+      return [];
+    });
+    const alertsClients = alertesClients.map(({ client, texte }) => '<button type="button" class="alert invoice-button" data-client="' + client.id + '"><div class="alert-icon">!</div><div><strong>' +
+      escapeHtml(client.raisonSociale || "Client") + "</strong><small>" + escapeHtml(texte) + "</small></div></button>").join("");
+    const alerts = alertsEtudes + alertsClients;
     return '<div class="stats">' +
       '<div class="stat"><div class="label">JEH travaillées · étudiants</div><strong>' + (d.totalJehTravaillees ?? "—").toLocaleString?.("fr-FR") + '</strong><small>Interventions réalisées uniquement</small></div>' +
       '<div class="stat"><div class="label">Chiffre d’affaires signé HT</div><strong>' + money(d.caSigne) + '</strong><small>' + d.nombreEtudes + " études suivies</small></div>" +
@@ -92,20 +125,30 @@
       '</div></section><section class="panel"><h3>Encaissement</h3><div class="sub">Part du CA signé déjà encaissée</div><div class="ring-wrap"><div class="ring" style="background:conic-gradient(var(--pink) 0 ' +
       percent + '%,#f4eaf0 ' + percent + '% 100%)"></div><div class="ring-info"><strong>' + money(d.encaisse) + '</strong><small>sur ' + money(d.caSigne) +
       ' HT signés</small></div></div><div class="sub">' + money(d.resteAEncaisser) + " HT restent à encaisser</div></section></div>" +
-      heading("À surveiller", "Factures et suivis en cours") +
-      '<section class="panel">' + (alerts || '<div class="empty">Aucune facture en attente.</div>') + "</section>";
+      heading("Alertes à traiter", (parEtude.length + alertesClients.length) + " élément(s) concerné(s)") +
+      '<section class="panel">' + (alerts || '<div class="empty">Aucune alerte. Tout est à jour.</div>') + "</section>";
   }
 
   function studies(v) {
-    const rows = v.listes.etudes.filter(s => [s.num, s.clientLibelle, s.statut].join(" ").toLowerCase().includes(recherche.toLowerCase()));
+    const AL = alertesParEtude();
+    const FILTRES = { "En cours": s => EN_COURS.includes(s.statut), "Archivées": s => s.statut === "Archivée", "Refusées": s => s.statut === "Refusé / sans suite", "Alertes": s => (AL.get(s.id)?.alertes || []).length > 0, "Toutes": () => true };
+    const rows = v.listes.etudes.filter(FILTRES[filtreEtudes]).filter(s => [s.num, s.clientLibelle, s.statut].join(" ").toLowerCase().includes(recherche.toLowerCase()));
+    const puces = '<div class="toolbar" style="flex-wrap:wrap;margin-bottom:10px">' + Object.keys(FILTRES).map(k => '<button type="button" class="pill ' + (k === filtreEtudes ? "pink" : "") + '" data-filtre="' + k + '">' + k +
+      " (" + v.listes.etudes.filter(FILTRES[k]).length + ")</button>").join("") + "</div>";
     return heading("Études", data.etudes.length + " études",
       '<div class="toolbar"><input class="search" id="search" placeholder="Rechercher une étude…" value="' + escapeHtml(recherche) +
-      '"><button class="ghost action" id="addClient">＋ Client</button><button class="action" id="addStudy">＋ Étude</button></div>') +
+      '"><button class="ghost action" id="addClient">＋ Client</button><button class="action" id="addStudy">＋ Étude</button></div>') + puces +
       '<section class="listbox rows">' + (rows.map(s => '<button type="button" class="item invoice-button" data-etude="' + s.id + '"><div class="item-main"><strong>' + escapeHtml(s.num) + " · " + escapeHtml(s.clientLibelle) +
-        '</strong><small>' + escapeHtml(s.date) + " · " + s.factures.length + ' facture(s)</small></div><span class="pill ' +
+        '</strong><small>' + escapeHtml(AL.get(s.id)?.facture || "—") + (AL.get(s.id)?.alertes.length ? ' · <span class="accent">⚠ ' + escapeHtml(AL.get(s.id).alertes[0].texte) + (AL.get(s.id).alertes.length > 1 ? " (+" + (AL.get(s.id).alertes.length - 1) + ")" : "") + "</span>" : "") + '</small></div><span class="pill ' +
         (s.statut === "Archivée" ? "green" : s.statut === "Devis envoyé" ? "pink" : "") + '">' + escapeHtml(s.statut) +
         '</span><div class="amount">' + money(s.montant / 1.2) + " HT</div></button>").join("") || '<div class="empty">Aucune étude. Commencez par « ＋ Client » puis « ＋ Étude ».</div>') + "</section>" +
-      heading("Clients", data.clients.length + " clients") + '<section class="listbox rows">' + data.clients.map(c => '<button type="button" class="item invoice-button" data-client="' + c.id + '"><div class="item-main"><strong>' + escapeHtml(c.raisonSociale) + '</strong><small>' + (c.relationType === "longue_duree" ? "Relation récurrente" : "Mission ponctuelle") + " · " + data.etudes.filter(e => e.clientId === c.id).length + " étude(s)</small></div></button>").join("") + "</section>";
+      heading("Clients", data.clients.length + " clients") + '<section class="listbox rows">' + data.clients.map(c => {
+        const alerte = analyserAlerteClient(c);
+        const cadence = c.cadenceFacturation ? " · " + ({ mensuelle: "mensuelle", trimestrielle: "trimestrielle", semestrielle: "semestrielle", annuelle: "annuelle" }[c.cadenceFacturation] || "cadence inconnue") : "";
+        const prochaine = alerte.prochaineEcheance ? " · prochaine échéance " + dateFr(alerte.prochaineEcheance) : alerte.anomalie ? " · date de référence à renseigner" : "";
+        return '<button type="button" class="item invoice-button" data-client="' + c.id + '"><div class="item-main"><strong>' + escapeHtml(c.raisonSociale) + '</strong><small>' +
+          (c.relationType === "longue_duree" ? "Relation longue durée" + cadence + prochaine : "Mission ponctuelle") + " · " + data.etudes.filter(e => e.clientId === c.id).length + " étude(s)</small></div></button>";
+      }).join("") + "</section>";
   }
 
   function finances(v) {
@@ -146,6 +189,7 @@
         return '<button type="button" class="item invoice-button" data-interv="' + i.id + '"><div class="item-main"><strong>' + escapeHtml(nomMembre(i.membreId)) + " · " + escapeHtml(e?.num || "") +
           '</strong><small>' + escapeHtml(i.date) + " · " + escapeHtml(i.statut) + '</small></div><div class="amount">' + (Number(i.minutesIndividuelles || 0) / 480).toLocaleString("fr-FR", { maximumFractionDigits: 3 }) + " JEH</div></button>";
       }).join("") || '<div class="empty">Aucune intervention.</div>') + "</section>" +
+      paieHtml() + formationHtml() +
       heading("Bulletins de versement", data.bvs.length + " BV", '<button class="action" id="addBV">＋ BV</button>') +
       '<section class="listbox rows">' + (data.lignesBV.map(l => {
         const bv = data.bvs.find(b => b.id === l.bvId), jeh = Number(l.jeh) || 0;
@@ -154,14 +198,153 @@
       }).join("") || '<div class="empty">Aucun BV.</div>') + "</section>";
   }
 
+  // ---------- Rapport d'étude ----------
+  function rapport(id) {
+    const e = data.etudes.find(x => x.id === id);
+    if (!e) { etudeOuverte = null; return studies(view()); }
+    const A = alertesParEtude().get(id) || calculerAlertes({ etudes: [e], factures: data.factures, interventions: data.interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() }).get(id);
+    const tva = synchro?.lireConfig()?.tva ?? 0.2, inv = data.factures.filter(f => f.etudeId === id), ls = data.interventions.filter(i => i.etudeId === id);
+    const f3 = n => (Math.round(Number(n || 0) * 1000) / 1000).toLocaleString("fr-FR");
+    const per = {}; ls.forEach(i => { const p = per[i.membreId] || (per[i.membreId] = { jeh: 0, brut: 0, aPayer: false }); if (i.statut === "Payé" || i.statut === "Pas payé") { const j = Number(i.minutesIndividuelles || 0) / 480; p.jeh += j; p.brut += j * Number(i.prixJehHt || 0); } if (i.statut === "Pas payé") p.aPayer = true; });
+    const nomM = mid => data.membres.find(m => m.id === mid)?.nomComplet || "?";
+    const niveaux = data.membres.map(m => [m, (data.formation || []).find(f => f.membreId === m.id)?.niveaux?.[id]]).filter(x => Number.isInteger(x[1]));
+    const tuile = (l, v) => '<div class="stat"><div class="label">' + l + "</div><strong>" + v + "</strong></div>";
+    return '<button class="ghost action" id="retourEtudes">‹ Études</button>' +
+      heading(escapeHtml(nomEtude(e)), escapeHtml(e.statut || "") + " · " + escapeHtml(A.facture || "—") + (mandatDe(e.date) ? " · " + escapeHtml(mandatDe(e.date)) : ""), '<button class="action" data-modifier-etude="' + id + '">Modifier</button>') +
+      (e.resume ? '<p class="sub">' + escapeHtml(e.resume) + "</p>" : "") +
+      (A.alertes.length ? '<section class="panel">' + A.alertes.map(a => '<div class="alert"><div class="alert-icon">!</div><div><strong>' + escapeHtml(a.texte) + "</strong></div></div>").join("") + "</section>" : "") +
+      heading("Finances", "") + '<div class="stats">' + tuile("Montant TTC", money(e.montant)) + tuile("Encaissé TTC", money(A.encaisse)) + tuile("Reste à encaisser", A.reste === null ? "—" : money(A.reste)) + tuile("Prochaine échéance", A.echeance || "—") + "</div>" +
+      '<p class="sub">' + money(Number(e.montant || 0) / (1 + tva)) + " HT · JEH client " + (e.jeh ? money(e.jeh) : "—") + (e.frais ? " · frais " + money(e.frais) + " HT" : "") + "</p>" +
+      heading("Factures", inv.length + " facture(s)", '<button class="action" data-facture-pour="' + id + '">＋ Facture</button>') +
+      '<section class="listbox rows">' + (inv.map(f => '<button type="button" class="item invoice-button" data-invoice="' + f.id + '"><div class="item-main"><strong>' + escapeHtml(f.type || "Facture") + "</strong><small>" + escapeHtml(f.date || "") + (f.echeance ? " · échéance " + escapeHtml(f.echeance) : "") + '</small></div><span class="pill ' + (f.etat === "Payée" ? "green" : "pink") + '">' + escapeHtml(f.etat) + '</span><div class="amount">' + money(f.montant) + " TTC</div></button>").join("") || '<div class="empty">Aucune facture.</div>') + "</section>" +
+      heading("JEH", "Facturées " + f3(A.jehFacturees) + " · rémunérées " + f3(A.jehRemunerees), '<button class="action" data-interv-pour="' + id + '">＋ Intervention</button>') +
+      '<section class="listbox rows">' + (Object.entries(per).map(([mid, p]) => '<div class="item"><div class="item-main"><strong>' + escapeHtml(nomM(mid)) + " · " + f3(p.jeh) + " JEH</strong><small>" + money(p.brut) + ' brut</small></div><span class="pill ' + (p.aPayer ? "pink" : "green") + '">' + (p.aPayer ? "À payer" : "Payé") + "</span></div>").join("") || '<div class="empty">Aucune intervention.</div>') + "</section>" +
+      (ls.length ? '<details class="sub" style="margin-top:8px"><summary>Voir les ' + ls.length + " lignes</summary>" + ls.map(i => '<button type="button" class="item invoice-button" data-interv="' + i.id + '"><div class="item-main"><strong>' + escapeHtml(nomM(i.membreId)) + "</strong><small>" + escapeHtml(i.date || "") + " · " + escapeHtml(i.statut || "") + '</small></div><div class="amount">' + f3(Number(i.minutesIndividuelles || 0) / 480) + " JEH</div></button>").join("") + "</details>" : "") +
+      (niveaux.length ? heading("Formation sur cette étude", "") + '<p class="sub">' + niveaux.map(([m, n]) => escapeHtml(m.nomComplet) + " · niveau " + n).join(" · ") + "</p>" : "");
+  }
+
+  // ---------- Qualité formation : niveau 0 à 4 par membre et par étude ----------
+  const NIVEAUX = ["0 · Non formé", "1 · Notions", "2 · Autonome avec appui", "3 · Autonome", "4 · Référent (peut former)"];
+  function formationHtml() {
+    const ouvertes = data.etudes.filter(e => e.statut !== "Archivée" && e.statut !== "Refusé / sans suite"), fermees = data.etudes.filter(e => !ouvertes.includes(e));
+    const cols = ouvertes.concat(fermees);
+    if (!data.membres.length || !cols.length) return "";
+    const niv = (mid, eid) => (data.formation || []).find(f => f.membreId === mid)?.niveaux?.[eid];
+    return heading("Qualité formation", "Niveau de 0 à 4 par intervenant et par étude") + '<div class="listbox" style="overflow-x:auto"><table style="border-collapse:collapse;font-size:12px"><thead><tr><th style="text-align:left;padding:8px">Intervenant</th>' +
+      cols.map(e => '<th style="padding:6px;' + (fermees.includes(e) ? "opacity:.6" : "") + '">' + escapeHtml(e.num || "?") + "</th>").join("") + "</tr></thead><tbody>" +
+      data.membres.map(m => "<tr><td style=\"padding:6px 8px;white-space:nowrap\"><b>" + escapeHtml(m.nomComplet) + "</b></td>" + cols.map(e => { const v = niv(m.id, e.id); return '<td><select data-niveau="' + m.id + "|" + e.id + '" aria-label="Niveau"><option value=""></option>' + [0, 1, 2, 3, 4].map(k => "<option" + (v === k ? " selected" : "") + ">" + k + "</option>").join("") + "</select></td>"; }).join("") + "</tr>").join("") +
+      '</tbody></table></div><details class="sub"><summary>Échelle</summary>' + NIVEAUX.join(" · ") + "</details>";
+  }
+  async function changerNiveau(mid, eid, valeur) {
+    const existant = (data.formation || []).find(f => f.membreId === mid);
+    const niveaux = { ...(existant?.niveaux || {}) };
+    if (valeur === "") delete niveaux[eid]; else niveaux[eid] = Number(valeur);
+    const cmd = existant ? { type: "modifier", collection: "formation", id: existant.id, modifications: { niveaux } }
+      : (() => { const id = nouvelId("formation"); return { type: "ajouter", collection: "formation", id, enregistrement: { id, membreId: mid, nom: data.membres.find(m => m.id === mid)?.nomComplet || "", niveaux } }; })();
+    if (!Array.isArray(data.formation)) data = { ...data, formation: [] };
+    const r = await synchro.executerPlusieurs([cmd]);
+    if (!r.valide) { alert(r.anomalies.map(a => a.raison || a).join("\n")); return; }
+    data = synchro.lireEtat(); await majStatut(); render();
+  }
+
+  function paieHtml() {
+    const P = calculerPaie({ interventions: data.interventions, membres: data.membres, config: synchro?.lireConfig() || {} });
+    const aVerser = P.lignes.filter(r => r.jehAPayer > 0);
+    const f3 = n => n.toLocaleString("fr-FR", { maximumFractionDigits: 3 });
+    return heading("À verser (prochain BV)", money(P.total.net) + " net en tout · coût Junior " + money(P.total.cout)) +
+      '<section class="listbox rows">' + (aVerser.map(r => '<div class="item"><div class="item-main"><strong>' + escapeHtml(r.nom) + " · " + money(r.net) + ' net</strong><small>' +
+        f3(r.jehAPayer) + " JEH · brut " + money(r.brut) + " · coût Junior " + money(r.cout) + (r.assiette > r.jehAPayer ? " · cotisé sur 1 JEH" : "") +
+        (r.sansPrix ? ' · <span class="accent">prix JEH intervenant manquant</span>' : "") + " · déjà payé " + money(r.dejaPaye) +
+        '</small></div><button class="action" data-payer="' + r.membreId + '">Créer le BV</button></div>').join("") || '<div class="empty">Personne à payer pour le moment.</div>') + "</section>" +
+      '<details class="sub" style="margin-top:8px"><summary>Comment c’est calculé ?</summary>Pour chaque personne : les interventions « Fait, pas encore payé ». Brut = JEH × prix JEH intervenant. Net = brut − cotisations salariales ; coût Junior = brut + charges patronales. Base d’une JEH : 4 h de SMIC. En dessous de 1 JEH, cotisations et charges sont calculées sur 1 JEH. « Créer le BV » enregistre le bulletin et passe ces lignes à « Payé ».</details>';
+  }
+  async function creerBVPour(membreId) {
+    const P = calculerPaie({ interventions: data.interventions, membres: data.membres, config: synchro?.lireConfig() || {} });
+    const r = P.lignes.find(x => x.membreId === membreId);
+    if (!r || !(r.jehAPayer > 0)) return;
+    if (!confirm("Créer le BV de " + r.nom + " (" + money(r.net) + " net) et passer ses lignes à « Payé » ?")) return;
+    const bvId = nouvelId("bv"), ligneId = nouvelId("ligne");
+    const bv = { id: bvId, date: aujourdHui(), reference: "BV " + r.nom + " " + aujourdHui(), brut: Math.round(r.brut * 100) / 100, net: Math.round(r.net * 100) / 100, coutJunior: Math.round(r.cout * 100) / 100 };
+    const commandes = [
+      { type: "ajouter", collection: "bvs", id: bvId, enregistrement: bv },
+      { type: "ajouter", collection: "lignesBV", id: ligneId, enregistrement: { id: ligneId, bvId, membreId, jeh: Math.round(r.jehAPayer * 1e6) / 1e6 } },
+      ...data.interventions.filter(i => i.membreId === membreId && i.statut === "Pas payé").map(i => ({ type: "modifier", collection: "interventions", id: i.id, modifications: { statut: "Payé", bvId } })),
+    ];
+    const res = await synchro.executerPlusieurs(commandes);
+    if (!res.valide) { alert(res.anomalies.map(a => a.raison || a).join("\n")); return; }
+    data = synchro.lireEtat(); await majStatut(); render();
+  }
+
   function settings() {
-    const e = etatSynchro;
-    return heading("Réglages", "Connexion et synchronisation") +
-      '<section class="listbox rows"><div class="item"><div class="item-main"><strong>Serveur</strong><small>' + escapeHtml(connexion?.essai ? "Mode essai (serveur simulé sur ce téléphone)" : connexion?.url ? "Connecté" : "Non connecté") + '</small></div></div>' +
-      '<div class="item"><div class="item-main"><strong>Données affichées</strong><small>' + (e.source === "serveur" ? "À jour avec le serveur" : e.source === "cache" ? "Dernière version gardée sur cet appareil (hors ligne)" : "Aucune") + '</small></div></div>' +
-      '<div class="item"><div class="item-main"><strong>Modifications en attente d’envoi</strong><small>' + e.enAttente + '</small></div><button class="ghost action" id="syncNow">Synchroniser</button></div>' +
-      '<div class="item"><div class="item-main"><strong>Taux de TVA</strong><small>' + Math.round((synchro?.lireConfig()?.tva ?? 0.2) * 100) + ' %</small></div></div>' +
-      '<div class="item"><div class="item-main"><strong>Se déconnecter de cet appareil</strong><small>Efface l’adresse, le jeton et les données gardées sur ce téléphone</small></div><button class="ghost action" id="logout">Déconnexion</button></div></section>';
+    const e = etatSynchro, c = synchro?.lireConfig() || {};
+    const ligne = (titre, detail, bouton) => '<div class="item"><div class="item-main"><strong>' + titre + "</strong><small>" + detail + "</small></div>" + (bouton || "") + "</div>";
+    const btn = (id, txt) => '<button class="ghost action" data-reglage="' + id + '">' + txt + "</button>";
+    const pc = x => (Math.round(Number(x || 0) * 10000) / 100).toLocaleString("fr-FR") + " %";
+    const tot = o => Object.values(o || {}).reduce((s, v) => s + Number(v || 0), 0);
+    const off = c.alertesOff || {};
+    return heading("Réglages", "Paramètres partagés par toute l’équipe") +
+      '<section class="listbox rows">' +
+      ligne("Mandats", mandats().map(m => escapeHtml(m.nom) + " (dès le " + escapeHtml(m.debut) + ")").join(" · ") || "Aucun mandat", btn("mandat", "＋ Mandat")) +
+      ligne("TVA et relances", "TVA " + pc(c.tva ?? 0.2) + " · 1re relance à " + (c.relance1 ?? 3) + " j · 2e relance après " + (c.relance2 ?? 10) + " j", btn("tva", "Modifier")) +
+      ligne("Règles CNJE", c.cnje?.date ? "Depuis le " + escapeHtml(c.cnje.date) + " · JEH client " + (c.cnje.min ?? 80) + "–" + (c.cnje.max ?? 450) + " € · intervenant ≤ " + (c.cnje.maxInt ?? 300) + " €" : "Aucune règle appliquée", btn("cnje", "Modifier")) +
+      ligne("Cotisations", "SMIC " + (c.smic ?? 12.02) + " € · salariales " + pc(c.cot ? tot(c.cot) : 0.183) + " · patronales " + pc(c.patr ? tot(c.patr) : 0.3014) + " · chômage " + pc(c.chomage ?? 0), btn("cot", "Modifier")) +
+      ligne("Alertes", c.alertesOn === false ? "Toutes désactivées" : (ALERTES.length - ALERTES.filter(a => off[a[0]]).length) + " activées sur " + ALERTES.length, btn("alertes", "Choisir")) +
+      "</section>" + heading("Synchronisation", "Cet appareil") + '<section class="listbox rows">' +
+      ligne("Serveur", escapeHtml(connexion?.essai ? "Mode essai (serveur simulé sur ce téléphone)" : connexion?.url ? "Connecté" : "Non connecté")) +
+      ligne("Données affichées", e.source === "serveur" ? "À jour avec le serveur" : e.source === "cache" ? "Dernière version gardée sur cet appareil (hors ligne)" : "Aucune") +
+      ligne("Modifications en attente d’envoi", String(e.enAttente), '<button class="ghost action" id="syncNow">Synchroniser</button>') +
+      ligne("Exporter", "Télécharger une sauvegarde complète (.json)", '<button class="ghost action" id="exportJson">Exporter</button>') +
+      ligne("Se déconnecter de cet appareil", "Efface l’adresse, le jeton et les données gardées sur ce téléphone", '<button class="ghost action" id="logout">Déconnexion</button>') +
+      "</section>";
+  }
+  async function sauverConfig(modifs) {
+    const r = await synchro.enregistrerConfig({ ...(synchro.lireConfig() || {}), ...modifs });
+    if (!r.valide) return r.anomalies.join(" · ");
+    await majStatut(); return null;
+  }
+  const pourcent = x => Math.round(Number(x || 0) * 10000) / 100;
+  const versTaux = x => (x === null || x === "" ? 0 : Number(x) / 100);
+  function ouvrirReglage(cle) {
+    const c = synchro.lireConfig() || {};
+    if (cle === "mandat") return formulaire({ titre: "Nouveau mandat", valeurs: {}, champs: [
+      { name: "nom", label: "Nom (ex. 2026-2027)", required: true },
+      { name: "debut", label: "Date de début", type: "date", required: true, aide: "La fin est la veille du mandat suivant." },
+    ], onValider: d => mandats().some(m => m.nom === d.nom) ? "Ce mandat existe déjà." : sauverConfig({ mandats: [...mandats(), { nom: d.nom, debut: d.debut }] }) });
+    if (cle === "tva") return formulaire({ titre: "TVA et relances", valeurs: { tva: pourcent(c.tva ?? 0.2), relance1: c.relance1 ?? 3, relance2: c.relance2 ?? 10 }, champs: [
+      { name: "tva", label: "TVA (%)", type: "number", required: true },
+      { name: "relance1", label: "1re relance (jours après l’échéance)", type: "number", required: true },
+      { name: "relance2", label: "2e relance (au-delà de … jours)", type: "number", required: true },
+    ], onValider: d => sauverConfig({ tva: versTaux(d.tva), relance1: Math.round(d.relance1), relance2: Math.round(d.relance2) }) });
+    if (cle === "cnje") return formulaire({ titre: "Règles CNJE", valeurs: { date: c.cnje?.date || "", min: c.cnje?.min ?? 80, max: c.cnje?.max ?? 450, maxInt: c.cnje?.maxInt ?? 300 }, champs: [
+      { name: "date", label: "Appliquer aux études créées depuis le", type: "date", aide: "Vide = aucune alerte CNJE." },
+      { name: "min", label: "JEH client minimum HT (€)", type: "number", required: true },
+      { name: "max", label: "JEH client maximum HT (€)", type: "number", required: true },
+      { name: "maxInt", label: "JEH intervenant maximum HT (€)", type: "number", required: true },
+    ], onValider: d => sauverConfig({ cnje: { date: d.date, min: d.min, max: d.max, maxInt: d.maxInt } }) });
+    if (cle === "cot") {
+      const cot = c.cot || { maladie: 0.013, retraiteP: 0.069, retraiteD: 0.004, csgD: 0.068, csgND: 0.029 };
+      const patr = c.patr || { maladie: 0.13, at: 0.0123, retraiteP: 0.0855, retraiteD: 0.0211, famille: 0.0525, autres: 0 };
+      const champs = [{ name: "smic", label: "SMIC horaire brut (€)", type: "number", required: true }, { name: "chomage", label: "Chômage (%)", type: "number" }]
+        .concat(Object.keys(cot).map(k => ({ name: "cot_" + k, label: "Salariale · " + k + " (%)", type: "number" })))
+        .concat(Object.keys(patr).map(k => ({ name: "patr_" + k, label: "Patronale · " + k + " (%)", type: "number" })));
+      const valeurs = { smic: c.smic ?? 12.02, chomage: pourcent(c.chomage ?? 0) };
+      Object.keys(cot).forEach(k => { valeurs["cot_" + k] = pourcent(cot[k]); }); Object.keys(patr).forEach(k => { valeurs["patr_" + k] = pourcent(patr[k]); });
+      return formulaire({ titre: "Cotisations", valeurs, champs, onValider: d => {
+        const nc = {}, np = {}; Object.keys(cot).forEach(k => { nc[k] = versTaux(d["cot_" + k]); }); Object.keys(patr).forEach(k => { np[k] = versTaux(d["patr_" + k]); });
+        return sauverConfig({ smic: d.smic, chomage: versTaux(d.chomage), cot: nc, patr: np });
+      } });
+    }
+    if (cle === "alertes") {
+      const off = c.alertesOff || {};
+      return formulaire({ titre: "Alertes affichées", valeurs: { tout: c.alertesOn === false ? "non" : "oui", ...Object.fromEntries(ALERTES.map(a => [a[0], off[a[0]] ? "non" : "oui"])) }, champs: [
+        { name: "tout", label: "Toutes les alertes", type: "select", required: true, options: [["oui", "Activées"], ["non", "Désactivées"]] },
+        ...ALERTES.map(a => ({ name: a[0], label: a[1], type: "select", required: true, options: [["oui", "Oui"], ["non", "Non"]], aide: a[2] })),
+      ], onValider: d => sauverConfig({ alertesOn: d.tout === "oui", alertesOff: Object.fromEntries(ALERTES.filter(a => d[a[0]] === "non").map(a => [a[0], true])) }) });
+    }
+  }
+  function exporter() {
+    const blob = new Blob([JSON.stringify({ format: "hac-v3", exporteLe: new Date().toISOString(), config: synchro.lireConfig(), donnees: data }, null, 2)], { type: "application/json" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "hac-sauvegarde-" + aujourdHui() + ".json"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }
 
   // ---------- Formulaires ----------
@@ -222,13 +405,19 @@
   }
   function ouvrirClient(id) {
     const c = id ? data.clients.find(x => x.id === id) : {};
-    formulaire({ titre: id ? "Modifier le client" : "Nouveau client", valeurs: { relationType: "ponctuelle", ...c }, champs: [
+    formulaire({ titre: id ? "Modifier le client" : "Nouveau client", valeurs: { relationType: "ponctuelle", cadenceFacturation: "", dateProchaineFacture: "", ...c }, champs: [
       { name: "raisonSociale", label: "Nom du client", required: true },
-      { name: "relationType", label: "Type de collaboration", type: "select", required: true, options: [["ponctuelle", "Ponctuelle (mission délimitée)"], ["longue_duree", "Récurrente (relation suivie)"]] },
-    ], onValider: d => enregistrer("clients", id, d, "client") });
+      { name: "relationType", label: "Type de collaboration", type: "select", required: true, options: [["ponctuelle", "Ponctuelle (mission délimitée)"], ["longue_duree", "Longue durée (relation durable, type CDI)"]] },
+      { name: "cadenceFacturation", label: "Cadence de facturation", type: "select", options: [["mensuelle", "Mensuelle"], ["trimestrielle", "Trimestrielle"], ["semestrielle", "Semestrielle"], ["annuelle", "Annuelle"]], aide: "Facultative : renseignez-la uniquement si une facture périodique est prévue." },
+      { name: "dateProchaineFacture", label: "Date de référence de facturation", type: "date", aide: "Date de la dernière facture ou du dernier jalon ; la prochaine échéance est calculée avec la cadence." },
+    ], onValider: d => {
+      if (d.relationType !== "longue_duree") { d.cadenceFacturation = null; d.dateProchaineFacture = null; }
+      else { d.cadenceFacturation = d.cadenceFacturation || null; d.dateProchaineFacture = d.dateProchaineFacture || null; }
+      return enregistrer("clients", id, d, "client");
+    } });
   }
-  function ouvrirFacture(id) {
-    const f = id ? data.factures.find(x => x.id === id) : {};
+  function ouvrirFacture(id, preset = {}) {
+    const f = id ? data.factures.find(x => x.id === id) : preset;
     formulaire({ titre: id ? "Modifier la facture" : "Nouvelle facture", valeurs: { type: "Acompte", etat: "Émise", date: aujourdHui(), ...f }, champs: [
       { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
       { name: "type", label: "Type", type: "select", required: true, options: ["Acompte", "Intermédiaire", "Solde"] },
@@ -246,8 +435,8 @@
       { name: "role", label: "Rôle (facultatif)" },
     ], onValider: d => enregistrer("membres", id, d, "membre") });
   }
-  function ouvrirIntervention(id) {
-    const i = id ? data.interventions.find(x => x.id === id) : {};
+  function ouvrirIntervention(id, preset = {}) {
+    const i = id ? data.interventions.find(x => x.id === id) : preset;
     formulaire({ titre: id ? "Modifier l’intervention" : "Nouvelle intervention (JEH)", valeurs: { date: aujourdHui(), statut: "Pas payé", nb: 1, duree: i.minutesIndividuelles, ...i }, champs: [
       { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
       { name: "membreId", label: "Intervenant", type: "select", required: true, options: data.membres.map(m => [m.id, m.nomComplet]) },
@@ -282,6 +471,7 @@
 
   function render() {
     const v = view();
+    selecteurMandat();
     nav();
     banniere();
     const content = document.getElementById("content");
@@ -292,7 +482,7 @@
     }
     content.innerHTML = ({
       Accueil: () => dashboard(v),
-      Études: () => studies(v),
+      Études: () => (etudeOuverte ? rapport(etudeOuverte) : studies(v)),
       Finances: () => finances(v),
       Équipe: () => team(v),
       Réglages: settings,
@@ -308,7 +498,16 @@
     brancher("#addMembre", () => ouvrirMembre());
     brancher("#addInterv", () => ouvrirIntervention());
     brancher("#addBV", () => ouvrirBV());
-    brancher("[data-etude]", el => ouvrirEtude(el.dataset.etude));
+    brancher("[data-etude]", el => { etudeOuverte = el.dataset.etude; current = "Études"; render(); window.scrollTo(0, 0); });
+    brancher("#retourEtudes", () => { etudeOuverte = null; render(); });
+    brancher("[data-modifier-etude]", el => ouvrirEtude(el.dataset.modifierEtude));
+    brancher("[data-facture-pour]", el => ouvrirFacture(null, { etudeId: el.dataset.facturePour }));
+    brancher("[data-interv-pour]", el => ouvrirIntervention(null, { etudeId: el.dataset.intervPour }));
+    document.querySelectorAll("[data-niveau]").forEach(el => el.addEventListener("change", () => { const [m, e] = el.dataset.niveau.split("|"); changerNiveau(m, e, el.value); }));
+    brancher("[data-filtre]", el => { filtreEtudes = el.dataset.filtre; render(); });
+    brancher("[data-payer]", el => creerBVPour(el.dataset.payer));
+    brancher("[data-reglage]", el => ouvrirReglage(el.dataset.reglage));
+    brancher("#exportJson", () => exporter());
     brancher("[data-client]", el => ouvrirClient(el.dataset.client));
     brancher("[data-invoice]", el => ouvrirFacture(el.dataset.invoice));
     brancher("[data-membre]", el => ouvrirMembre(el.dataset.membre));

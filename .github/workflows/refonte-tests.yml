@@ -9,6 +9,7 @@ on:
       - "refonte/application/**"
       - "refonte/build/**"
       - "refonte/demo/**"
+      - "refonte/app/**"
       - "refonte/migration/**"
       - "refonte/README.md"
       - ".github/workflows/refonte-tests.yml"
@@ -20,6 +21,7 @@ on:
       - "refonte/application/**"
       - "refonte/build/**"
       - "refonte/demo/**"
+      - "refonte/app/**"
       - ".github/workflows/refonte-tests.yml"
 
 permissions:
@@ -39,6 +41,23 @@ jobs:
         run: node refonte/build/build-browser.mjs
       - name: Vérifier que le bundle commité est à jour
         run: git diff --exit-code -- refonte/demo/hac-core.js refonte/app/hac-app.js
+      - name: Vérifier la syntaxe de l’application v3
+        run: node --check refonte/app/app.js && node --check refonte/app/e2e-navigateur.js && node --check refonte/app/e2e-essai.js
+      - name: Installer Playwright et Chromium
+        run: |
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
+      - name: Tester l’application dans Chromium
+        run: |
+          python3 -m http.server 8766 --bind 0.0.0.0 > /tmp/hac-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID"' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://localhost:8766/refonte/app/index.html >/dev/null; then break; fi
+            sleep 1
+          done
+          node refonte/app/e2e-navigateur.js
+          node refonte/app/e2e-essai.js
       - name: Vérifier l’interface isolée
         run: node refonte/demo/validate-demo.mjs
       - name: Vérifier la syntaxe du candidat Apps Script v3

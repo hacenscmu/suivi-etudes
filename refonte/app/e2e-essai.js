@@ -1,10 +1,23 @@
-// Test navigateur du mode essai (Playwright, hors CI) : python3 -m http.server 8766 à la racine, puis node refonte/app/e2e-essai.js
-const {chromium}=require('playwright');const ok=(n,c)=>console.log((c?'✔ ':'✘ ')+n);
+// Test navigateur du mode essai (Chromium, CI et local) : python3 -m http.server 8766 à la racine, puis node refonte/app/e2e-essai.js
+const {chromium}=require('playwright');let failures=0;const ok=(n,c)=>{if(!c)failures++;console.log((c?'✔ ':'✘ ')+n);};
 (async()=>{const b=await chromium.launch();const p=await b.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));p.on('dialog',d=>d.accept());
 let net=0;p.on('request',r=>{if(!r.url().startsWith('http://localhost'))net++});
 await p.goto('http://localhost:8766/refonte/app/index.html');await p.click('#essai');await p.waitForTimeout(600);
-ok('mode essai démarré avec données d’exemple',(await p.textContent('#syncBanner')).includes('Mode essai')&&(await p.textContent('#content')).includes('JEH'));
-await p.click('#tabs [data-page="Études"]');await p.click('[data-etude="etude_0002"]');await p.selectOption('dialog [name=statut]','Devis signé');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
+ok('alertes affichées à l’accueil',(await p.textContent('#content')).includes('Alertes à traiter'));ok('alerte de facturation récurrente affichée',(await p.textContent('#content')).includes('Facture périodique à émettre'));ok('mode essai démarré avec données d’exemple',(await p.textContent('#syncBanner')).includes('Mode essai')&&(await p.textContent('#content')).includes('JEH'));
+await p.click('#tabs [data-page="Études"]');await p.click('[data-etude="etude_0002"]');await p.click('[data-modifier-etude]');await p.selectOption('dialog [name=statut]','Devis signé');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
 await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Études"]');
 ok('modification conservée après rechargement',(await p.textContent('#content')).includes('Devis signé'));
-ok('aucun appel réseau externe',net===0);ok('aucune erreur JS',errs.length===0||console.log(errs));await b.close()})();
+await p.click('#tabs [data-page="Équipe"]');ok('paie : Lucas à verser',(await p.textContent('#content')).includes('À verser'));
+await p.click('[data-payer="membre_0002"]');await p.waitForTimeout(500);ok('BV créé, lignes passées à Payé',(await p.textContent('#content')).includes('Personne à payer')||!(await p.locator('[data-payer="membre_0002"]').count()));
+await p.click('#tabs [data-page="Réglages"]');await p.click('[data-reglage="mandat"]');await p.fill('dialog [name=nom]','2026-2027');await p.fill('dialog [name=debut]','2026-09-01');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
+await p.click('[data-reglage="mandat"]');await p.fill('dialog [name=nom]','2025-2026');await p.fill('dialog [name=debut]','2025-09-01');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
+ok('mandats ajoutés au sélecteur',(await p.locator('#mandatSel option').count())===3);
+await p.click('[data-reglage="tva"]');await p.fill('dialog [name=relance1]','5');await p.click('dialog [data-ok]');await p.waitForTimeout(400);ok('relance modifiée',(await p.textContent('#content')).includes('1re relance à 5 j'));
+await p.click('[data-reglage="alertes"]');await p.selectOption('dialog [name=temps]','non');await p.click('dialog [data-ok]');await p.waitForTimeout(400);ok('une alerte désactivée',(await p.textContent('#content')).includes('21 activées sur 22'));
+await p.selectOption('#mandatSel','2025-2026');await p.click('#tabs [data-page="Études"]');await p.click('[data-filtre="Toutes"]');ok('filtre mandat : aucune étude en 2025-2026',(await p.textContent('#content')).includes('Toutes (0)'));
+await p.selectOption('#mandatSel','2026-2027');ok('filtre mandat 2026-2027 : 2 études',(await p.textContent('#content')).includes('Toutes (2)'));
+const dl=p.waitForEvent('download');await p.click('#tabs [data-page="Réglages"]');await p.click('#exportJson');ok('export JSON téléchargé',(await dl).suggestedFilename().startsWith('hac-sauvegarde-'));
+await p.click('#tabs [data-page="Équipe"]');await p.selectOption('[data-niveau="membre_0001|etude_0001"]','3');await p.waitForTimeout(400);
+ok('niveau de formation enregistré',(await p.locator('[data-niveau="membre_0001|etude_0001"]').inputValue())==='3');
+await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Équipe"]');ok('niveau conservé après rechargement',(await p.locator('[data-niveau="membre_0001|etude_0001"]').inputValue())==='3');
+ok('aucun appel réseau externe',net===0);ok('aucune erreur JS',errs.length===0||console.log(errs));await b.close();if(failures)process.exitCode=1})();
