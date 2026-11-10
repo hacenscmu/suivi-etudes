@@ -2,7 +2,27 @@
 (() => {
   "use strict";
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
-  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch } = window.HAC;
+  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3 } = window.HAC;
+  // ---- Mode essai : un serveur v3 simulé sur ce téléphone, avec des données d'exemple. Aucune donnée réelle. ----
+  const JETON_ESSAI = "essai-local-hac-v3";
+  const v1 = o => Object.fromEntries(o.map(x => [x.id, { ...x, _v: 1 }]));
+  const EXEMPLE = {
+    clients: v1([{ id: "client_0001", raisonSociale: "Soléa Industrie", relationType: "ponctuelle" }, { id: "client_0002", raisonSociale: "Novalys", relationType: "longue_duree" }]),
+    membres: v1([{ id: "membre_0001", nomComplet: "Camille Martin", role: "Cheffe de projet" }, { id: "membre_0002", nomComplet: "Lucas Bernard" }]),
+    etudes: v1([{ id: "etude_0001", clientId: "client_0001", client: "Soléa Industrie", num: "HAC-2026-018", date: "2026-09-04", statut: "En réalisation", montant: 5040, jeh: 400 },
+      { id: "etude_0002", clientId: "client_0002", client: "Novalys", num: "HAC-2026-021", date: "2026-11-03", statut: "Devis envoyé", montant: 1800, jeh: 350 }]),
+    factures: v1([{ id: "facture_0001", etudeId: "etude_0001", type: "Acompte", etat: "Payée", montant: 2520, date: "2026-09-10", datePaiement: "2026-09-25" },
+      { id: "facture_0002", etudeId: "etude_0001", type: "Solde", etat: "Émise", montant: 2520, date: "2026-10-20", echeance: "2026-11-20" }]),
+    interventions: v1([{ id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-10-02", statut: "Payé", minutesIndividuelles: 960, prixJehHt: 300 },
+      { id: "interv_0002", etudeId: "etude_0001", membreId: "membre_0002", date: "2026-10-14", statut: "Pas payé", minutesIndividuelles: 240, prixJehHt: 300 }]),
+  };
+  function transportEssai() {
+    const CLE = "hac.v3.essai.donnees";
+    let donnees = null; try { donnees = JSON.parse(localStorage.getItem(CLE) || "null"); } catch { donnees = null; }
+    const serveur = creerServeurMemoireV3({ token: JETON_ESSAI, donnees: donnees || EXEMPLE, maintenant: () => new Date().toISOString() });
+    return async requete => { const r = await serveur.transport(requete); try { localStorage.setItem(CLE, JSON.stringify(serveur.lireDonnees())); } catch {} return r; };
+  }
+
   // ---- Connexion : adresse du serveur Apps Script et jeton personnel, gardés sur cet appareil ----
   const CONN = "hac.v3.connexion";
   const lireConnexion = () => { try { return JSON.parse(localStorage.getItem(CONN) || "null"); } catch { return null; } };
@@ -137,7 +157,7 @@
   function settings() {
     const e = etatSynchro;
     return heading("Réglages", "Connexion et synchronisation") +
-      '<section class="listbox rows"><div class="item"><div class="item-main"><strong>Serveur</strong><small>' + escapeHtml(connexion?.url ? "Connecté" : "Non connecté") + '</small></div></div>' +
+      '<section class="listbox rows"><div class="item"><div class="item-main"><strong>Serveur</strong><small>' + escapeHtml(connexion?.essai ? "Mode essai (serveur simulé sur ce téléphone)" : connexion?.url ? "Connecté" : "Non connecté") + '</small></div></div>' +
       '<div class="item"><div class="item-main"><strong>Données affichées</strong><small>' + (e.source === "serveur" ? "À jour avec le serveur" : e.source === "cache" ? "Dernière version gardée sur cet appareil (hors ligne)" : "Aucune") + '</small></div></div>' +
       '<div class="item"><div class="item-main"><strong>Modifications en attente d’envoi</strong><small>' + e.enAttente + '</small></div><button class="ghost action" id="syncNow">Synchroniser</button></div>' +
       '<div class="item"><div class="item-main"><strong>Taux de TVA</strong><small>' + Math.round((synchro?.lireConfig()?.tva ?? 0.2) * 100) + ' %</small></div></div>' +
@@ -314,6 +334,8 @@
       el.className = "sync warn"; el.textContent = e.enAttente + " modification(s) gardée(s) sur ce téléphone, envoi dès le retour du réseau.";
     } else if (e.source === "cache") {
       el.className = "sync warn"; el.textContent = "Hors ligne : dernière version connue affichée.";
+    } else if (connexion?.essai) {
+      el.className = "sync warn"; el.textContent = "Mode essai : données d’exemple, gardées sur ce téléphone uniquement. Aucune donnée réelle n’est lue ni modifiée.";
     } else { el.className = "sync hidden"; el.textContent = ""; }
   }
   async function executer(prepared) {
@@ -332,7 +354,7 @@
     location.reload();
   }
   async function demarrer() {
-    const client = creerClientApiV3({ transport: transportFetch(connexion.url), obtenirToken: () => connexion.token });
+    const client = creerClientApiV3({ transport: connexion.essai ? transportEssai() : transportFetch(connexion.url), obtenirToken: () => connexion.token });
     synchro = creerSynchro({ client, stockage: stockageNavigateur(), creerOpId: () => nouvelId("op") });
     try { etatSynchro = await synchro.demarrer(); }
     catch (e) {
@@ -349,6 +371,7 @@
     const box = document.getElementById("login");
     box.classList.remove("hidden");
     document.getElementById("loginMsg").textContent = message || "";
+    document.getElementById("essai").onclick = () => { connexion = { essai: true, token: JETON_ESSAI }; localStorage.setItem(CONN, JSON.stringify(connexion)); demarrer(); };
     document.getElementById("loginForm").onsubmit = ev => {
       ev.preventDefault();
       const f = new FormData(ev.currentTarget);
@@ -362,5 +385,5 @@
   }
 
   document.getElementById("quickAdd").addEventListener("click", () => { current = "Études"; render(); ouvrirEtude(); });
-  if (connexion?.url && connexion?.token) demarrer(); else afficherConnexion();
+  if ((connexion?.url || connexion?.essai) && connexion?.token) demarrer(); else afficherConnexion();
 })();

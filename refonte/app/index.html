@@ -28,9 +28,10 @@
 <nav class="mobile-nav" id="mobileTabs"></nav>
 <div class="login hidden" id="login"><form id="loginForm"><div class="brand"><div class="mark">H</div><div><strong>HAC</strong><small>Connexion</small></div></div>
 <p>Saisissez une seule fois sur cet appareil l’adresse du serveur HAC et votre jeton personnel (donnés par la trésorerie).</p>
-<label>Adresse du serveur<input name="url" type="url" required placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
-<label>Jeton personnel<input name="token" type="password" required autocomplete="off"></label>
-<button class="action" type="submit">Se connecter</button><p id="loginMsg"></p></form></div>
+<label>Adresse du serveur<input name="url" type="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+<label>Jeton personnel<input name="token" type="password" autocomplete="off"></label>
+<button class="action" type="submit">Se connecter</button><p id="loginMsg"></p>
+<button class="ghost action" type="button" id="essai">Essayer sans serveur (données d’exemple)</button></form></div>
 <script src="./hac-app.js"></script>
 <script src="./app.js"></script>
 <script>if("serviceWorker" in navigator)addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));document.getElementById("today").textContent=new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long",year:"numeric"});</script>
