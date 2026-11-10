@@ -31,7 +31,7 @@ Depuis la racine du dépôt, avec Node.js :
 node --test refonte/domain/*.test.js
 ```
 
-Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire.
+Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 44 tests et le dernier run vérifié est vert (44 réussis, 0 échec).
 
 ## État d'intégration
 
@@ -39,4 +39,4 @@ L'audit historique est en lecture seule : il relève les numéros d'étude dupli
 
 L’adaptateur historique produit uniquement un aperçu : il bloque les références d’étude ambiguës, exige un générateur d’identifiants explicite, signale les correspondances client/membre absentes ou invalides et ne regroupe jamais automatiquement les lignes de temps en BV. Il ne réalise aucune écriture.
 
-Les modules sont actuellement autonomes. Les formats d'entrée constituent le modèle cible de travail, pas encore un contrat de données migré. La suite consiste à exécuter les tests dans un environnement Node, puis à appliquer l'aperçu à une copie des données réelles et à arbitrer les correspondances manuelles. Aucun raccordement à `app.js` ni aucune migration n'est autorisé à ce stade. Les calculs actuels de production restent inchangés.
+Les modules sont actuellement autonomes. Les formats d'entrée constituent le modèle cible de travail, pas encore un contrat de données migré. Les tests sont exécutés automatiquement dans GitHub Actions. La prochaine étape est d'appliquer l'aperçu à une copie des données réelles et d'arbitrer les correspondances manuelles. Aucun raccordement à `app.js` ni aucune migration n'est autorisé à ce stade. Les calculs actuels de production restent inchangés.
