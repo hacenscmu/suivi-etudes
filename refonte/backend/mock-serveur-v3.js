@@ -78,6 +78,21 @@ function creerServeurMemoireV3({
     return null;
   }
 
+  function dependance(collection, id) {
+    const references = {
+      clients: [["etudes", "clientId"]],
+      etudes: [["factures", "etudeId"], ["interventions", "etudeId"]],
+      membres: [["interventions", "membreId"], ["lignesBV", "membreId"]],
+      bvs: [["lignesBV", "bvId"]],
+    }[collection] || [];
+    for (const [nom, champ] of references) {
+      if (Object.values(collections[nom]).some(record => record && record._deleted !== true && record[champ] === id)) {
+        return "Suppression refusée : des fiches " + nom + " référencent encore cet élément";
+      }
+    }
+    return null;
+  }
+
   function validerRequeteMutation(request, action) {
     if (!COLLECTIONS_ECRITURE.has(request.collection)) {
       return { code: COLLECTIONS_LECTURE.includes(request.collection) ? "READ_ONLY_COLLECTION" : "UNKNOWN_COLLECTION", message: "Collection non modifiable ou inconnue" };
@@ -115,7 +130,11 @@ function creerServeurMemoireV3({
     if (request.token !== token) return erreur("AUTH_INVALID", "Token invalide", 403);
 
     if (request.action === "loadAll") {
-      return enveloppe(true, cloner(collections), null, { revision, schemaVersion: 3 });
+      const publicCollections = cloner(collections);
+      for (const records of Object.values(publicCollections)) {
+        for (const record of Object.values(records)) if (record && typeof record === "object") delete record._opId;
+      }
+      return enveloppe(true, publicCollections, null, { revision, schemaVersion: 3 });
     }
 
     if (request.action !== "save" && request.action !== "delete") {
@@ -151,6 +170,11 @@ function creerServeurMemoireV3({
       return erreur("NOT_FOUND", "Fiche introuvable", 404);
     }
 
+    if (request.action === "delete") {
+      const dependanceActive = dependance(request.collection, request.id);
+      if (dependanceActive) return erreur("INVALID_REQUEST", dependanceActive, 400);
+    }
+
     let prochain;
     if (request.action === "save") {
       const relation = relationValide(request.collection, request.record);
@@ -161,6 +185,7 @@ function creerServeurMemoireV3({
         _v: versionCourante + 1,
         _par: "mock",
         _le: maintenant(),
+        _opId: request.opId,
       };
     } else {
       prochain = {
@@ -174,7 +199,9 @@ function creerServeurMemoireV3({
     }
     collection[request.id] = prochain;
     revision += 1;
-    const response = enveloppe(true, cloner(prochain), null, { revision });
+    const publicRecord = cloner(prochain);
+    delete publicRecord._opId;
+    const response = enveloppe(true, publicRecord, null, { revision });
     operations.set(request.opId, { fingerprint, response: cloner(response) });
     return response;
   }
