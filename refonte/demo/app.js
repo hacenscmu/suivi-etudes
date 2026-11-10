@@ -111,17 +111,25 @@
 
   function finances(v) {
     const d = v.tableauDeBord;
-    return '<div class="stats"><div class="stat"><div class="label">Facturé HT</div><strong>' + money(d.montantFacture) +
-      '</strong><small>' + data.factures.length + " factures</small></div><div class="stat"><div class="label">Encaissé HT</div><strong>" + money(d.encaisse) +
-      '</strong><small>Factures payées</small></div><div class="stat"><div class="label">En attente HT</div><strong>' + money(d.resteAEncaisser) +
-      '</strong><small>Factures non payées</small></div><div class="stat"><div class="label">À facturer HT</div><strong>' +
-      money(Math.max(0, d.caSigne - d.montantFacture)) + '</strong><small>CA signé moins facturé</small></div></div>' +
-      heading("Factures", "Clique sur une facture pour changer son état dans cette session") +
-      '<section class="listbox rows">' + v.listes.factures.map(f => '<button class="item invoice-button" data-invoice="' + f.id +
-        '" type="button"><div class="item-main"><strong>' + escapeHtml(f.type || "Facture") + " · " + escapeHtml(f.etudeLibelle) +
-        '</strong><small>' + escapeHtml(f.etat) + '</small></div><span class="pill ' + (f.etat === "Payée" ? "green" : "pink") + '">' +
-        (f.etat === "Payée" ? "Payée" : "À encaisser") + '</span><div class="amount">' + money(f.montant / 1.2) + " HT</div></button>").join("") +
-      "</section>";
+    return [
+      '<div class="stats">',
+      '<div class="stat"><div class="label">Facturé HT</div><strong>' + money(d.montantFacture) + '</strong><small>' + data.factures.length + ' factures</small></div>',
+      '<div class="stat"><div class="label">Encaissé HT</div><strong>' + money(d.encaisse) + '</strong><small>Factures payées</small></div>',
+      '<div class="stat"><div class="label">En attente HT</div><strong>' + money(d.resteAEncaisser) + '</strong><small>Factures non payées</small></div>',
+      '<div class="stat"><div class="label">À facturer HT</div><strong>' + money(Math.max(0, d.caSigne - d.montantFacture)) + '</strong><small>CA signé moins facturé</small></div>',
+      '</div>',
+      heading("Factures", "Clique sur une facture pour changer son état dans cette session"),
+      '<section class="listbox rows">',
+      v.listes.factures.map(f =>
+        '<button class="item invoice-button" data-invoice="' + f.id + '" type="button">' +
+        '<div class="item-main"><strong>' + escapeHtml(f.type || "Facture") + ' · ' + escapeHtml(f.etudeLibelle) + '</strong>' +
+        '<small>' + escapeHtml(f.etat) + '</small></div>' +
+        '<span class="pill ' + (f.etat === "Payée" ? "green" : "pink") + '">' +
+        (f.etat === "Payée" ? "Payée" : "À encaisser") + '</span>' +
+        '<div class="amount">' + money(f.montant / 1.2) + ' HT</div></button>'
+      ).join(""),
+      '</section>'
+    ].join("");
   }
 
   function team(v) {
