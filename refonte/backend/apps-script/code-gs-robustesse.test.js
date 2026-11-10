@@ -143,3 +143,18 @@ test("le serveur refuse une intervention aux champs métier invalides", async ()
   assert.equal(r.error.code, "INVALID_REQUEST");
   assert.equal(s.lireRevision(), 0);
 });
+
+test("un id JSON incohérent ou une version invalide est mis en quarantaine logique et jamais publié", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: base });
+  s.feuilles["Données"].rows.push(["clients", "client_0002", JSON.stringify({ id: "client_9999", raisonSociale: "Mauvais id", _v: 1 })]);
+  s.feuilles["Données"].rows.push(["clients", "client_0003", JSON.stringify({ id: "client_0003", raisonSociale: "Mauvaise version", _v: -1 })]);
+  const loaded = await body(s, req("loadAll"));
+  assert.equal(loaded.data.clients.client_0002, undefined);
+  assert.equal(loaded.data.clients.client_0003, undefined);
+  assert.ok(loaded.meta.anomalies.some(a => a.erreur === "id_mismatch"));
+  assert.ok(loaded.meta.anomalies.some(a => a.erreur === "version"));
+  const unchanged = JSON.stringify(s.feuilles["Données"].rows);
+  const write = await body(s, save("client_0003", { raisonSociale: "Écrasement" }, 0, "op_corrupt_version_01"));
+  assert.equal(write.error.code, "INVALID_REQUEST");
+  assert.equal(JSON.stringify(s.feuilles["Données"].rows), unchanged);
+});
