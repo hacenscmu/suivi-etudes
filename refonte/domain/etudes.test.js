@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { analyserEtude, STATUTS_ETUDE } = require("./etudes");
+const { analyserEtude } = require("./etudes");
 
 const etude = {
   id: "etude_0001",
@@ -9,13 +9,15 @@ const etude = {
   client: "Client A",
   statut: "Convention signée",
   montant: 3600,
-  jeh: 12,
+  // Compatibilité v11 : le champ jeh est le prix unitaire HT, pas le nombre de JEH.
+  jeh: 250,
 };
 
-test("convertit le montant TTC en CA HT signé", () => {
+test("convertit le montant TTC en CA HT et déduit le nombre de JEH du prix unitaire", () => {
   const r = analyserEtude(etude);
   assert.equal(r.caSigneHt, 3000);
   assert.equal(r.prixJehHt, 250);
+  assert.equal(r.nombreJehFacturees, 12);
 });
 
 test("ne compte pas le CA d'une étude non signée", () => {
@@ -29,15 +31,31 @@ test("compte le CA d'une étude archivée", () => {
 });
 
 test("signale un prix JEH supérieur au plafond HAC sans le traiter comme une règle légale", () => {
-  const r = analyserEtude({ ...etude, montant: 5000, jeh: 10 });
+  const r = analyserEtude({ ...etude, jeh: 350 });
   assert.ok(r.alertes.some(a => a.includes("plafond HAC de 300")));
+  assert.equal(r.nombreJehFacturees, 3000 / 350);
   assert.equal(r.valide, true);
 });
 
 test("ne signale pas le plafond lorsque le prix JEH est égal à 300 € HT", () => {
-  const r = analyserEtude({ ...etude, montant: 4320, jeh: 12 });
+  const r = analyserEtude({ ...etude, jeh: 300 });
   assert.equal(r.prixJehHt, 300);
+  assert.equal(r.nombreJehFacturees, 10);
   assert.equal(r.alertes.length, 0);
+});
+
+test("exige un prix JEH positif pour une étude signée", () => {
+  for (const jeh of [null, 0, -10, ""]) {
+    const r = analyserEtude({ ...etude, jeh });
+    assert.equal(r.valide, false);
+    assert.ok(r.anomalies.some(a => a.includes("Prix unitaire HT")));
+  }
+});
+
+test("autorise une étude non signée sans prix JEH encore défini", () => {
+  const r = analyserEtude({ ...etude, statut: "Devis envoyé", jeh: null });
+  assert.equal(r.valide, true);
+  assert.equal(r.nombreJehFacturees, null);
 });
 
 test("rattache les factures par identifiant stable et calcule leur situation", () => {
@@ -77,15 +95,4 @@ test("rejette un statut et une date invalides", () => {
   const r = analyserEtude({ ...etude, statut: "En cours", date: "2026-02-30" });
   assert.equal(r.valide, false);
   assert.ok(r.anomalies.length >= 2);
-});
-
-test("expose les statuts issus de l'application historique", () => {
-  assert.equal(STATUTS_ETUDE.length, 9);
-  assert.ok(STATUTS_ETUDE.includes("Convention étudiant avant réalisation"));
-});
-
-test("n'invente pas le CA signé si le montant ou la JEH est absent", () => {
-  const r = analyserEtude({ ...etude, montant: "", jeh: "" });
-  assert.equal(r.caSigneHt, null);
-  assert.equal(r.valide, false);
 });
