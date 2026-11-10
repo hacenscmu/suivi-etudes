@@ -43,7 +43,7 @@ Depuis la racine du dépôt, avec Node.js :
 node --test refonte/domain/*.test.js refonte/application/*.test.js
 ```
 
-Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 155 tests : domaine, application, client API v3, serveur simulé, intégration client/serveur et file hors ligne. Le dernier run complet vérifié : 155 réussis, 0 échec ; le workflow vérifie aussi la reproductibilité du bundle navigateur.
+Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 156 tests : domaine, application, client API v3, serveur simulé, intégration client/serveur et file hors ligne. Le dernier run complet vérifié : 156 réussis, 0 échec ; le workflow vérifie aussi la reproductibilité du bundle navigateur.
 
 ## État d'intégration
 
