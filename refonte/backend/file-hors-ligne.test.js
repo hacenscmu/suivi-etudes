@@ -239,3 +239,15 @@ test("une opération interrompue par le serveur est bloquée jusqu'à remplaceme
   assert.equal(second.traitees, 1);
   assert.equal(second.restantes, 0);
 });
+
+test("accepte config/main dans la file mais refuse sa suppression", async () => {
+  const file = creerFileHorsLigne({ stockage: stockage(), api: apiOk() });
+  await file.ajouter({
+    type: "save", collection: "config", id: "main", record: { id: "main", tva: 0.2 },
+    opId: "op_queue_config_01", expectedVersion: 1,
+  });
+  await assert.rejects(file.ajouter({
+    type: "delete", collection: "config", id: "main",
+    opId: "op_queue_config_02", expectedVersion: 1,
+  }), e => e.code === "READ_ONLY_COLLECTION");
+});
