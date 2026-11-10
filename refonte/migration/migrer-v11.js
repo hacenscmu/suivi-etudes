@@ -89,7 +89,7 @@ function migrerV11(exportV11, { correspondances = {} } = {}) {
     if (e?.num && numsVus.get(e.num) === 1) idEtudeParNum.set(e.num, id);
     const o = { id, sourceLegacyId: sid, num: e?.num ?? "", date: e?.date ?? "", statut: e?.statut ?? "", client: e?.client ?? "",
       clientId: e?.client ? clientDe(e.client) : null, resume: e?.resume ?? "", montant: num(e?.montant), jeh: num(e?.jeh), frais: num(e?.frais) };
-    if (!e?.client && !o.clientId) anomalies.push({ type: "etude_sans_client", sourceLegacyId: sid, num: o.num, gravite: "bloquante" });
+    if (!cle(e?.client) && !o.clientId) anomalies.push({ type: "etude_sans_client", sourceLegacyId: sid, num: o.num, gravite: "bloquante" });
     if (o.jeh !== null && (o.jeh < 80 || o.jeh > 450)) anomalies.push({ type: "prix_jeh_client_hors_cnje", sourceLegacyId: sid, num: o.num, valeur: o.jeh, gravite: "a_verifier" });
     return o;
   });
@@ -174,7 +174,7 @@ function migrerV11(exportV11, { correspondances = {} } = {}) {
   });
 
   // ---- Questions pour Pauline ----
-  [...clients.values()].filter(c => c.variantes.size > 1).forEach(c => questions.push({ type: "clients_fusionnes", question: "Ces écritures désignent-elles bien le même client ?", valeurs: [...c.variantes] }));
+  [...clients.values()].filter(c => c.variantes.size > 1 && ![...c.variantes].every(v => C.clients[v] === c.id)).forEach(c => questions.push({ type: "clients_fusionnes", question: "Ces écritures désignent-elles bien le même client ?", valeurs: [...c.variantes] }));
   const proches = new Map();
   [...clients.values()].forEach(c => { const k = cle(c.raisonSociale).replace(/[^a-z0-9]/g, ""); proches.set(k, [...(proches.get(k) || []), c.raisonSociale]); });
   [...proches.values()].filter(v => v.length > 1).forEach(v => questions.push({ type: "clients_proches", question: "Ces clients sont-ils le même ?", valeurs: v }));
