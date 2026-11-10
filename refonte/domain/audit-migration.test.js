@@ -41,7 +41,7 @@ test("les prénoms et noms clients réutilisés sont signalés sans fusion", () 
   });
   assert.equal(resultat.resume.nomsClientsReutilises, 1);
   assert.equal(resultat.resume.prenomsReutilises, 1);
-  assert.equal(resultat.migrationAutomatiqueAutorisee, true);
+  assert.equal(resultat.migrationAutomatiqueAutorisee, false);
   assert.ok(resultat.anomalies.every(a => a.gravite === "a_verifier"));
 });
 
