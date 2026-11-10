@@ -8,8 +8,10 @@
  */
 const { auditerDonneesHistoriques } = require("./audit-migration");
 
-function entries(collection) {
-  if (!collection || typeof collection !== "object" || Array.isArray(collection)) return [];
+function entries(collection, nom) {
+  if (!collection || typeof collection !== "object" || Array.isArray(collection)) {
+    throw new TypeError("Collection historique invalide : " + nom);
+  }
   return Object.entries(collection).map(([sourceId, data]) => ({
     sourceId,
     data: data && typeof data === "object" && !Array.isArray(data) ? data : {},
@@ -30,9 +32,9 @@ function adaptateurHistorique({
     throw new TypeError("createId doit être fourni : aucun identifiant de repli n'est généré.");
   }
 
-  const E = entries(etudes);
-  const F = entries(factures);
-  const T = entries(temps);
+  const E = entries(etudes, "etudes");
+  const F = entries(factures, "factures");
+  const T = entries(temps, "temps");
   const audit = auditerDonneesHistoriques({
     etudes: E.map(x => x.data),
     factures: F.map(x => x.data),
@@ -80,7 +82,6 @@ function adaptateurHistorique({
   });
 
   const tempsCibles = T.map(({ sourceId, data }) => {
-    const etude = E.find(x => x.data.num === data.etude);
     return {
       ...data,
       id: attribuerId(sourceId, "tmp"),
