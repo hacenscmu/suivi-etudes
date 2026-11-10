@@ -134,6 +134,14 @@ function relation_(I, c, r) {
     if (!vivante_(I, 'bvs', r.bvId)) return 'BV parent introuvable';
     if (!vivante_(I, 'membres', r.membreId)) return 'Membre lié introuvable';
   }
+  if (c === 'formation') {
+    if (!vivante_(I, 'membres', r.membreId)) return 'Membre de formation introuvable';
+    if (!simple_(r.niveaux)) return 'Grille de niveaux invalide';
+    var idsEtudes = Object.keys(r.niveaux);
+    for (var fi = 0; fi < idsEtudes.length; fi++) {
+      if (!vivante_(I, 'etudes', idsEtudes[fi])) return 'Étude de formation introuvable';
+    }
+  }
   return null;
 }
 
@@ -167,7 +175,16 @@ function validerMetier_(c,r) {
   }
   if(c==='lignesBV'&&(typeof r.bvId!=='string'||!ID_VALIDE.test(r.bvId)||typeof r.membreId!=='string'||!ID_VALIDE.test(r.membreId)||!nombreNonNegatif_(r.jeh)))
     return 'Ligne BV : BV, membre ou nombre de JEH invalide';
-  if(c==='formation'&&!texte_(r.nom)) return 'Nom de formation requis';
+  if(c==='formation'){
+    if(!texte_(r.nom)) return 'Nom de formation requis';
+    if(typeof r.membreId!=='string'||!ID_VALIDE.test(r.membreId)) return 'Membre de formation invalide';
+    if(!simple_(r.niveaux)||Object.keys(r.niveaux).length>500) return 'Grille de niveaux invalide';
+    var niveauxIds=Object.keys(r.niveaux);
+    for(var ni=0;ni<niveauxIds.length;ni++){
+      var niveau=r.niveaux[niveauxIds[ni]];
+      if(!ID_VALIDE.test(niveauxIds[ni])||!Number.isInteger(niveau)||niveau<0||niveau>4) return 'Niveau de formation invalide';
+    }
+  }
   return '';
 }
 
@@ -212,7 +229,7 @@ function dependance_(I, c, id) {
   var references = {
     clients:[['etudes','clientId']],
     etudes:[['factures','etudeId'],['interventions','etudeId']],
-    membres:[['interventions','membreId'],['lignesBV','membreId']],
+    membres:[['interventions','membreId'],['lignesBV','membreId'],['formation','membreId']],
     bvs:[['lignesBV','bvId']]
   }[c] || [];
   for (var i=0;i<references.length;i++) {
@@ -223,6 +240,16 @@ function dependance_(I, c, id) {
         e.o._deleted!==true && e.o[field]===id;
     });
     if (trouve) return 'Suppression refusée : des fiches '+collection+' référencent encore cet élément';
+  }
+  if (c === 'etudes') {
+    var prefixFormation = 'formation\\u0001';
+    var grilleTrouvee = Object.keys(I.idx).some(function(key) {
+      var entree = I.idx[key];
+      return key.indexOf(prefixFormation) === 0 && entree.o && !entree.corrompu && !entree.doublon &&
+        entree.o._deleted !== true && entree.o.niveaux &&
+        Object.prototype.hasOwnProperty.call(entree.o.niveaux, id);
+    });
+    if (grilleTrouvee) return 'Suppression refusée : la grille Qualité formation référence encore cette étude';
   }
   return '';
 }
