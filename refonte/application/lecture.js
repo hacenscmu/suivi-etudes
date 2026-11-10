@@ -16,6 +16,7 @@ const COLLECTIONS = Object.freeze([
   "interventions",
   "bvs",
   "lignesBV",
+  "formation",
 ]);
 
 function creerEtatVide() {
@@ -80,6 +81,32 @@ function validerEtat(etat) {
   etat.lignesBV.forEach((_, i) => {
     verifierLien("lignesBV", i, "bvId", "bvs");
     verifierLien("lignesBV", i, "membreId", "membres");
+  });
+
+  const membresAvecFormation = new Set();
+  etat.formation.forEach((fiche, i) => {
+    if (!estIdValide(fiche.membreId) || !index.membres.has(fiche.membreId)) {
+      anomalies.push({ collection: "formation", index: i, raison: "Membre de formation introuvable ou invalide" });
+    }
+    if (fiche.membreId && membresAvecFormation.has(fiche.membreId)) {
+      anomalies.push({ collection: "formation", index: i, raison: "Plusieurs grilles de formation pour le même membre" });
+    }
+    if (fiche.membreId) membresAvecFormation.add(fiche.membreId);
+    if (typeof fiche.nom !== "string" || !fiche.nom.trim()) {
+      anomalies.push({ collection: "formation", index: i, raison: "Nom de formation absent ou invalide" });
+    }
+    if (!fiche.niveaux || typeof fiche.niveaux !== "object" || Array.isArray(fiche.niveaux)) {
+      anomalies.push({ collection: "formation", index: i, raison: "Grille de niveaux invalide" });
+    } else {
+      for (const [etudeId, niveau] of Object.entries(fiche.niveaux)) {
+        if (!estIdValide(etudeId) || !index.etudes.has(etudeId)) {
+          anomalies.push({ collection: "formation", index: i, raison: "Étude de formation introuvable ou invalide" });
+        }
+        if (!Number.isInteger(niveau) || niveau < 0 || niveau > 4) {
+          anomalies.push({ collection: "formation", index: i, raison: "Niveau de formation hors de 0 à 4" });
+        }
+      }
+    }
   });
 
   const analyseBVs = analyserCollectionBVs({
