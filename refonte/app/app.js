@@ -2,7 +2,9 @@
 (() => {
   "use strict";
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
-  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3 } = window.HAC;
+  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, EN_COURS } = window.HAC;
+  let filtreEtudes = "En cours";
+  const alertesParEtude = () => calculerAlertes({ etudes: data.etudes, factures: data.factures, interventions: data.interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
   // ---- Mode essai : un serveur v3 simulé sur ce téléphone, avec des données d'exemple. Aucune donnée réelle. ----
   const JETON_ESSAI = "essai-local-hac-v3";
   const v1 = o => Object.fromEntries(o.map(x => [x.id, { ...x, _v: 1 }]));
@@ -79,7 +81,10 @@
         escapeHtml(member?.nomComplet || "Intervenant") + " · " + escapeHtml(study?.num || "Étude") +
         " · " + money(intervention?.prixJehHt) + " HT/JEH</small></div></div>";
     }).join("");
-    const alerts = alertesFactures + alertesJeh;
+    const AL = alertesParEtude();
+    const parEtude = data.etudes.map(e => ({ e, a: AL.get(e.id)?.alertes || [] })).filter(x => x.a.length);
+    const alerts = parEtude.map(({ e, a }) => '<button type="button" class="alert invoice-button" data-etude="' + e.id + '"><div class="alert-icon">' + a.length + '</div><div><strong>' +
+      escapeHtml(nomEtude(e)) + "</strong><small>" + a.map(x => escapeHtml(x.texte)).join(" · ") + "</small></div></button>").join("");
     return '<div class="stats">' +
       '<div class="stat"><div class="label">JEH travaillées · étudiants</div><strong>' + (d.totalJehTravaillees ?? "—").toLocaleString?.("fr-FR") + '</strong><small>Interventions réalisées uniquement</small></div>' +
       '<div class="stat"><div class="label">Chiffre d’affaires signé HT</div><strong>' + money(d.caSigne) + '</strong><small>' + d.nombreEtudes + " études suivies</small></div>" +
@@ -92,17 +97,21 @@
       '</div></section><section class="panel"><h3>Encaissement</h3><div class="sub">Part du CA signé déjà encaissée</div><div class="ring-wrap"><div class="ring" style="background:conic-gradient(var(--pink) 0 ' +
       percent + '%,#f4eaf0 ' + percent + '% 100%)"></div><div class="ring-info"><strong>' + money(d.encaisse) + '</strong><small>sur ' + money(d.caSigne) +
       ' HT signés</small></div></div><div class="sub">' + money(d.resteAEncaisser) + " HT restent à encaisser</div></section></div>" +
-      heading("À surveiller", "Factures et suivis en cours") +
-      '<section class="panel">' + (alerts || '<div class="empty">Aucune facture en attente.</div>') + "</section>";
+      heading("Alertes à traiter", parEtude.length + " étude(s) concernée(s)") +
+      '<section class="panel">' + (alerts || '<div class="empty">Aucune alerte. Tout est à jour.</div>') + "</section>";
   }
 
   function studies(v) {
-    const rows = v.listes.etudes.filter(s => [s.num, s.clientLibelle, s.statut].join(" ").toLowerCase().includes(recherche.toLowerCase()));
+    const AL = alertesParEtude();
+    const FILTRES = { "En cours": s => EN_COURS.includes(s.statut), "Archivées": s => s.statut === "Archivée", "Refusées": s => s.statut === "Refusé / sans suite", "Alertes": s => (AL.get(s.id)?.alertes || []).length > 0, "Toutes": () => true };
+    const rows = v.listes.etudes.filter(FILTRES[filtreEtudes]).filter(s => [s.num, s.clientLibelle, s.statut].join(" ").toLowerCase().includes(recherche.toLowerCase()));
+    const puces = '<div class="toolbar" style="flex-wrap:wrap;margin-bottom:10px">' + Object.keys(FILTRES).map(k => '<button type="button" class="pill ' + (k === filtreEtudes ? "pink" : "") + '" data-filtre="' + k + '">' + k +
+      " (" + v.listes.etudes.filter(FILTRES[k]).length + ")</button>").join("") + "</div>";
     return heading("Études", data.etudes.length + " études",
       '<div class="toolbar"><input class="search" id="search" placeholder="Rechercher une étude…" value="' + escapeHtml(recherche) +
-      '"><button class="ghost action" id="addClient">＋ Client</button><button class="action" id="addStudy">＋ Étude</button></div>') +
+      '"><button class="ghost action" id="addClient">＋ Client</button><button class="action" id="addStudy">＋ Étude</button></div>') + puces +
       '<section class="listbox rows">' + (rows.map(s => '<button type="button" class="item invoice-button" data-etude="' + s.id + '"><div class="item-main"><strong>' + escapeHtml(s.num) + " · " + escapeHtml(s.clientLibelle) +
-        '</strong><small>' + escapeHtml(s.date) + " · " + s.factures.length + ' facture(s)</small></div><span class="pill ' +
+        '</strong><small>' + escapeHtml(AL.get(s.id)?.facture || "—") + (AL.get(s.id)?.alertes.length ? ' · <span class="accent">⚠ ' + escapeHtml(AL.get(s.id).alertes[0].texte) + (AL.get(s.id).alertes.length > 1 ? " (+" + (AL.get(s.id).alertes.length - 1) + ")" : "") + "</span>" : "") + '</small></div><span class="pill ' +
         (s.statut === "Archivée" ? "green" : s.statut === "Devis envoyé" ? "pink" : "") + '">' + escapeHtml(s.statut) +
         '</span><div class="amount">' + money(s.montant / 1.2) + " HT</div></button>").join("") || '<div class="empty">Aucune étude. Commencez par « ＋ Client » puis « ＋ Étude ».</div>') + "</section>" +
       heading("Clients", data.clients.length + " clients") + '<section class="listbox rows">' + data.clients.map(c => '<button type="button" class="item invoice-button" data-client="' + c.id + '"><div class="item-main"><strong>' + escapeHtml(c.raisonSociale) + '</strong><small>' + (c.relationType === "longue_duree" ? "Relation récurrente" : "Mission ponctuelle") + " · " + data.etudes.filter(e => e.clientId === c.id).length + " étude(s)</small></div></button>").join("") + "</section>";
@@ -309,6 +318,7 @@
     brancher("#addInterv", () => ouvrirIntervention());
     brancher("#addBV", () => ouvrirBV());
     brancher("[data-etude]", el => ouvrirEtude(el.dataset.etude));
+    brancher("[data-filtre]", el => { filtreEtudes = el.dataset.filtre; render(); });
     brancher("[data-client]", el => ouvrirClient(el.dataset.client));
     brancher("[data-invoice]", el => ouvrirFacture(el.dataset.invoice));
     brancher("[data-membre]", el => ouvrirMembre(el.dataset.membre));
