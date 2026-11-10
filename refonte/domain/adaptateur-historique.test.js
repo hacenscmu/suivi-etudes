@@ -62,3 +62,15 @@ test("conserve les champs et statuts historiques sans normalisation silencieuse"
   assert.equal(r.donnees.temps[0].statut, "A venir");
   assert.equal(r.donnees.temps[0].min, 90);
 });
+
+test("ignore les identifiants client/membre invalides et les signale", () => {
+  const r = adaptateurHistorique({
+    etudes: { etude0001: { num: "A-1", client: "Client" } },
+    temps: { temps0001: { etude: "A-1", prenom: "Alex", statut: "Payé" } },
+    clientIdParEtudeSource: { etude0001: "client" },
+    membreIdParTempsSource: { temps0001: "membre" },
+    createId: ids,
+  });
+  assert.equal(r.statut, "a_completer");
+  assert.deepEqual(r.correspondancesManquantes.map(x => x.type), ["client", "membre"]);
+});
