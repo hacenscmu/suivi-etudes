@@ -74,7 +74,7 @@
     const max = Math.max(1, ...mois.map(m => m.jeh));
     const percent = d.caSigne > 0 ? Math.round(d.encaisse / d.caSigne * 100) : 0;
     const facturesOuvertes = data.factures.filter(f => f.etat !== "Payée");
-    const alerts = facturesOuvertes.map(f => {
+    const alertesFactures = facturesOuvertes.map(f => {
       const study = data.etudes.find(e => e.id === f.etudeId);
       const client = data.clients.find(c => c.id === study?.clientId);
       return '<div class="alert"><div class="alert-icon">!</div><div><strong>Facture à encaisser · ' +
@@ -82,6 +82,15 @@
         escapeHtml(study?.num || "") + " · " + money(f.montant / 1.2) + " HT · " + escapeHtml(f.type || "Facture") +
         "</small></div></div>";
     }).join("");
+    const alertesJeh = (d.alertesInterventions || []).map(a => {
+      const intervention = data.interventions[a.index];
+      const study = data.etudes.find(e => e.id === intervention?.etudeId);
+      const member = data.membres.find(m => m.id === intervention?.membreId);
+      return '<div class="alert"><div class="alert-icon">!</div><div><strong>Prix JEH intervenant supérieur à 300 € HT</strong><small>' +
+        escapeHtml(member?.nomComplet || "Intervenant") + " · " + escapeHtml(study?.num || "Étude") +
+        " · " + money(intervention?.prixJehHt) + " HT/JEH</small></div></div>";
+    }).join("");
+    const alerts = alertesFactures + alertesJeh;
     return '<div class="stats">' +
       '<div class="stat"><div class="label">JEH travaillées · étudiants</div><strong>' + (d.totalJehTravaillees ?? "—").toLocaleString?.("fr-FR") + '</strong><small>Interventions réalisées uniquement</small></div>' +
       '<div class="stat"><div class="label">Chiffre d’affaires signé HT</div><strong>' + money(d.caSigne) + '</strong><small>' + d.nombreEtudes + " études suivies</small></div>" +
