@@ -4,7 +4,7 @@
  * Prépare et applique des ajouts/modifications immuables sur un état de travail.
  * Ce module ne persiste rien et ne remplace pas les contrôles de version du serveur.
  */
-const { COLLECTIONS, validerEtat } = require("./lecture");
+const { COLLECTIONS, construireVueApplication } = require("./lecture");
 
 function preparerAjout({ etat, collection, donnees, creerId }) {
   if (!COLLECTIONS.includes(collection)) {
@@ -96,7 +96,7 @@ function appliquerCommande(etat, commande) {
     return { valide: false, etat, anomalies: ["Type de commande non pris en charge"] };
   }
 
-  const validation = validerEtat(copie);
+  const validation = construireVueApplication(copie);
   if (!validation.valide) {
     return { valide: false, etat, anomalies: validation.anomalies };
   }
