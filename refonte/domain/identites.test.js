@@ -15,6 +15,10 @@ test("un identifiant stable doit être une chaîne suffisamment longue", () => {
   assert.equal(estIdValide(null), false);
 });
 
+test("les interventions font partie des entités à identifiant stable", () => {
+  assert.equal(validerIdentite({ id: "interv_0001" }, "interventions").valide, true);
+});
+
 test("une identité valide porte un identifiant stable", () => {
   assert.deepEqual(validerIdentite({ id: "etude_000001" }, "etudes"), {
     valide: true,
@@ -73,4 +77,20 @@ test("les factures et lignes de BV doivent référencer des parents existants", 
 
   assert.equal(resultat.valide, false);
   assert.equal(resultat.anomalies.length, 2);
+});
+
+test("les interventions doivent référencer une étude et un membre existants", () => {
+  const resultat = validerLiensMetier({
+    etudes: [{ id: "etude_000001" }],
+    membres: [{ id: "membre_0001" }],
+    interventions: [
+      { id: "interv_0001", etudeId: "etude_000001", membreId: "membre_0001" },
+      { id: "interv_0002", etudeId: "etude_absente", membreId: "membre_absent" },
+    ],
+  });
+  assert.equal(resultat.valide, false);
+  assert.deepEqual(resultat.anomalies, [
+    { collection: "interventions", index: 1, raison: "Étude liée introuvable" },
+    { collection: "interventions", index: 1, raison: "Membre lié introuvable" },
+  ]);
 });
