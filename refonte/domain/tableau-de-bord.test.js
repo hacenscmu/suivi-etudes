@@ -1,0 +1,146 @@
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const { calculerTableauDeBord } = require("./tableau-de-bord");
+
+const base = {
+  dateFin: "2026-11-10",
+  nombreMois: 3,
+  etudes: [
+    { id: "etude_0001", statut: "Convention signée", montant: 6000 },
+    { id: "etude_0002", statut: "Faisabilité", montant: 2400 },
+  ],
+  factures: [
+    { id: "facture_001", etudeId: "etude_0001", montant: 2000, etat: "Payée" },
+    { id: "facture_002", etudeId: "etude_0001", montant: 1000, etat: "Émise" },
+    { id: "facture_003", etudeId: "etude_0002", montant: 1500, etat: "Payée" },
+  ],
+  interventions: [
+    { id: "t1", etudeId: "etude_0001", membreId: "membre_001", date: "2026-09-15", statut: "Payé", minutesIndividuelles: 960 },
+    { id: "t2", etudeId: "etude_0001", membreId: "membre_001", date: "2026-10-15", statut: "Pas payé", minutesIndividuelles: 720 },
+    { id: "t3", etudeId: "etude_0002", membreId: "membre_002", date: "2026-11-02", statut: "A venir", minutesIndividuelles: 3840 },
+    { id: "t4", etudeId: "etude_0002", membreId: "membre_002", date: "2026-11-03", statut: "Non effectué", minutesIndividuelles: 1920 },
+  ],
+};
+
+test("sépare CA signé, facturé et encaissé", () => {
+  const r = calculerTableauDeBord(base);
+  assert.equal(r.caSigne, 5000);
+  assert.equal(r.montantFacture, 3750);
+  assert.equal(r.encaisse, 2916.666666666667);
+  assert.equal(r.resteAEncaisser, 833.333333333333);
+});
+
+test("ne compte que les JEH réellement travaillées", () => {
+  const r = calculerTableauDeBord(base);
+  assert.equal(r.totalJehTravaillees, 3.5);
+  assert.deepEqual(r.jehParMois, [
+    { mois: "2026-09", jeh: 2 },
+    { mois: "2026-10", jeh: 1.5 },
+    { mois: "2026-11", jeh: 0 },
+  ]);
+});
+
+test("répartit les JEH par identifiant stable de membre", () => {
+  const r = calculerTableauDeBord(base);
+  assert.deepEqual(r.jehParMembre, [
+    { membreId: "membre_001", jeh: 3.5 },
+  ]);
+});
+
+test("n'affiche pas un total financier complet si une facture est incohérente", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    factures: [...base.factures, { etudeId: "etude_0001", montant: 90 }],
+  });
+  assert.equal(r.montantFacture, null);
+  assert.equal(r.encaisse, null);
+  assert.equal(r.resteAEncaisser, null);
+  assert.equal(r.valide, false);
+});
+
+test("signale une facture orpheline au lieu de l'ignorer", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    factures: [...base.factures, { etudeId: "etude_absente", montant: 90, etat: "Payée" }],
+  });
+  assert.equal(r.encaisse, null);
+  assert.ok(r.anomalies.some(a => a.raison === "Facture sans lien d'étude valide"));
+});
+
+test("ne masque pas un montant d'étude signée absent", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    etudes: [...base.etudes, { id: "etude_0003", statut: "Convention signée" }],
+  });
+  assert.equal(r.caSigne, null);
+  assert.equal(r.valide, false);
+});
+
+test("n'ajoute pas une étude non signée au CA signé", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    etudes: [
+      { ...base.etudes[0], statut: "Devis envoyé" },
+      base.etudes[1],
+    ],
+  });
+  assert.equal(r.caSigne, 0);
+});
+
+test("convertit les factures TTC en montants HT avec le taux de TVA", () => {
+  const r = calculerTableauDeBord({ ...base, tva: 0.1 });
+  assert.ok(Math.abs(r.montantFacture - 4090.909090909091) < 1e-9);
+  assert.ok(Math.abs(r.encaisse - 3181.818181818182) < 1e-9);
+});
+
+test("refuse un taux de TVA invalide", () => {
+  assert.equal(calculerTableauDeBord({ ...base, tva: 1.2 }).valide, false);
+});
+
+test("bloque les paramètres de période invalides", () => {
+  assert.equal(calculerTableauDeBord({ ...base, dateFin: "2026-02-30" }).valide, false);
+  assert.equal(calculerTableauDeBord({ ...base, nombreMois: 0 }).valide, false);
+});
+
+test("bloque les collections invalides", () => {
+  const r = calculerTableauDeBord({ ...base, factures: null });
+  assert.equal(r.valide, false);
+});
+
+test("détecte les identifiants d'étude dupliqués", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    etudes: [...base.etudes, { id: "etude_0001", montant: 10 }],
+  });
+  assert.equal(r.caSigne, null);
+  assert.ok(r.anomalies.some(a => a.raison === "Identifiant d'étude dupliqué"));
+});
+
+test("le tableau de bord consomme le modèle canonique des interventions individuelles", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    interventions: [{ ...base.interventions[0], minutesIndividuelles: undefined, jeh: 2 }],
+  });
+  assert.equal(r.totalJehTravaillees, null);
+  assert.equal(r.jehParMois, null);
+  assert.equal(r.valide, false);
+});
+
+test("remonte les alertes de prix JEH intervenant au-dessus de 300 € HT sans invalider les totaux", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    interventions: [{ ...base.interventions[0], prixJehHt: 301 }],
+  });
+  assert.equal(r.valide, true);
+  assert.equal(r.alertesInterventions.length, 1);
+  assert.ok(r.alertesInterventions[0].raison.includes("plafond HAC de 300"));
+});
+
+test("permet de configurer le plafond de JEH intervenant", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    interventions: [{ ...base.interventions[0], prixJehHt: 350 }],
+    plafondJehHt: 400,
+  });
+  assert.equal(r.alertesInterventions.length, 0);
+});
