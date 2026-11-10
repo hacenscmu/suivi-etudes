@@ -36,13 +36,14 @@ const etat = () => ({
     membreId: "membre_001",
     jeh: 1,
   }],
+  formation: [],
 });
 
 test("crée un état vide avec toutes les collections attendues", () => {
   const vide = creerEtatVide();
   assert.deepEqual(Object.keys(vide), [
     "clients", "membres", "etudes", "factures",
-    "interventions", "bvs", "lignesBV",
+    "interventions", "bvs", "lignesBV", "formation",
   ]);
   assert.ok(Object.values(vide).every(Array.isArray));
 });
@@ -110,4 +111,38 @@ test("ne fabrique pas de nom lorsqu'une référence client est absente", () => {
   data.etudes[0].clientId = undefined;
   const r = construireVueApplication(data, { dateFin: "2026-11-10" });
   assert.equal(r.listes.etudes[0].clientLibelle, "Client Alpha");
+});
+
+test("valide une grille de formation reliée à un membre et à une étude", () => {
+  const data = etat();
+  data.formation.push({ id: "formation_0001", membreId: "membre_001", nom: "Alice Martin", niveaux: { etude_0001: 3 } });
+  assert.equal(validerEtat(data).valide, true);
+});
+
+test("bloque une grille de formation sans membre existant", () => {
+  const data = etat();
+  data.formation.push({ id: "formation_0001", membreId: "membre_absent", nom: "Alice Martin", niveaux: {} });
+  const r = validerEtat(data);
+  assert.equal(r.valide, false);
+  assert.ok(r.anomalies.some(a => a.raison.includes("Membre de formation")));
+});
+
+test("bloque une grille de formation qui référence une étude absente ou un niveau hors échelle", () => {
+  const data = etat();
+  data.formation.push({ id: "formation_0001", membreId: "membre_001", nom: "Alice Martin", niveaux: { etude_absente: 5 } });
+  const r = validerEtat(data);
+  assert.equal(r.valide, false);
+  assert.ok(r.anomalies.some(a => a.raison.includes("Étude de formation")));
+  assert.ok(r.anomalies.some(a => a.raison.includes("Niveau de formation")));
+});
+
+test("bloque plusieurs grilles de formation pour un même membre", () => {
+  const data = etat();
+  data.formation.push(
+    { id: "formation_0001", membreId: "membre_001", nom: "Alice Martin", niveaux: {} },
+    { id: "formation_0002", membreId: "membre_001", nom: "Alice Martin", niveaux: {} },
+  );
+  const r = validerEtat(data);
+  assert.equal(r.valide, false);
+  assert.ok(r.anomalies.some(a => a.raison.includes("Plusieurs grilles")));
 });
