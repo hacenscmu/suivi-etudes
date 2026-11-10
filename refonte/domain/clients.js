@@ -1,27 +1,25 @@
 /**
- * HAC refonte — modèle explicite de relation client.
+ * HAC refonte — relation client et cadence de facturation.
  *
- * Aucun caractère récurrent n'est déduit du nombre d'études passées.
- * La relation est définie sur le client, avec surcharge facultative par étude.
- * Les alertes périodiques ne sont calculées que si une cadence explicite
- * et une date de référence valide sont renseignées.
+ * La durée de la relation commerciale et la périodicité de facturation
+ * sont deux notions distinctes. Une relation longue durée (type CDI) ne
+ * signifie pas automatiquement une facturation mensuelle ou récurrente.
+ * Rien n'est déduit du nombre d'études passées.
  */
-
-const TYPES_RELATION = new Set(["ponctuelle", "recurrente"]);
+const TYPES_RELATION = new Set(["ponctuelle", "longue_duree"]);
 const CADENCES = new Set(["mensuelle", "trimestrielle", "semestrielle", "annuelle"]);
 
 function resoudreRelation(client, etude = null) {
   const type = etude?.relationType ?? client?.relationType ?? "ponctuelle";
-  const cadence = etude?.cadence ?? client?.cadence ?? null;
+  const cadenceFacturation = etude?.cadenceFacturation ?? client?.cadenceFacturation ?? null;
 
   if (!TYPES_RELATION.has(type)) {
-    return { type: "invalide", cadence: null, anomalie: "Type de relation absent ou inconnu" };
+    return { type: "invalide", cadenceFacturation: null, anomalie: "Type de relation absent ou inconnu" };
   }
-  if (type === "ponctuelle") return { type, cadence: null, anomalie: null };
-  if (!CADENCES.has(cadence)) {
-    return { type, cadence: null, anomalie: "Une relation récurrente nécessite une cadence explicite" };
+  if (cadenceFacturation !== null && !CADENCES.has(cadenceFacturation)) {
+    return { type, cadenceFacturation: null, anomalie: "Cadence de facturation inconnue" };
   }
-  return { type, cadence, anomalie: null };
+  return { type, cadenceFacturation, anomalie: null };
 }
 
 function calculerProchaineEcheance({ dateReference, cadence }) {
@@ -48,11 +46,18 @@ function calculerProchaineEcheance({ dateReference, cadence }) {
 
 function analyserAlerteClient(client, etude = null) {
   const relation = resoudreRelation(client, etude);
-  if (relation.anomalie) return { alerteActivable: false, prochaineEcheance: null, anomalie: relation.anomalie };
-  if (relation.type !== "recurrente") return { alerteActivable: false, prochaineEcheance: null, anomalie: null };
+  if (relation.anomalie) {
+    return { alerteActivable: false, prochaineEcheance: null, anomalie: relation.anomalie };
+  }
+  if (relation.type !== "longue_duree" || relation.cadenceFacturation === null) {
+    return { alerteActivable: false, prochaineEcheance: null, anomalie: null };
+  }
 
   const dateReference = etude?.dateProchaineFacture ?? client?.dateProchaineFacture;
-  const prochaineEcheance = calculerProchaineEcheance({ dateReference, cadence: relation.cadence });
+  const prochaineEcheance = calculerProchaineEcheance({
+    dateReference,
+    cadence: relation.cadenceFacturation,
+  });
   if (!prochaineEcheance) {
     return {
       alerteActivable: false,
