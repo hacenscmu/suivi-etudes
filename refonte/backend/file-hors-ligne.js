@@ -40,6 +40,9 @@ function validerOperation(operation) {
   if (typeof operation.collection !== "string" || !operation.collection.trim()) {
     throw new ErreurFile("INVALID_OPERATION", "Collection absente");
   }
+  if (operation.collection === "temps") {
+    throw new ErreurFile("READ_ONLY_COLLECTION", "Les anciennes lignes temps sont en lecture seule ; utiliser interventions");
+  }
   if (typeof operation.id !== "string" || !ID_VALIDE.test(operation.id)) {
     throw new ErreurFile("INVALID_OPERATION", "Identifiant absent ou invalide");
   }
