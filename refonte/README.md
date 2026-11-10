@@ -44,3 +44,10 @@ L'audit historique est en lecture seule : il relève les numéros d'étude dupli
 L’adaptateur historique produit uniquement un aperçu : il bloque les références d’étude ambiguës, exige un générateur d’identifiants explicite, signale les correspondances client/membre absentes ou invalides et ne regroupe jamais automatiquement les lignes de temps en BV. Il ne réalise aucune écriture.
 
 Les modules sont actuellement autonomes. Les formats d'entrée constituent le modèle cible de travail, pas encore un contrat de données migré. Les tests sont exécutés automatiquement dans GitHub Actions. La prochaine étape est d'appliquer l'aperçu à une copie des données réelles et d'arbitrer les correspondances manuelles. Aucun raccordement à `app.js` ni aucune migration n'est autorisé à ce stade. Les calculs actuels de production restent inchangés.
+
+
+## Aperçu d'interface
+
+Un premier prototype mobile-first est disponible dans [`demo/index.html`](demo/index.html). Il présente les cinq onglets retenus (Accueil, Études, Finances, Équipe, Réglages), le tableau de bord avec les JEH réellement travaillées par les étudiants, les listes d'études et de factures, ainsi que les alertes adaptées aux clients ponctuels/récurrents.
+
+**Limites du prototype :** les données sont fictives, les interactions sont locales et aucune connexion au backend ni aux données de production n'est faite. Ce fichier permet de valider une direction d'interface, pas encore de tester la gestion réelle. Il n'est pas publié sur l'URL de production.
