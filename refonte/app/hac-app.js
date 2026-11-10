@@ -730,6 +730,7 @@
       "interventions",
       "bvs",
       "lignesBV",
+      "formation",
     ]);
     
     function creerEtatVide() {
@@ -794,6 +795,32 @@
       etat.lignesBV.forEach((_, i) => {
         verifierLien("lignesBV", i, "bvId", "bvs");
         verifierLien("lignesBV", i, "membreId", "membres");
+      });
+    
+      const membresAvecFormation = new Set();
+      etat.formation.forEach((fiche, i) => {
+        if (!estIdValide(fiche.membreId) || !index.membres.has(fiche.membreId)) {
+          anomalies.push({ collection: "formation", index: i, raison: "Membre de formation introuvable ou invalide" });
+        }
+        if (fiche.membreId && membresAvecFormation.has(fiche.membreId)) {
+          anomalies.push({ collection: "formation", index: i, raison: "Plusieurs grilles de formation pour le même membre" });
+        }
+        if (fiche.membreId) membresAvecFormation.add(fiche.membreId);
+        if (typeof fiche.nom !== "string" || !fiche.nom.trim()) {
+          anomalies.push({ collection: "formation", index: i, raison: "Nom de formation absent ou invalide" });
+        }
+        if (!fiche.niveaux || typeof fiche.niveaux !== "object" || Array.isArray(fiche.niveaux)) {
+          anomalies.push({ collection: "formation", index: i, raison: "Grille de niveaux invalide" });
+        } else {
+          for (const [etudeId, niveau] of Object.entries(fiche.niveaux)) {
+            if (!estIdValide(etudeId) || !index.etudes.has(etudeId)) {
+              anomalies.push({ collection: "formation", index: i, raison: "Étude de formation introuvable ou invalide" });
+            }
+            if (!Number.isInteger(niveau) || niveau < 0 || niveau > 4) {
+              anomalies.push({ collection: "formation", index: i, raison: "Niveau de formation hors de 0 à 4" });
+            }
+          }
+        }
       });
     
       const analyseBVs = analyserCollectionBVs({
@@ -1730,6 +1757,12 @@
           if (!collections.bvs[record.bvId] || collections.bvs[record.bvId]._deleted) return "BV parent introuvable";
           if (!collections.membres[record.membreId] || collections.membres[record.membreId]._deleted) return "Membre lié introuvable";
         }
+        if (collection === "formation") {
+          if (!collections.membres[record.membreId] || collections.membres[record.membreId]._deleted) return "Membre de formation introuvable";
+          for (const etudeId of Object.keys(record.niveaux || {})) {
+            if (!collections.etudes[etudeId] || collections.etudes[etudeId]._deleted) return "Étude de formation introuvable";
+          }
+        }
         return null;
       }
     
@@ -1737,13 +1770,17 @@
         const references = {
           clients: [["etudes", "clientId"]],
           etudes: [["factures", "etudeId"], ["interventions", "etudeId"]],
-          membres: [["interventions", "membreId"], ["lignesBV", "membreId"]],
+          membres: [["interventions", "membreId"], ["lignesBV", "membreId"], ["formation", "membreId"]],
           bvs: [["lignesBV", "bvId"]],
         }[collection] || [];
         for (const [nom, champ] of references) {
           if (Object.values(collections[nom]).some(record => record && record._deleted !== true && record[champ] === id)) {
             return "Suppression refusée : des fiches " + nom + " référencent encore cet élément";
           }
+        }
+        if (collection === "etudes" && Object.values(collections.formation).some(record =>
+          record && record._deleted !== true && record.niveaux && Object.prototype.hasOwnProperty.call(record.niveaux, id))) {
+          return "Suppression refusée : la grille Qualité formation référence encore cette étude";
         }
         return null;
       }
@@ -1782,7 +1819,13 @@
               typeof record.membreId !== "string" || !ID_VALIDE.test(record.membreId) ||
               !nonNegatif(record.jeh)) return "Ligne BV : BV, membre ou nombre de JEH invalide";
         }
-        if (collection === "formation" && !present(record.nom)) return "Nom de formation requis";
+        if (collection === "formation") {
+          if (!present(record.nom)) return "Nom de formation requis";
+          if (typeof record.membreId !== "string" || !ID_VALIDE.test(record.membreId)) return "Membre de formation invalide";
+          if (!objetSimple(record.niveaux) || Object.keys(record.niveaux).length > 500) return "Grille de niveaux invalide";
+          if (Object.entries(record.niveaux).some(([id, niveau]) =>
+            !ID_VALIDE.test(id) || !Number.isInteger(niveau) || niveau < 0 || niveau > 4)) return "Niveau de formation invalide";
+        }
         return null;
       }
       function validerRequeteMutation(request, action) {
@@ -2059,37 +2102,20 @@
     }
   };
   const cache = Object.create(null);
-
   function resoudre(parent, demande) {
-    const segments = demande.startsWith(".")
-      ? parent.split("/").slice(0, -1).concat(demande.split("/"))
-      : demande.split("/");
+    const segments = demande.startsWith(".") ? parent.split("/").slice(0, -1).concat(demande.split("/")) : demande.split("/");
     const normalises = [];
-    for (const segment of segments) {
-      if (!segment || segment === ".") continue;
-      if (segment === "..") normalises.pop();
-      else normalises.push(segment);
-    }
-    let id = normalises.join("/");
-    if (!id.endsWith(".js")) id += ".js";
-    if (!Object.prototype.hasOwnProperty.call(definitions, id)) {
-      throw new Error("Module HAC introuvable : " + id);
-    }
+    for (const segment of segments) { if (!segment || segment === ".") continue; if (segment === "..") normalises.pop(); else normalises.push(segment); }
+    let id = normalises.join("/"); if (!id.endsWith(".js")) id += ".js";
+    if (!Object.prototype.hasOwnProperty.call(definitions, id)) throw new Error("Module HAC introuvable : " + id);
     return id;
   }
-
   function charger(id) {
     if (cache[id]) return cache[id].exports;
-    const module = { exports: {} };
-    cache[id] = module;
-    definitions[id](
-      demande => charger(resoudre(id, demande)),
-      module,
-      module.exports
-    );
+    const module = { exports: {} }; cache[id] = module;
+    definitions[id](demande => charger(resoudre(id, demande)), module, module.exports);
     return module.exports;
   }
-
   global.HAC = Object.freeze({
     ...charger("application/lecture.js"),
     ...charger("application/commandes.js"),
