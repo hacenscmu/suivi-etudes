@@ -25,7 +25,7 @@ test("ping est public et vérifie la version du contrat", async () => {
 
 test("loadAll exige un token et retourne les collections et métadonnées", async () => {
   let request;
-  const c = client(async r => { request = r; return succes({ etudes: {}, interventions: {}, temps: {} }); });
+  const c = client(async r => { request = r; return succes({ etudes: {}, clients: {}, membres: {}, factures: {}, interventions: {}, bvs: {}, lignesBV: {}, formation: {}, appareils: {}, config: { main: {} }, temps: {} }); });
   const r = await c.loadAll();
   assert.equal(request.token, "token-test");
   assert.deepEqual(r.collections.etudes, []);
