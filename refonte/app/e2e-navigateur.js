@@ -33,8 +33,8 @@ ok('rechargement hors ligne : données du cache, modif en attente visible',(awai
 offline=false;await p.click('#tabs [data-page="Réglages"]');await p.click('#syncNow');await p.waitForTimeout(600);
 ok('retour réseau : modif envoyée',srv.lireDonnees().factures.facture_0001.etat==='Émise'&&srv.lireDonnees().factures.facture_0001._v===3);
 const D=()=>srv.lireDonnees();
-await p.click('#tabs [data-page="Études"]');await p.click('#addClient');await remplir({raisonSociale:'Novalys',relationType:'longue_duree'});
-const cli=Object.values(D().clients).find(c=>c.raisonSociale==='Novalys');ok('client créé (récurrent)',cli&&cli.relationType==='longue_duree');
+await p.click('#tabs [data-page="Études"]');await p.click('#addClient');await remplir({raisonSociale:'Novalys',relationType:'longue_duree',cadenceFacturation:'mensuelle',dateProchaineFacture:'2026-10-10'});
+const cli=Object.values(D().clients).find(c=>c.raisonSociale==='Novalys');ok('client créé (longue durée + cadence)',cli&&cli.relationType==='longue_duree'&&cli.cadenceFacturation==='mensuelle');await p.click('#tabs [data-page="Accueil"]');ok('alerte de facture périodique affichée',(await p.textContent('#content')).includes('Facture périodique à émettre'));await p.click('#tabs [data-page="Études"]');
 await p.click('#addStudy');await remplir({clientId:cli.id,num:'HAC-002',statut:'Convention signée',montant:1428,jeh:400,frais:70});
 const et=Object.values(D().etudes).find(e=>e.num==='HAC-002');ok('étude créée avec prix JEH et frais',et&&et.jeh===400&&et.frais===70&&et.clientId===cli.id);
 await p.click('[data-etude="'+et.id+'"]');await remplir({statut:'En réalisation'});ok('étude modifiée',D().etudes[et.id].statut==='En réalisation'&&D().etudes[et.id]._v===2);
