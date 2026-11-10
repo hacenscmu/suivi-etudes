@@ -93,6 +93,43 @@ function creerServeurMemoireV3({
     return null;
   }
 
+  function dateValide(value) {
+    if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+    const [y, mo, d] = value.split("-").map(Number);
+    const date = new Date(Date.UTC(y, mo - 1, d));
+    return date.getUTCFullYear() === y && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d;
+  }
+  function validerMetier(collection, record) {
+    const present = value => typeof value === "string" && value.trim() !== "";
+    const positif = value => typeof value === "number" && Number.isFinite(value) && value > 0;
+    const nonNegatif = value => typeof value === "number" && Number.isFinite(value) && value >= 0;
+    if (Object.keys(record).length > 100) return "Trop de champs dans la fiche";
+    if (collection === "clients" && ![record.raisonSociale, record.nom, record.name].some(present)) return "Nom du client requis";
+    if (collection === "membres" && ![record.nomComplet, record.nom, record.prenom].some(present)) return "Nom du membre requis";
+    if (collection === "etudes") {
+      if (!dateValide(record.date) || !present(record.num) || !present(record.statut) || !nonNegatif(record.montant)) return "Étude : date, numéro, statut ou montant invalide";
+      if (!present(record.client) && !record.clientId) return "Étude : client ou clientId requis";
+      if (record.clientId && (typeof record.clientId !== "string" || !ID_VALIDE.test(record.clientId))) return "Étude : clientId invalide";
+      if (["Devis signé","Convention signée","Convention étudiant avant réalisation","En réalisation","Archivée"].includes(record.statut) && !positif(record.jeh)) return "Étude signée : prix unitaire JEH client HT positif requis";
+    }
+    if (collection === "factures") {
+      if (typeof record.etudeId !== "string" || !ID_VALIDE.test(record.etudeId) || !present(record.type) || !present(record.etat) || !nonNegatif(record.montant)) return "Facture : étude, type, état ou montant invalide";
+    }
+    if (collection === "interventions") {
+      if (typeof record.etudeId !== "string" || !ID_VALIDE.test(record.etudeId) ||
+          typeof record.membreId !== "string" || !ID_VALIDE.test(record.membreId) ||
+          !dateValide(record.date) || !["Payé","Pas payé","A venir","Non effectué"].includes(record.statut) ||
+          !positif(record.minutesIndividuelles) ||
+          (record.prixJehHt != null && !nonNegatif(record.prixJehHt))) return "Intervention : étude, membre, date, statut, durée ou prix invalide";
+    }
+    if (collection === "lignesBV") {
+      if (typeof record.bvId !== "string" || !ID_VALIDE.test(record.bvId) ||
+          typeof record.membreId !== "string" || !ID_VALIDE.test(record.membreId) ||
+          !nonNegatif(record.jeh)) return "Ligne BV : BV, membre ou nombre de JEH invalide";
+    }
+    if (collection === "formation" && !present(record.nom)) return "Nom de formation requis";
+    return null;
+  }
   function validerRequeteMutation(request, action) {
     if (!COLLECTIONS_ECRITURE.has(request.collection)) {
       return { code: COLLECTIONS_LECTURE.includes(request.collection) ? "READ_ONLY_COLLECTION" : "UNKNOWN_COLLECTION", message: "Collection non modifiable ou inconnue" };
@@ -111,6 +148,8 @@ function creerServeurMemoireV3({
       if (!objetSimple(request.record) || request.record.id !== request.id || request.record._deleted === true) {
         return { code: "INVALID_REQUEST", message: "Enregistrement invalide ou identifiant incohérent" };
       }
+      const erreurMetier = validerMetier(request.collection, request.record);
+      if (erreurMetier) return { code: "INVALID_REQUEST", message: erreurMetier };
       const bytes = new TextEncoder().encode(JSON.stringify(request.record)).length;
       if (bytes > maxBytes) return { code: "PAYLOAD_TOO_LARGE", message: "Enregistrement trop volumineux" };
     }
