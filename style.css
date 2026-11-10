@@ -406,3 +406,15 @@ button.b.ghost:disabled{opacity:.4}
 .jc .rt{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none}.jc .jj{font-weight:800;font-size:15px;color:var(--ink)}
 .jst{font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;background:var(--card2);color:var(--mute)}.jst.due{background:var(--accsoft);color:var(--acc)}.jst.ok{background:var(--card2);color:var(--good)}.jst.warn{background:#fff3cd;color:var(--warn)}
 .lcard .lm>span.small{display:block}
+
+/* v14 : moins de rose — tons neutres, le rose reste réservé aux alertes, retards et à l'onglet actif */
+.jehk .jehbig{color:var(--ink)}
+.jmc i{background:var(--line)}.jmc i.cur{background:var(--mute)}
+.jb i{background:var(--mute)}
+.cav,.avs i{background:var(--card2);color:var(--ink)}
+.finnet{background:var(--card2)}.finnet b{color:var(--ink)}
+.pc2 .pnet b{color:var(--ink)}
+.eprog .svt i,.ec2 .svt i{background:var(--mute)}
+.etag.bv{background:var(--card2);color:var(--ink);font-weight:600}
+.jst.due{background:var(--card2);color:var(--ink)}
+.cft .ft.acc b{color:var(--ink)}
