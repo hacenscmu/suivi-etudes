@@ -1,0 +1,30 @@
+name: Tests de la refonte HAC
+
+on:
+  push:
+    branches: [Refonte]
+    paths:
+      - "refonte/domain/**"
+      - "refonte/README.md"
+      - ".github/workflows/refonte-tests.yml"
+  pull_request:
+    branches: [Refonte]
+    paths:
+      - "refonte/domain/**"
+      - ".github/workflows/refonte-tests.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+      - name: Installer Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Exécuter tous les tests métier
+        run: node --test refonte/domain/*.test.js
