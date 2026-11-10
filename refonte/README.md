@@ -48,7 +48,7 @@ Depuis la racine du dépôt, avec Node.js :
 node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js refonte/migration/*.test.js
 ```
 
-Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 271 tests : domaine, application, client API v3, serveur simulé, intégration client/serveur, file hors ligne et préparation de migration. Le dernier run complet vérifié : 271 réussis, 0 échec (run 42920378904, commit `8832607`) ; le workflow vérifie aussi la reproductibilité des bundles navigateur.
+Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 276 tests : domaine, application, client API v3, serveur simulé, intégration client/serveur, file hors ligne et préparation de migration. Le dernier run complet vérifié : 276 réussis, 0 échec (run 42921077192, commit `825f3a4`) ; le workflow vérifie aussi la reproductibilité des bundles navigateur.
 
 ## État d'intégration
 
@@ -63,6 +63,6 @@ Les modules de domaine restent indépendants de l'interface. Le modèle client d
 
 ## Aperçu d'interface
 
-L'application v3 mobile-first est disponible dans [`app/index.html`](app/index.html). Elle comporte les cinq espaces retenus, les formulaires de création/modification des études, clients, factures, membres, interventions et BV, les 22 alertes métier portées depuis la v12 et les filtres d'études, ainsi qu'une synchronisation hors ligne. Le bouton « Mode essai » permet de parcourir l'interface avec des données fictives locales, sans connexion au serveur HAC.
+L'application v3 mobile-first est disponible dans [`app/index.html`](app/index.html). Elle comporte les cinq espaces retenus, les formulaires de création/modification des études, clients, factures, membres, interventions et BV, les 22 alertes métier portées depuis la v12 et les filtres d'études, ainsi qu'une synchronisation hors ligne. Les fiches clients distinguent les missions ponctuelles des relations longues durées (type CDI) ; une cadence facultative et une date de référence activent les alertes périodiques sans les déduire automatiquement. Le bouton « Mode essai » permet de parcourir l'interface avec des données fictives locales, sans connexion au serveur HAC.
 
 **Limites avant mise en service :** le mode essai n'est pas connecté aux vraies données ; le candidat Apps Script n'a pas été déployé ni testé sur une copie réelle ; l'import des données historiques et la recette métier restent à faire. Les tests navigateur Playwright sont disponibles dans `app/e2e-navigateur.js` et `app/e2e-essai.js` (exécution locale, hors CI). L'application v3 n'est pas publiée sur l'URL de production.
