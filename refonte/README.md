@@ -27,6 +27,7 @@ Elle n'est pas encore branchée sur l'interface ni sur le backend de production.
 | `domain/adaptateur-historique.js` | Produire un aperçu de migration sans écriture, avec correspondances client/membre explicites |
 | `application/lecture.js` | Assembler les collections validées, vérifier les références et fournir un modèle de lecture unifié à l'interface |
 | `application/commandes.js` | Préparer et appliquer des ajouts/modifications immuables en mémoire, après validation structurelle et métier |
+| `build/build-browser.mjs` | Construire un bundle navigateur sans dépendance externe à partir des modules CommonJS testés |
 
 ## Backend
 
@@ -40,7 +41,7 @@ Depuis la racine du dépôt, avec Node.js :
 node --test refonte/domain/*.test.js
 ```
 
-Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 108 tests (90 tests domaine + 18 tests applicatifs : lecture et commandes). Le dernier run complet vérifié : 99 réussis, 0 échec ; la CI doit confirmer les 108 tests.
+Les tests utilisent le module natif `node:test` et ne nécessitent pas de dépendance supplémentaire. Un workflow GitHub Actions exécute automatiquement toute la suite avec Node.js 22 sur les changements de la branche `Refonte`. Au 10 novembre 2026, la suite compte 108 tests (90 tests domaine + 18 tests applicatifs : lecture et commandes). Le dernier run complet vérifié : 108 réussis, 0 échec ; la CI doit reconfirmer les 108 tests et la reproductibilité du bundle.
 
 ## État d'intégration
 
