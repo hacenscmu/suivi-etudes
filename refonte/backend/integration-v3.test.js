@@ -54,13 +54,13 @@ test("le client reçoit un conflit sans écraser la version concurrente", async 
 test("le client propage un tombstone après suppression logique", async () => {
   const { client } = setup();
   const deleted = await client.delete({
-    collection: "clients", id: "client_0001",
+    collection: "membres", id: "membre_0001",
     opId: "op_integration_delete_001", expectedVersion: 1,
   });
   assert.equal(deleted.data._deleted, true);
   const state = await client.loadAll();
-  assert.equal(state.tombstones.clients.client_0001, 2);
-  assert.equal(state.collections.clients.length, 0);
+  assert.equal(state.tombstones.membres.membre_0001, 2);
+  assert.equal(state.collections.membres.length, 0);
 });
 
 test("le client n'envoie jamais d'écriture dans temps historique", async () => {
@@ -72,4 +72,13 @@ test("le client n'envoie jamais d'écriture dans temps historique", async () => 
     expectedVersion: 0,
   }), e => e.code === "READ_ONLY_COLLECTION");
   assert.equal(serveur.lireRevision(), 0);
+});
+
+test("bloque la suppression d'un client encore lié à une étude", async () => {
+  const { client, serveur } = setup();
+  await assert.rejects(client.delete({
+    collection: "clients", id: "client_0001",
+    opId: "op_integration_delete_parent", expectedVersion: 1,
+  }), e => e.code === "INVALID_REQUEST");
+  assert.equal(serveur.lireDonnees().clients.client_0001._deleted, undefined);
 });
