@@ -19,6 +19,7 @@
       "membres",
       "etudes",
       "factures",
+      "interventions",
       "bvs",
       "lignesBV",
     ]);
@@ -26,6 +27,7 @@
     const RELATIONS = Object.freeze({
       etude: { collection: "etudes", parent: "clientId" },
       facture: { collection: "factures", parent: "etudeId" },
+      intervention: { collection: "interventions", parents: ["etudeId", "membreId"] },
       bv: { collection: "bvs", parent: null },
       ligneBV: { collection: "lignesBV", parent: "bvId" },
     });
@@ -84,16 +86,26 @@
       return { statut: "resolue", objet: candidats[0], candidats };
     }
     
-    function validerLiensMetier({ etudes = [], factures = [], bvs = [], lignesBV = [] } = {}) {
+    function validerLiensMetier({ etudes = [], factures = [], interventions = [], membres = [], bvs = [], lignesBV = [] } = {}) {
       const anomalies = [];
       const idsEtudes = new Set(etudes.filter(e => estIdValide(e?.id)).map(e => e.id));
       const idsBVs = new Set(bvs.filter(b => estIdValide(b?.id)).map(b => b.id));
+      const idsMembres = new Set(membres.filter(m => estIdValide(m?.id)).map(m => m.id));
     
       factures.forEach((facture, index) => {
         if (!estIdValide(facture?.etudeId)) {
           anomalies.push({ collection: "factures", index, raison: "etudeId absent ou invalide" });
         } else if (!idsEtudes.has(facture.etudeId)) {
           anomalies.push({ collection: "factures", index, raison: "Étude liée introuvable" });
+        }
+      });
+    
+      interventions.forEach((intervention, index) => {
+        if (!estIdValide(intervention?.etudeId) || !idsEtudes.has(intervention.etudeId)) {
+          anomalies.push({ collection: "interventions", index, raison: "Étude liée introuvable" });
+        }
+        if (!estIdValide(intervention?.membreId) || !idsMembres.has(intervention.membreId)) {
+          anomalies.push({ collection: "interventions", index, raison: "Membre lié introuvable" });
         }
       });
     
