@@ -630,9 +630,9 @@ function selEtude(c,r,f,D){return sel(c,r,f,D.etudes.map(e=>e.num).filter(Boolea
 function jehCard(t,D){
   const e=D.etudes.find(x=>x.num===t.etude),st=t.statut?t.stat:'Sans statut',paye=t.stat==='Payé';
   const lib={'Pas payé':'À payer','Payé':'Payé','A venir':'À venir','Non effectué':'Non effectué','Sans statut':'Statut à choisir'}[st]||st;
-  return `<button class="card lcard jc" data-edit="temps:${t.id}"><span class="cav">${esc(iniP(t.prenom))}</span>
+  return `<button class="card lcard jc" data-edit="temps:${t.id}">${dayBox(t.d)}
   <div class="lm"><b>${esc(t.prenom)||'Prénom à saisir'}</b><span class="small">${t.etude?'Étude '+esc(t.etude)+(e&&e.client?' · '+esc(e.client):''):'Étude à choisir'}</span>
-  <span class="small">${t.d!==null?sd(t.d)+' · ':''}${hm(t.min)}${num(t.nb)>1?' à '+num(t.nb)+' personnes':''}${t.note?' · '+esc(t.note):''}</span></div>
+  <span class="small">${hm(t.min)}${num(t.nb)>1?' à '+num(t.nb)+' personnes':''}${t.note?' · '+esc(t.note):''}</span></div>
   <div class="rt"><span class="jj">${t.I===null?'—':nf3.format(Math.round(t.I*1000)/1000)+' JEH'}</span><span class="small">${t.J===null?'—':eur(t.J)}</span><span class="jst ${paye?'ok':!t.statut?'warn':st==='Pas payé'?'due':''}">${lib}</span></div></button>`;
 }
 function listTemps(D){
