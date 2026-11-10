@@ -15,10 +15,10 @@ const base = {
     { id: "facture_003", etudeId: "etude_0002", montant: 1500, etat: "Payée" },
   ],
   interventions: [
-    { id: "t1", membreId: "membre_001", date: "2026-09-15", statut: "Payé", jeh: 2 },
-    { id: "t2", membreId: "membre_001", date: "2026-10-15", statut: "Pas payé", jeh: 1.5 },
-    { id: "t3", membreId: "membre_002", date: "2026-11-02", statut: "A venir", jeh: 8 },
-    { id: "t4", membreId: "membre_002", date: "2026-11-03", statut: "Non effectué", jeh: 4 },
+    { id: "t1", etudeId: "etude_0001", membreId: "membre_001", date: "2026-09-15", statut: "Payé", minutesIndividuelles: 960 },
+    { id: "t2", etudeId: "etude_0001", membreId: "membre_001", date: "2026-10-15", statut: "Pas payé", minutesIndividuelles: 720 },
+    { id: "t3", etudeId: "etude_0002", membreId: "membre_002", date: "2026-11-02", statut: "A venir", minutesIndividuelles: 3840 },
+    { id: "t4", etudeId: "etude_0002", membreId: "membre_002", date: "2026-11-03", statut: "Non effectué", minutesIndividuelles: 1920 },
   ],
 };
 
@@ -93,4 +93,14 @@ test("détecte les identifiants d'étude dupliqués", () => {
   });
   assert.equal(r.caSigne, null);
   assert.ok(r.anomalies.some(a => a.raison === "Identifiant d'étude dupliqué"));
+});
+
+test("le tableau de bord consomme le modèle canonique des interventions individuelles", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    interventions: [{ ...base.interventions[0], minutesIndividuelles: undefined, jeh: 2 }],
+  });
+  assert.equal(r.totalJehTravaillees, null);
+  assert.equal(r.jehParMois, null);
+  assert.equal(r.valide, false);
 });
