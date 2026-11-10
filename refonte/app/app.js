@@ -2,7 +2,7 @@
 (() => {
   "use strict";
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
-  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, EN_COURS, ALERTES, calculerPaie } = window.HAC;
+  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, resoudreRelation, EN_COURS, ALERTES, calculerPaie } = window.HAC;
   let filtreEtudes = "En cours";
   let etudeOuverte = null;
   const alertesParEtude = () => calculerAlertes({ etudes: donneesVues().etudes, factures: donneesVues().factures, interventions: donneesVues().interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
@@ -102,16 +102,33 @@
     const parEtude = donneesVues().etudes.map(e => ({ e, a: AL.get(e.id)?.alertes || [] })).filter(x => x.a.length);
     const alertsEtudes = parEtude.map(({ e, a }) => '<button type="button" class="alert invoice-button" data-etude="' + e.id + '"><div class="alert-icon">' + a.length + '</div><div><strong>' +
       escapeHtml(nomEtude(e)) + "</strong><small>" + a.map(x => escapeHtml(x.texte)).join(" · ") + "</small></div></button>").join("");
-    const alertesClients = data.clients.flatMap(client => {
-      const r = analyserAlerteClient(client);
-      if (r.anomalie) return [{ client, texte: "Renseigner la date de référence de facturation" }];
+    const etudesPourAlertes = donneesVues().etudes;
+    const clientsAyantEtude = new Set(data.etudes.map(e => e.clientId));
+    const alertesEtudesClients = etudesPourAlertes.flatMap(etude => {
+      const client = data.clients.find(c => c.id === etude.clientId);
+      if (!client) return [];
+      const r = analyserAlerteClient(client, etude);
+      if (r.anomalie) return [{ client, etude, texte: "Renseigner la date de référence de facturation" }];
       if (r.alerteActivable && r.prochaineEcheance <= aujourdHui()) {
-        return [{ client, texte: "Facture périodique à émettre · échéance du " + dateFr(r.prochaineEcheance) }];
+        return [{ client, etude, texte: "Facture périodique à émettre · échéance du " + dateFr(r.prochaineEcheance) }];
       }
       return [];
     });
-    const alertsClients = alertesClients.map(({ client, texte }) => '<button type="button" class="alert invoice-button" data-client="' + client.id + '"><div class="alert-icon">!</div><div><strong>' +
-      escapeHtml(client.raisonSociale || "Client") + "</strong><small>" + escapeHtml(texte) + "</small></div></button>").join("");
+    const alertesClientsSansEtude = data.clients.filter(client => !clientsAyantEtude.has(client.id)).flatMap(client => {
+      const r = analyserAlerteClient(client);
+      if (r.anomalie) return [{ client, etude: null, texte: "Renseigner la date de référence de facturation" }];
+      if (r.alerteActivable && r.prochaineEcheance <= aujourdHui()) {
+        return [{ client, etude: null, texte: "Facture périodique à émettre · échéance du " + dateFr(r.prochaineEcheance) }];
+      }
+      return [];
+    });
+    const alertesClients = [...alertesEtudesClients, ...alertesClientsSansEtude];
+    const alertsClients = alertesClients.map(({ client, etude, texte }) => {
+      const cible = etude ? 'data-etude="' + etude.id + '"' : 'data-client="' + client.id + '"';
+      const detail = etude ? escapeHtml(nomEtude(etude)) + " · " : "";
+      return '<button type="button" class="alert invoice-button" ' + cible + '><div class="alert-icon">!</div><div><strong>' +
+        escapeHtml(client.raisonSociale || "Client") + "</strong><small>" + detail + escapeHtml(texte) + "</small></div></button>";
+    }).join("");
     const alerts = alertsEtudes + alertsClients;
     return '<div class="stats">' +
       '<div class="stat"><div class="label">JEH travaillées · étudiants</div><strong>' + (d.totalJehTravaillees ?? "—").toLocaleString?.("fr-FR") + '</strong><small>Interventions réalisées uniquement</small></div>' +
@@ -202,6 +219,9 @@
   function rapport(id) {
     const e = data.etudes.find(x => x.id === id);
     if (!e) { etudeOuverte = null; return studies(view()); }
+    const relation = resoudreRelation(data.clients.find(c => c.id === e.clientId), e);
+    const relationLabel = relation.type === "longue_duree" ? "Longue durée" : relation.type === "ponctuelle" ? "Ponctuelle" : "À vérifier";
+    const cadenceLabel = relation.anomalie ? "à vérifier" : relation.cadenceFacturation || "sans périodicité";
     const A = alertesParEtude().get(id) || calculerAlertes({ etudes: [e], factures: data.factures, interventions: data.interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() }).get(id);
     const tva = synchro?.lireConfig()?.tva ?? 0.2, inv = data.factures.filter(f => f.etudeId === id), ls = data.interventions.filter(i => i.etudeId === id);
     const f3 = n => (Math.round(Number(n || 0) * 1000) / 1000).toLocaleString("fr-FR");
@@ -212,6 +232,7 @@
     return '<button class="ghost action" id="retourEtudes">‹ Études</button>' +
       heading(escapeHtml(nomEtude(e)), escapeHtml(e.statut || "") + " · " + escapeHtml(A.facture || "—") + (mandatDe(e.date) ? " · " + escapeHtml(mandatDe(e.date)) : ""), '<button class="action" data-modifier-etude="' + id + '">Modifier</button>') +
       (e.resume ? '<p class="sub">' + escapeHtml(e.resume) + "</p>" : "") +
+      '<p class="sub">Collaboration : ' + relationLabel + " · Facturation : " + cadenceLabel + "</p>" +
       (A.alertes.length ? '<section class="panel">' + A.alertes.map(a => '<div class="alert"><div class="alert-icon">!</div><div><strong>' + escapeHtml(a.texte) + "</strong></div></div>").join("") + "</section>" : "") +
       heading("Finances", "") + '<div class="stats">' + tuile("Montant TTC", money(e.montant)) + tuile("Encaissé TTC", money(A.encaisse)) + tuile("Reste à encaisser", A.reste === null ? "—" : money(A.reste)) + tuile("Prochaine échéance", A.echeance || "—") + "</div>" +
       '<p class="sub">' + money(Number(e.montant || 0) / (1 + tva)) + " HT · JEH client " + (e.jeh ? money(e.jeh) : "—") + (e.frais ? " · frais " + money(e.frais) + " HT" : "") + "</p>" +
@@ -391,17 +412,35 @@
   }
 
   function ouvrirEtude(id) {
-    const e = id ? data.etudes.find(x => x.id === id) : {};
-    formulaire({ titre: id ? "Modifier l’étude" : "Nouvelle étude", valeurs: { ...e, date: e.date || aujourdHui(), statut: e.statut || "Faisabilité" }, champs: [
+    const e = (id ? data.etudes.find(x => x.id === id) : null) || {};
+    const modeCadence = e.cadenceFacturationMode ?? (Object.prototype.hasOwnProperty.call(e, "cadenceFacturation") ? (e.cadenceFacturation ? "personnalisee" : "aucune") : "client");
+    formulaire({ titre: id ? "Modifier l’étude" : "Nouvelle étude", valeurs: {
+      ...e, relationType: e.relationType ?? "__client__", cadenceFacturationMode: modeCadence,
+      cadenceFacturation: e.cadenceFacturation || "", dateProchaineFacture: e.dateProchaineFacture || "",
+      date: e.date || aujourdHui(), statut: e.statut || "Faisabilité",
+    }, champs: [
       { name: "clientId", label: "Client", type: "select", required: true, options: data.clients.map(c => [c.id, c.raisonSociale]), aide: data.clients.length ? "" : "Créez d’abord un client (bouton « ＋ Client »)." },
       { name: "num", label: "N° d’étude", required: true },
       { name: "resume", label: "Résumé" },
+      { name: "relationType", label: "Relation pour cette étude", type: "select", required: true, options: [["__client__", "Hériter du client"], ["ponctuelle", "Ponctuelle"], ["longue_duree", "Longue durée"]], aide: "Permet de déroger au type de collaboration du client." },
+      { name: "cadenceFacturationMode", label: "Facturation périodique", type: "select", required: true, options: [["client", "Hériter du client"], ["aucune", "Aucune facturation périodique"], ["personnalisee", "Cadence propre à l’étude"]], aide: "La cadence client peut être conservée, désactivée ou remplacée pour cette étude." },
+      { name: "cadenceFacturation", label: "Cadence spécifique", type: "select", options: [["mensuelle", "Mensuelle"], ["trimestrielle", "Trimestrielle"], ["semestrielle", "Semestrielle"], ["annuelle", "Annuelle"]], aide: "Utilisée uniquement si « Cadence propre à l’étude » est sélectionné." },
+      { name: "dateProchaineFacture", label: "Date de référence (facultative)", type: "date", aide: "Laisser vide pour reprendre la date de référence du client." },
       { name: "statut", label: "Statut", type: "select", required: true, options: synchro?.lireConfig()?.statuts || STATUTS_ETUDE },
       { name: "montant", label: "Montant TTC (€)", type: "number" },
       { name: "jeh", label: "Prix de la JEH client HT (€)", type: "number", aide: "Fourchette CNJE : 80 à 450 € HT" },
       { name: "frais", label: "Dont frais HT (labo…, hors JEH)", type: "number" },
       { name: "date", label: "Date de création", type: "date", required: true },
-    ], onValider: d => { d.client = data.clients.find(c => c.id === d.clientId)?.raisonSociale || ""; return enregistrer("etudes", id, d, "etude"); } });
+    ], onValider: d => {
+      if (!["__client__", "ponctuelle", "longue_duree"].includes(d.relationType)) return "Choisis le type de relation de l’étude.";
+      if (!["client", "aucune", "personnalisee"].includes(d.cadenceFacturationMode)) return "Choisis le mode de facturation périodique.";
+      d.relationType = d.relationType === "__client__" ? null : d.relationType;
+      if (d.cadenceFacturationMode === "personnalisee" && !d.cadenceFacturation) return "Choisis une cadence spécifique.";
+      if (d.cadenceFacturationMode !== "personnalisee") d.cadenceFacturation = null;
+      d.dateProchaineFacture = d.dateProchaineFacture || null;
+      d.client = data.clients.find(c => c.id === d.clientId)?.raisonSociale || "";
+      return enregistrer("etudes", id, d, "etude");
+    } });
   }
   function ouvrirClient(id) {
     const c = id ? data.clients.find(x => x.id === id) : {};
