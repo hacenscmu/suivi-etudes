@@ -125,3 +125,22 @@ test("le tableau de bord consomme le modèle canonique des interventions individ
   assert.equal(r.jehParMois, null);
   assert.equal(r.valide, false);
 });
+
+test("remonte les alertes de prix JEH intervenant au-dessus de 300 € HT sans invalider les totaux", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    interventions: [{ ...base.interventions[0], prixJehHt: 301 }],
+  });
+  assert.equal(r.valide, true);
+  assert.equal(r.alertesInterventions.length, 1);
+  assert.ok(r.alertesInterventions[0].raison.includes("plafond HAC de 300"));
+});
+
+test("permet de configurer le plafond de JEH intervenant", () => {
+  const r = calculerTableauDeBord({
+    ...base,
+    interventions: [{ ...base.interventions[0], prixJehHt: 350 }],
+    plafondJehHt: 400,
+  });
+  assert.equal(r.alertesInterventions.length, 0);
+});
