@@ -31,3 +31,20 @@ test("SMIC par défaut applicable depuis le 1er juin 2026 : 12,31 € et base JE
   const r = calculerPaie({ interventions: [I()], membres: M });
   assert.equal(r.parametres.baseJeh, 49.24);
 });
+
+
+test("un prix absent, nul ou négatif bloque les montants de paie", () => {
+  for (const prixJehHt of [null, 0, -1]) {
+    const r = calculerPaie({ interventions: [I({ prixJehHt })], membres: M, config: cfg }).lignes[0];
+    assert.equal(r.sansPrix, true);
+    assert.equal(r.net, 0);
+    assert.equal(r.cout, 0);
+  }
+});
+
+test("un BV est bloqué si une seule des interventions à payer n'a pas de prix valide", () => {
+  const r = calculerPaie({ interventions: [I(), I({ prixJehHt: 0 })], membres: M, config: cfg }).lignes[0];
+  assert.equal(r.sansPrix, true);
+  assert.equal(r.net, 0);
+  assert.equal(r.cout, 0);
+});
