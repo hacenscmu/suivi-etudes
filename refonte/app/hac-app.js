@@ -262,7 +262,7 @@
       let deductionTtc = 0;
       (Array.isArray(facturesPrecedentes) ? facturesPrecedentes : []).forEach((facture, index) => {
         const montant = Number(facture?.montant);
-        if (!Number.isFinite(montant) || montant < 0) anomalies.push("Montant TTC invalide dans la facture précédente " + (index + 1));
+        if (facture?.montant === "" || facture?.montant == null || !Number.isFinite(montant) || montant < 0) anomalies.push("Montant TTC invalide dans la facture précédente " + (index + 1));
         else deductionTtc += montant;
       });
       const montantHt = arrondir(prestationsHt + fraisHt);
