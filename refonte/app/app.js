@@ -82,11 +82,12 @@
   }
 
   // Préférences d'affichage locales : aucun champ métier ni synchronisation supplémentaire.
-  const CLE_DISPOSITION_DASHBOARD = "hac.v3.dashboard.disposition";
+  const cleDispositionDashboard = () => "hac.v3.dashboard.disposition." +
+    encodeURIComponent(session?.role || "local") + "." + encodeURIComponent(session?.membreId || "appareil");
   function lireDispositionDashboard() {
     const defaut = { ordre: ["activite", "encaissement"], visibles: { activite: true, encaissement: true } };
     try {
-      const p = JSON.parse(localStorage.getItem(CLE_DISPOSITION_DASHBOARD) || "null");
+      const p = JSON.parse(localStorage.getItem(cleDispositionDashboard()) || "null");
       if (!p || typeof p !== "object") return defaut;
       const ordre = Array.isArray(p.ordre) ? p.ordre.filter(x => ["activite", "encaissement"].includes(x)) : [];
       return {
@@ -119,7 +120,7 @@
         const ordre = Number(d.positionActivite) < Number(d.positionEncaissement)
           ? ["activite", "encaissement"] : ["encaissement", "activite"];
         try {
-          localStorage.setItem(CLE_DISPOSITION_DASHBOARD, JSON.stringify({
+          localStorage.setItem(cleDispositionDashboard(), JSON.stringify({
             ordre, visibles: { activite: d.visibleActivite === "oui", encaissement: d.visibleEncaissement === "oui" },
           }));
         } catch { return "Impossible d’enregistrer les préférences sur cet appareil."; }
