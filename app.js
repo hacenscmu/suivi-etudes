@@ -291,14 +291,19 @@ function donut(parts,center,sub){
 function legendHtml(parts){return '<div class="legend">'+parts.map(p=>`<span><i style="background:${p.c}"></i>${esc(p.l)} · ${p.v}</span>`).join('')+'</div>'}
 function smooth(a){const f=(x,i)=>x[i]===null?null:((x[i-1]==null?x[i]:x[i-1])+2*x[i]+(x[i+1]==null?x[i]:x[i+1]))/4;const o=a.map((_,i)=>f(a,i));return o}
 let GRAD=0;
-function lineChart(pts,series,fmt,int){
-  const W=560,H=230,pl=44,pr=10,pt=12,pb=26;
+// Dans un widget, la courbe est redessinée aux dimensions exactes de sa case (pas de bandes vides, texte net).
+let LCS={},LCN=0;
+function fitCharts(){document.querySelectorAll('.wgc .chartbox[data-lc]').forEach(b=>{const a=LCS[b.dataset.lc];if(!a)return;const w=Math.round(b.clientWidth),h=Math.round(b.clientHeight);if(w<40||h<30)return;const t=document.createElement('div');t.innerHTML=lineChart(a[0],a[1],a[2],a[3],w,h);const nb=t.querySelector('.chartbox');nb.removeAttribute('data-lc');b.replaceWith(nb)})}
+window.addEventListener('resize',()=>{clearTimeout(window.__fc);window.__fc=setTimeout(()=>{if(tab==='dash')render()},200)});
+function lineChart(pts,series,fmt,int,W0,H0){
+  let lc='';if(!W0){if(LCN%40===0&&LCN)LCS={};LCS[++LCN]=[pts,series,fmt,int];lc=' data-lc="'+LCN+'"'}
+  const W=W0||560,H=H0||230,nar=W<220,pl=nar?6:44,pr=nar?6:10,pt=nar?6:12,pb=nar?6:26;
   const sm=series.map(s=>({c:s.c,l:s.l,a:smooth(smooth(s.v)),area:s.area}));
   let mx=0;sm.forEach(s=>s.a.forEach(v=>{if(v!==null&&v>mx)mx=v}));if(mx<=0)mx=1;
   const nice=int?Math.max(4,Math.ceil(mx/4)*4):(()=>{const p=Math.pow(10,Math.floor(Math.log10(mx)));const m=mx/p;return (m<=1?1:m<=2?2:m<=5?5:10)*p})();
   const X=i=>pl+(W-pl-pr)*i/(pts.length-1),Y=v=>pt+(H-pt-pb)*(1-v/nice);
-  let g='';for(let k=0;k<=4;k++){const v=nice*k/4,y=Y(v);g+=`<line x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${pl-6}" y="${y+3}" text-anchor="end">${fmt(v)}</text>`}
-  let lastLab=-99;pts.forEach((T,i)=>{const d=new Date(T*864e5),prev=i?new Date(pts[i-1]*864e5):null;if((!prev||prev.getUTCMonth()!==d.getUTCMonth())&&i-lastLab>=7&&i<=pts.length-4){lastLab=i;g+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${MOIS[d.getUTCMonth()]}${d.getUTCMonth()===0||i===0?' '+String(d.getUTCFullYear()).slice(2):''}</text>`}});
+  let g='';for(let k=0;k<=4;k++){const v=nice*k/4,y=Y(v);g+=`<line x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}" stroke="var(--line)"/>`+(nar?'':`<text x="${pl-6}" y="${y+3}" text-anchor="end">${fmt(v)}</text>`)}
+  let lastLab=-99;if(!nar)pts.forEach((T,i)=>{const d=new Date(T*864e5),prev=i?new Date(pts[i-1]*864e5):null;if((!prev||prev.getUTCMonth()!==d.getUTCMonth())&&i-lastLab>=7&&i<=pts.length-4){lastLab=i;g+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${MOIS[d.getUTCMonth()]}${d.getUTCMonth()===0||i===0?' '+String(d.getUTCFullYear()).slice(2):''}</text>`}});
   let defs='',fills='',lines='';
   sm.forEach((s,k)=>{let d='',started=false,lastI=0;s.a.forEach((v,i)=>{if(v===null)return;d+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);started=true;lastI=i});
     if(!d)return;
@@ -307,7 +312,7 @@ function lineChart(pts,series,fmt,int){
     fills+=`<path d="${d}L${X(lastI)} ${Y(0)}L${X(s.a.findIndex(v=>v!==null))} ${Y(0)}Z" fill="url(#${id})"/>`;
     lines+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`});
   g+=fills+lines;
-  return `<div class="chartbox"><svg viewBox="0 0 ${W} ${H}" role="img"><defs>${defs}</defs>${g}</svg></div><div class="legend">${sm.map(s=>`<span><i style="background:${s.c}"></i>${esc(s.l)}</span>`).join('')}</div>`;
+  return `<div class="chartbox"${lc}><svg viewBox="0 0 ${W} ${H}" role="img"><defs>${defs}</defs>${g}</svg></div><div class="legend">${sm.map(s=>`<span><i style="background:${s.c}"></i>${esc(s.l)}</span>`).join('')}</div>`;
 }
 
 /* ---------- champs de saisie ---------- */
@@ -327,6 +332,7 @@ const ICO={
  trend:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
  sign:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>',
  hour:'<path d="M6 3h12M6 21h12"/><path d="M7 3v3a5 5 0 0 0 2 4l3 2-3 2a5 5 0 0 0-2 4v3M17 3v3a5 5 0 0 1-2 4l-3 2 3 2a5 5 0 0 1 2 4v3"/>',
+ move:'<path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
  pie:'<path d="M12 3v9h9"/><path d="M20.5 15A9 9 0 1 1 9 3.5"/>',
  list:'<path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
  alert:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
@@ -397,7 +403,7 @@ function render(){
   const D=compute();
   const views={moi:vMoi,dash:vDash,etudes:vEtudes,finances:vFinances,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams};
   const scrolls=[...document.querySelectorAll('.tw')].map(e=>e.scrollLeft);
-  v.innerHTML=views[tab](D);
+  v.innerHTML=views[tab](D);fitCharts();
   const hs=$('#hsel');if(hs)hs.innerHTML=tab==='finances'?HSEL:tab==='dash'?HSEL+'<button class="pen" type="button" data-dashed="1" aria-label="Modifier le tableau de bord"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>':'';
   
   document.querySelectorAll('.tw').forEach((e,i)=>{if(scrolls[i])e.scrollLeft=scrolls[i]});
@@ -408,11 +414,22 @@ const DASH_BLOCKS=[['banner','Bandeau des alertes'],['kpis','Recette, CA signé,
 // disposition propre à chaque appareil (non synchronisée)
 function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(e){return {}}}
 function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
-function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});
-  // Les deux anneaux et la carte JEH restent côte à côte (même ligne), y compris avec un ordre personnalisé.
-  {const trio=['vue','det','jeh'],i=Math.min(...trio.map(k=>o.indexOf(k)).filter(x=>x>=0));if(isFinite(i)){const rest=o.filter(k=>!trio.includes(k));rest.splice(Math.min(i,rest.length),0,...trio);o.splice(0,o.length,...rest)}}return {order:o,hide:c.hide||{}}}
+function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{}}}
+// Widgets : grille de 9 colonnes, taille minimale [largeur, hauteur] en cases ; chaque ligne est complétée pour prendre toute la largeur.
+let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[3,2],alert:[2,3],enc:[3,3],cli:[3,3]},DFULL=['banner','kpis'];
+let DEDIT=false,WDRAG=null;
+// nombre de cases selon la largeur de l'écran : 9 sur téléphone, jusqu'à 18 sur grand écran (≈ 80 px par case)
+function dashCols(){const v=document.getElementById('view'),w=(v&&v.clientWidth)||window.innerWidth;return Math.max(9,Math.min(18,Math.round(w/80)))}
+let DRSZ=null;window.addEventListener('resize',()=>{clearTimeout(DRSZ);DRSZ=setTimeout(()=>{if(tab==='dash'&&dashCols()!==DCOLS)render()},150)});
+function dashSize(L,k){const m=DMIN[k],s=L.size[k]||[];return [Math.min(DCOLS,Math.max(m[0],s[0]|0)),Math.min(8,Math.max(m[1],s[1]|0))]}
+function packDash(L,ks){const rows=[];let cur=[],used=0;
+  ks.forEach(k=>{const [w,h]=dashSize(L,k);if(used+w>DCOLS&&cur.length){rows.push(cur);cur=[];used=0}cur.push({k,w,h});used+=w});if(cur.length)rows.push(cur);
+  rows.forEach(r=>{const sum=r.reduce((a,x)=>a+x.w,0),ex=DCOLS-sum,H=Math.max(...r.map(x=>x.h));
+    const add=r.map(x=>ex*x.w/sum),fl=add.map(Math.floor);let rest=ex-fl.reduce((a,b)=>a+b,0);
+    add.map((a,i)=>[a-fl[i],i]).sort((a,b)=>b[0]-a[0]||a[1]-b[1]).forEach(([,i])=>{if(rest>0){fl[i]++;rest--}});
+    r.forEach((x,i)=>{x.W=x.w+fl[i];x.H=H})});return rows}
 function dashSec(){const L=dashLayout(),lab=Object.fromEntries(DASH_BLOCKS);
-  return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
+  return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Pour la taille des blocs : bouton ✎ du tableau de bord. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
 function vDash(D){
   const c=D.c;const M=['Tous les mandats'].concat(c.mandats.map(m=>m.nom));if(!M.includes(mandatSel))mandatSel='Tous les mandats';
   const d=dash(D,mandatSel);
@@ -444,7 +461,13 @@ function vDash(D){
    enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
    cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
   const L=dashLayout();
-  return `<div class="dgrid">${(()=>{const ks=L.order.filter(k=>!L.hide[k]&&B[k]),T=['vue','det','jeh'];let out='',tr='';ks.forEach(k=>{if(T.includes(k)){tr+=B[k];return}if(tr){out+=`<div class="full trow">${tr}</div>`;tr=''}out+=k==='banner'||k==='kpis'?`<div class="full">${B[k]}</div>`:B[k]});if(tr)out+=`<div class="full trow">${tr}</div>`;return out})()}</div>`;
+  DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='',seg=[];
+  const tb=k=>{const [w,h]=dashSize(L,k),m=DMIN[k];return `<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><span class="wsz"><button type="button" data-wsz="${k}:w:-1" ${w<=m[0]?'disabled':''} aria-label="Moins large">−</button><b>↔ ${w}</b><button type="button" data-wsz="${k}:w:1" ${w>=DCOLS?'disabled':''} aria-label="Plus large">+</button></span><span class="wsz"><button type="button" data-wsz="${k}:h:-1" ${h<=m[1]?'disabled':''} aria-label="Moins haut">−</button><b>↕ ${h}</b><button type="button" data-wsz="${k}:h:1" ${h>=8?'disabled':''} aria-label="Plus haut">+</button></span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`};
+  const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))">${packDash(L,seg).map(r=>r.map(x=>`<div class="wgc" data-wk="${x.k}" style="grid-column:span ${x.W};grid-row:span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')).join('')}</div>`;seg=[]};
+  ks.forEach(k=>{if(DFULL.includes(k)){flush();out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`}else seg.push(k)});flush();
+  const hid=DASH_BLOCKS.filter(([k])=>L.hide[k]);
+  const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, − / + pour sa largeur (↔) et sa hauteur (↕). Chaque ligne s’étire pour remplir l’écran.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
+  return `<div class="dwrap${DEDIT?' dedit':''}">${bar}${out}</div>`;
 }
 /* ---------- listes en cartes ---------- */
 const FLT={etudes:{q:'',s:'all'},factures:{q:'',s:'all'},temps:{q:'',s:'all'}};
@@ -792,6 +815,13 @@ function vParams(D){
 let PSEC=null,DRAG=null;
 document.addEventListener('pointerdown',e=>{const h=e.target.closest('.hdl');if(!h)return;e.preventDefault();const row=h.closest('.li'),rows=[...row.parentElement.children],i=rows.indexOf(row);DRAG={k:h.dataset.k,from:i,to:i,row,rows,y0:e.clientY};row.classList.add('drg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
 document.addEventListener('pointermove',e=>{if(!DRAG)return;const dy=e.clientY-DRAG.y0,H=DRAG.row.offsetHeight+6,n=DRAG.rows.length,f=DRAG.from;DRAG.row.style.transform=`translateY(${dy}px)`;const to=Math.max(0,Math.min(n-1,f+Math.round(dy/H)));DRAG.to=to;DRAG.rows.forEach((r,i)=>{if(r===DRAG.row)return;const sh=(f<to&&i>f&&i<=to)?-H:(f>to&&i<f&&i>=to)?H:0;r.style.transform=sh?`translateY(${sh}px)`:''})});
+document.addEventListener('pointerdown',e=>{const h=e.target.closest('.wdh');if(!h||!DEDIT)return;e.preventDefault();const el=h.closest('[data-wk].wgc,[data-wk].wfull');if(!el)return;WDRAG={k:h.dataset.wk,el,x0:e.clientX,y0:e.clientY};el.classList.add('wdrg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
+document.addEventListener('pointermove',e=>{if(!WDRAG)return;WDRAG.el.style.transform=`translate(${e.clientX-WDRAG.x0}px,${e.clientY-WDRAG.y0}px)`;WDRAG.cx=e.clientX;WDRAG.cy=e.clientY;
+  document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));const t=wTarget(e.clientX,e.clientY);if(t)t.el.classList.add('wtgt')});
+function wTarget(x,y){const el=WDRAG&&WDRAG.el;if(!el)return null;el.style.pointerEvents='none';const u=document.elementFromPoint(x,y);el.style.pointerEvents='';const t=u&&u.closest('.dwrap [data-wk].wgc,.dwrap [data-wk].wfull');if(!t||t===el)return null;const r=t.getBoundingClientRect();return {el:t,k:t.dataset.wk,after:t.classList.contains('wfull')?y>r.top+r.height/2:x>r.left+r.width/2}}
+const endWDrag=()=>{if(!WDRAG)return;const W=WDRAG,t=W.cx!=null?wTarget(W.cx,W.cy):null;WDRAG=null;W.el.style.transform='';W.el.classList.remove('wdrg');document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));
+  if(t&&t.k!==W.k){const L=dashLayout(),o=L.order.filter(k=>k!==W.k);o.splice(o.indexOf(t.k)+(t.after?1:0),0,W.k);L.order=o;dashSave(L)}render()};
+document.addEventListener('pointerup',endWDrag);document.addEventListener('pointercancel',endWDrag);
 const endDrag=()=>{if(!DRAG)return;const {k,from,to}=DRAG;DRAG=null;if(from!==to){const c=ensureCfg();if(k==='dash'){const L=dashLayout();const [x]=L.order.splice(from,1);L.order.splice(to,0,x);dashSave(L);render()}else{const [x]=c[k].splice(from,1);c[k].splice(to,0,x);saveCfg();render()}}if(PSEC)drawParam()};
 document.addEventListener('pointerup',endDrag);document.addEventListener('pointercancel',endDrag);
 function openParam(k){PSEC=k;ED=null;drawParam()}
@@ -868,7 +898,12 @@ document.addEventListener('click',e=>{
   if(b.dataset.syncon){doSync();return}
   if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
   if(b.dataset.param){openParam(b.dataset.param);return}
-  if(b.dataset.dashed){openParam('dash');return}
+  if(b.dataset.dashed){DEDIT=!DEDIT;render();return}
+  if(b.dataset.wdone){DEDIT=false;render();return}
+  if(b.dataset.wreset){if(confirm('Revenir à la disposition par défaut ?')){dashSave({});render()}return}
+  if(b.dataset.wshow){const L=dashLayout();delete L.hide[b.dataset.wshow];dashSave(L);render();return}
+  if(b.dataset.whide){const L=dashLayout();L.hide[b.dataset.whide]=true;dashSave(L);render();return}
+  if(b.dataset.wsz){const [k,a,d]=b.dataset.wsz.split(':'),L=dashLayout(),[w,h]=dashSize(L,k);L.size[k]=a==='w'?[w+ +d,h]:[w,h+ +d];L.size[k]=[Math.max(DMIN[k][0],Math.min(DCOLS,L.size[k][0])),Math.max(DMIN[k][1],Math.min(8,L.size[k][1]))];dashSave(L);render();return}
   if(b.dataset.goalerts){FLT.etudes.s='alert';tab='etudes';lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.open){openRep(b.dataset.open);return}
   if(b.dataset.openc!==undefined){OPENC=b.dataset.openc;render();window.scrollTo(0,0);return}
@@ -904,11 +939,19 @@ document.addEventListener('click',e=>{
 /* ---------- démarrage ---------- */
 async function api(body){
   const c=CONN();
-  const r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'});
-  const j=await r.json();
+  let r,j;
+  try{r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'})}catch(e){throw new Error('reseau')}
+  const t=await r.text();try{j=JSON.parse(t)}catch(e){throw new Error(navigator.onLine===false?'reseau':'html')}
   if(j&&j.error)throw new Error(j.error);
   return j;
 }
+// Message clair selon la vraie cause (avant : tout était affiché comme « Hors connexion »)
+function errMsg(m,ecriture){const g=ecriture?' Vos modifications restent gardées sur cet appareil et repartiront automatiquement.':'';
+  if(m==='reseau')return ecriture?'Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.':'Hors connexion : dernière version enregistrée affichée.';
+  if(m==='html')return 'Le lien Drive ne répond pas comme prévu. Vérifiez dans Paramètres → Synchronisation que le lien finit par /exec (Déployer → Gérer les déploiements → Application Web, accès « Tout le monde »).'+g;
+  if(m==='action'||m==='op'||m==='expected')return 'Le Code.gs installé dans Google Apps Script n’est pas à jour : recopiez-le puis Déployer → Gérer les déploiements → Nouvelle version.'+g;
+  if(m==='serveur')return 'Google a renvoyé une erreur temporaire, nouvel essai automatique.'+g;
+  return 'Drive a refusé l’enregistrement (motif : '+m+').'+g}
 function makeDb(){
   const c=CONN();const local=!c.url;
   const subs=[];let cache=null,pending=0,loading=false;
@@ -923,7 +966,7 @@ function makeDb(){
     try{cache=await api({action:'loadAll'});keep();stamp();if(dbErr){dbErr='';renderStatus()}emit()}
     catch(e){
       if(String(e.message)==='auth'){dbErr='Code d’accès manquant ou refusé : saisissez votre code personnel (Paramètres → Code d’accès).';renderStatus();demanderCode();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
-      else if(cache){dbErr='Hors connexion : dernière version enregistrée affichée, les modifications ne sont pas possibles pour le moment.';renderStatus()}
+      else if(cache){dbErr=errMsg(String(e.message),false);renderStatus()}
       else if(first)subs.forEach(s=>s.err&&s.err({code:'unavailable'}));
     }
     loading=false;
@@ -946,9 +989,9 @@ function makeDb(){
           if(m==='conflit'||m==='json'||m==='collection'||m==='id'||m==='taille'){conflit++;outbox.shift();saveOut();continue}
           throw e}
         outbox.shift();saveOut()}
-      stamp();if(dbErr&&/Enregistrement|Hors connexion|Code d’accès/.test(dbErr)){dbErr='';renderStatus()}}
+      stamp();if(dbErr){dbErr='';renderStatus()}}
     catch(e){if(String(e.message)==='auth'){dbErr='Code d’accès manquant ou refusé : saisissez votre code personnel (Paramètres → Code d’accès). Vos modifications restent gardées sur cet appareil.';renderStatus();demanderCode()}
-      else{dbErr='Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.';renderStatus()}}
+      else{dbErr=errMsg(String(e.message),true);renderStatus()}}
     pending--;flushing=false;
     if(conflit){conflitMsg=conflit+' modification'+(conflit>1?'s n’ont':' n’a')+' pas été enregistrée'+(conflit>1?'s':'')+' : quelqu’un a modifié la même fiche entre-temps. La version à jour est affichée.';renderStatus();clearTimeout(window.__cft);window.__cft=setTimeout(()=>{conflitMsg='';renderStatus()},30000);if(!outbox.length)load(false)}
   }
@@ -997,7 +1040,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=23;
+const VERSION=24;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
