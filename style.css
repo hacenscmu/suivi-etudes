@@ -561,3 +561,9 @@ button.b.ghost:disabled{opacity:.4}
 .dseg{cursor:pointer}
 .dtip{position:fixed;z-index:99;display:none;align-items:center;gap:6px;padding:6px 10px;border-radius:10px;background:var(--ink);color:var(--card);font-size:12.5px;white-space:nowrap;pointer-events:none;box-shadow:0 6px 18px rgba(0,0,0,.25)}
 .dtip i{width:9px;height:9px;border-radius:50%;display:inline-block}
+
+/* v48 : numéro d'étude en grand sur les cartes */
+.enb{flex:none;min-width:52px;padding:6px 8px;text-align:center;background:var(--card2);border-radius:12px;line-height:1}
+.enb span{display:block;font-size:10.5px;color:var(--mute);margin-bottom:2px}.enb b{display:block;font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.5px}
+.ec2 .eh{align-items:center}.ec2 .et{flex:1;min-width:0}.ec2 .et .ecl{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ehn{align-items:center}.ehn .et{flex:1;min-width:0}
