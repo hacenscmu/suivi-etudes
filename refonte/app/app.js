@@ -413,7 +413,7 @@
         try {
           const r = await synchro.definirRole({ membreId: el.dataset.role, role: el.value });
           if (r.code) {
-            if (el.dataset.role === session?.membreId) { connexion = { ...connexion, token: r.code }; localStorage.setItem(CONN, JSON.stringify(connexion)); session.role = r.role; }
+            if (el.dataset.role === session?.membreId) { connexion = { ...connexion, token: r.code }; localStorage.setItem(CONN, JSON.stringify(connexion)); session.role = r.role; localStorage.setItem("hac.v3.session", JSON.stringify(session)); }
             alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.role)?.nom || "ce membre") + " : " + r.code);
           }
           if (session?.role === "Salarie") { dialog.close(); current = "Mon espace"; render(); return; }
@@ -813,10 +813,20 @@
     synchro = creerSynchro({ client, stockage: stockageNavigateur(), creerOpId: () => nouvelId("op") });
     try {
       etatSynchro = await synchro.demarrer();
-      session = connexion.essai ? { role: "Membre", membreId: "demo" } : await synchro.session();
+      if (connexion.essai) session = { role: "Membre", membreId: "demo" };
+      else {
+        try {
+          session = await synchro.session();
+          localStorage.setItem("hac.v3.session", JSON.stringify(session));
+        } catch (e) {
+          if (e.code !== "NETWORK_ERROR") throw e;
+          try { session = JSON.parse(localStorage.getItem("hac.v3.session") || "null"); } catch { session = null; }
+          if (!session) throw e;
+        }
+      }
     }
     catch (e) {
-      if (e.code === "AUTH_INVALID" || e.code === "AUTH_REQUIRED" || e.code === "AUTH_ROLE_REQUIRED") { localStorage.removeItem(CONN); afficherConnexion("Accès refusé ou rôle non attribué. Contactez un membre de l’association."); return; }
+      if (e.code === "AUTH_INVALID" || e.code === "AUTH_REQUIRED" || e.code === "AUTH_ROLE_REQUIRED") { localStorage.removeItem(CONN); localStorage.removeItem("hac.v3.session"); afficherConnexion("Accès refusé ou rôle non attribué. Contactez un membre de l’association."); return; }
       afficherConnexion("Connexion impossible : " + (e.message || e.code)); return;
     }
     if (session?.role === "Salarie") current = "Mon espace";
