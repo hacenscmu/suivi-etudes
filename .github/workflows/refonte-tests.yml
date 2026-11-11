@@ -24,6 +24,10 @@ on:
       - "refonte/app/**"
       - ".github/workflows/refonte-tests.yml"
 
+concurrency:
+  group: refonte-tests-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
