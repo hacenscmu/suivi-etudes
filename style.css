@@ -495,7 +495,7 @@ button.b.ghost:disabled{opacity:.4}
   .chartbox text{display:none}
   .alc h3 .cnt{min-width:20px;height:20px;font-size:11px}.ali{margin-top:5px;padding:6px}.aln b{font-size:13px}.alx{display:none}
 }
-@container (max-width:100px){.legend{display:none}.alc h3{flex-direction:column}}
+@container (max-width:100px){.alc h3{flex-direction:column}}
 /* mode édition */
 .wbar{margin-bottom:10px!important;display:flex;flex-direction:column;gap:6px}.wbar small{color:var(--mute);font-size:12.5px}.wbar small svg{vertical-align:-2px}
 .wre{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
@@ -508,3 +508,8 @@ button.b.ghost:disabled{opacity:.4}
 .wx{background:var(--card2);color:var(--mute)}
 .wdrg{z-index:5;opacity:.85;box-shadow:0 12px 30px rgba(0,0,0,.25);transition:none}
 .wtgt>.card,.wtgt>*:first-child{outline:3px solid var(--acc)!important}
+
+/* v27 : légende toujours visible (l'anneau rétrécit), panneau alertes plus fin */
+.wgc .donutbox{min-height:28px}
+.wgc .alc{border-width:1px}.wgc .alc .ali{margin-top:6px;padding:8px 10px}
+.wgc .alc h3{margin-bottom:0}
