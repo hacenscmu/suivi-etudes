@@ -70,6 +70,7 @@ function calculerAlertes({ etudes = [], factures = [], interventions = [], confi
     const reste = SIGNEES.includes(st) ? montant - encaisse : null;
     const ech = inv.filter(f => f.etat !== "Payée" && jour(f.echeance) !== null).map(f => jour(f.echeance));
     const echeance = ech.length ? Math.min(...ech) : null;
+    const echeanceManquante = inv.some(f => f.etat !== "Payée" && jour(f.echeance) === null);
     const realisees = ls.filter(i => i.statut === "Payé" || i.statut === "Pas payé");
     const bv = !ls.length ? "" : ls.some(i => i.statut === "Pas payé") ? "À payer" : ls.some(i => i.statut === "A venir") ? "À venir" : ls.some(i => i.statut === "Payé") ? "Payé" : "Non effectué";
     const jehInter = i => num(i.minutesIndividuelles) / 480;
@@ -88,7 +89,7 @@ function calculerAlertes({ etudes = [], factures = [], interventions = [], confi
     if (montant > 0 && encaisse > montant) add("enc_sup", "Encaissé supérieur au montant");
     if (fa === "Acompte à facturer") add("acompte", "Facturer l’acompte");
     if (fa === "Solde à facturer") add("solde_af", "Facturer le solde");
-    if (FACTUREES.includes(fa) && echeance === null && st !== "Archivée" && st !== "Refusé / sans suite") add("echeance", "Renseigner l’échéance de paiement");
+    if (FACTUREES.includes(fa) && echeanceManquante && st !== "Archivée" && st !== "Refusé / sans suite") add("echeance", "Renseigner l’échéance de paiement");
     if (st === "En réalisation" && !ls.length) add("temps", "Renseigner le temps de travail");
     if (ls.length && !estNum(e.jeh)) add("jeh_manq", "Prix de la JEH client manquant");
     if (montant > 0 && remun > montant / (1 + tva) + 1e-9) add("rem_sup", "Rémunérations supérieures au montant HT");
