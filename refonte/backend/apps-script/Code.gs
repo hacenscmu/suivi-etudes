@@ -115,20 +115,21 @@ function chargerAccesAdmin_() {
 }
 function signalerJEH_(q, qui, role) {
   if (role !== 'Salarie') return erreur_('FORBIDDEN', 'Cette action est réservée aux accès Salarié');
-  var I = index_(), etudeId = q.etudeId, date = q.date, duree = q.duree, nb = q.nb, commentaire = q.commentaire || '';
-  if (typeof etudeId !== 'string' || !vivante_(I, 'etudes', etudeId) || !dateValide_(date) ||
+  var I = index_(), numEtude = typeof q.numEtude === 'string' ? q.numEtude.trim() : '', date = q.date, duree = q.duree, nb = q.nb, commentaire = q.commentaire || '';
+  if (!texte_(numEtude) || numEtude.length > 80 || !dateValide_(date) ||
       !nombrePositif_(duree) || duree > 100000 || typeof nb !== 'number' || nb % 1 !== 0 || nb < 1 || nb > 100 ||
       typeof commentaire !== 'string' || commentaire.length > 1000)
-    return erreur_('INVALID_REQUEST', 'Date, étude, durée, nombre de personnes ou commentaire invalide');
-  var associee = Object.keys(I.idx).some(function(k) {
+    return erreur_('INVALID_REQUEST', 'Numéro d’étude, date, durée, nombre de personnes ou commentaire invalide');
+  var etudesCorrespondantes = Object.keys(I.idx).filter(function(k) {
     var e = I.idx[k];
-    return e.o && !e.corrompu && !e.doublon && e.o._deleted !== true &&
-      ((k.indexOf('interventions\u0001') === 0 && e.o.membreId === qui && e.o.etudeId === etudeId) ||
-       (k.indexOf('formation\u0001') === 0 && e.o.membreId === qui && e.o.niveaux && Object.prototype.hasOwnProperty.call(e.o.niveaux, etudeId)));
+    return k.indexOf('etudes\u0001') === 0 && e.o && !e.corrompu && !e.doublon &&
+      e.o._deleted !== true && String(e.o.num || '').trim() === numEtude;
   });
-  if (!associee) return erreur_('FORBIDDEN', 'Vous ne pouvez signaler que sur une étude qui vous est associée');
+  if (!etudesCorrespondantes.length) return erreur_('NOT_FOUND', 'Numéro d’étude introuvable');
+  if (etudesCorrespondantes.length > 1) return erreur_('AMBIGUOUS_STUDY', 'Ce numéro d’étude est ambigu ; contactez un Membre');
+  var etudeId = etudesCorrespondantes[0].split('\u0001')[1];
   var id = 'sig_' + Utilities.getUuid().replace(/-/g, '');
-  var record = {id:id, membreId:qui, etudeId:etudeId, date:date, dureeTotale:duree, nbPersonnes:nb,
+  var record = {id:id, membreId:qui, etudeId:etudeId, numEtude:numEtude, date:date, dureeTotale:duree, nbPersonnes:nb,
     minutesIndividuelles:Math.round((duree / nb) * 100) / 100, commentaire:commentaire.trim(),
     statut:'En attente', cree:new Date().toISOString(), _v:1, _par:qui, _le:new Date().toISOString()};
   feuille_('Données').appendRow(['signalementsJEH', id, JSON.stringify(record)]);
