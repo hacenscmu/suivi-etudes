@@ -412,8 +412,12 @@
       dialog.querySelectorAll("[data-role]").forEach(el => el.addEventListener("change", async () => {
         try {
           const r = await synchro.definirRole({ membreId: el.dataset.role, role: el.value });
-          if (r.code) alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.role)?.nom || "ce membre") + " : " + r.code);
+          if (r.code) {
+            if (el.dataset.role === session?.membreId) { connexion = { ...connexion, token: r.code }; localStorage.setItem(CONN, JSON.stringify(connexion)); session.role = r.role; }
+            alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.role)?.nom || "ce membre") + " : " + r.code);
+          }
           resultat = await synchro.adminAcces(); annonce = ""; afficher();
+          if (session?.role === "Salarie") { dialog.close(); current = "Mon espace"; render(); }
         } catch (e) { alert(e.message || e.code); afficher(); }
       }));
       dialog.querySelectorAll("[data-access]").forEach(el => el.addEventListener("click", async () => {
@@ -422,7 +426,10 @@
           if (el.dataset.access === "regen") r = await synchro.regenererCode({ membreId: el.dataset.id });
           else if (el.dataset.access === "off") r = await synchro.desactiverAcces({ membreId: el.dataset.id });
           else r = await synchro.reactiverAcces({ membreId: el.dataset.id });
-          if (r.code) alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.id)?.nom || "ce membre") + " : " + r.code);
+          if (r.code) {
+            if (el.dataset.id === session?.membreId) { connexion = { ...connexion, token: r.code }; localStorage.setItem(CONN, JSON.stringify(connexion)); }
+            alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.id)?.nom || "ce membre") + " : " + r.code);
+          }
           resultat = await synchro.adminAcces(); annonce = ""; afficher();
         } catch (e) { alert(e.message || e.code); }
       }));
@@ -707,7 +714,7 @@
   }
 
   function render() {
-    const v = view();
+    const v = session?.role === "Salarie" ? { valide: true } : view();
     selecteurMandat();
     nav();
     banniere();
@@ -752,6 +759,7 @@
     brancher("#changerMonCode", async () => {
       try {
         const r = await synchro.changerMonCode();
+        connexion = { ...connexion, token: r.code }; localStorage.setItem(CONN, JSON.stringify(connexion));
         alert("Ton nouveau code d’accès est : " + r.code + "\\nNote-le maintenant : il ne sera plus affiché.");
       } catch (e) { alert(e.message || e.code); }
     });
