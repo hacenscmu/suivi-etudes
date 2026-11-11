@@ -2059,7 +2059,7 @@
         },
     
         /**
-         * Applique plusieurs commandes como um todo (ex. un BV et sa ligne) : l'état final est validé une seule fois,
+         * Applique plusieurs commandes comme un tout (ex. un BV et sa ligne) : l'état final est validé une seule fois,
          * puis les écritures partent dans l'ordre (le parent avant l'enfant, comme l'exige le serveur).
          */
         async executerPlusieurs(commandes) {
