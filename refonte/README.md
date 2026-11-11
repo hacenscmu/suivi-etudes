@@ -71,7 +71,7 @@ L'application v3 mobile-first est disponible dans [`app/index.html`](app/index.h
 ## Signalement d'une ligne JEH manquante (v3)
 
 - Le salarié peut signaler une intervention oubliée depuis « Mon espace » (étude associée, date, durée totale, nombre de personnes, commentaire).
-- Le serveur impose l'identité depuis le jeton, contrôle l'association à l'étude et calcule la durée individuelle.
+- Le serveur impose l'identité depuis le jeton, résout le numéro d'étude exact et unique sans exiger de ligne JEH préexistante, puis calcule la durée individuelle.
 - Le signalement est visible uniquement par son auteur et les Membres.
 - Dans Finances, un Membre peut créer la ligne JEH préremplie ou refuser le signalement. La ligne créée reste au statut « Pas payé » et est liée au signalement pour éviter les doublons en cas de reprise.
 - Les actions sont spécifiques au besoin : le rôle Salarié reste en lecture seule pour toutes les autres écritures.
