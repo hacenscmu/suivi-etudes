@@ -1,7 +1,7 @@
 /* HAC — application v3 : interface branchée sur le serveur Apps Script (client v3, file hors ligne, synchronisation). */
 (() => {
   "use strict";
-  const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
+  const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande, calculerFactureParLignes } = window.HAC;
   const { creerSynchro, creerClientApiV3, stockageNavigateur, prefixeStockageUtilisateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, resoudreRelation, EN_COURS, ALERTES, calculerPaie } = window.HAC;
   let filtreEtudes = "En cours";
   let etudeOuverte = null;
