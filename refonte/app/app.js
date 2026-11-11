@@ -749,7 +749,8 @@
         : { type, designation: val("designation"), montantHt: val("montantHt") === "" ? null : Number(val("montantHt")) };
     });
     const precedentes = etudeId => {
-      const candidates = data.factures.filter(x => x.etudeId === etudeId && x.id !== id);
+      const dateFacture = form.elements.date.value;
+      const candidates = data.factures.filter(x => x.etudeId === etudeId && x.id !== id && (!dateFacture || !x.date || x.date <= dateFacture));
       if (!id || etudeId !== f?.etudeId) return candidates;
       if (Array.isArray(f.facturesPrecedentesIds)) {
         const ids = new Set(f.facturesPrecedentesIds);
@@ -796,6 +797,7 @@
     dialog.querySelector("[data-add-prestation]").addEventListener("click", () => { lignes.push({ type: "prestation", designation: "Prestation JEH", quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === form.elements.etudeId.value)?.jeh ?? "" }); rendreLignes(); });
     dialog.querySelector("[data-add-frais]").addEventListener("click", () => { lignes.push({ type: "frais", designation: "Frais hors JEH", montantHt: 0 }); rendreLignes(); });
     form.elements.etudeId.addEventListener("change", afficherTotaux);
+    form.elements.date.addEventListener("change", afficherTotaux);
     if (id) dialog.querySelector("[data-delete]").addEventListener("click", async () => {
       if (!confirm("Supprimer cette facture ?")) return;
       const erreur = await supprimerEnregistrement("factures", id);
