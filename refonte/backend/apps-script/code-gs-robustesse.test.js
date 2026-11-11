@@ -174,7 +174,7 @@ const donneesAcces = {
   },
   factures: { facture_0001: { id: "facture_0001", numEtude: "HAC-001", montant: 5000, _v: 1 } },
   interventions: {
-    interv_0001: { id: "interv_0001", numEtude: "HAC-001", membreId: "membre_0001", minutesIndividuelles: 240, statut: "Pas payé", _v: 1 },
+    interv_0001: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", minutesIndividuelles: 240, statut: "Pas payé", _v: 1 },
     interv_0002: { id: "interv_0002", numEtude: "HAC-002", membreId: "membre_0002", minutesIndividuelles: 480, statut: "Payé", _v: 1 },
   },
   bvs: { bv_0000001: { id: "bv_0000001", reference: "BV-Alice", _v: 1 }, bv_0000002: { id: "bv_0000002", reference: "BV-Bob", _v: 1 } },
