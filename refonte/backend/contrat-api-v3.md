@@ -28,7 +28,7 @@ Chaque réponse doit exposer :
 
 Le client se fonde sur `ok` et `error.code`, pas uniquement sur le statut HTTP, car Apps Script peut renvoyer un statut HTTP générique pour une erreur métier.
 
-Codes minimaux : `AUTH_REQUIRED`, `AUTH_INVALID`, `INVALID_REQUEST`, `UNKNOWN_COLLECTION`, `NOT_FOUND`, `VERSION_CONFLICT`, `DUPLICATE_OPERATION`, `PAYLOAD_TOO_LARGE`, `READ_ONLY_COLLECTION`, `OP_INTERRUPTED`, `INTERNAL_ERROR`.
+Codes minimaux : `AUTH_REQUIRED`, `AUTH_INVALID`, `AUTH_ROLE_REQUIRED`, `FORBIDDEN`, `LAST_ADMIN`, `SELF_DEACTIVATE`, `INVALID_REQUEST`, `UNKNOWN_COLLECTION`, `NOT_FOUND`, `VERSION_CONFLICT`, `DUPLICATE_OPERATION`, `PAYLOAD_TOO_LARGE`, `READ_ONLY_COLLECTION`, `OP_INTERRUPTED`, `INTERNAL_ERROR`.
 
 ## 3. Authentification
 
@@ -98,7 +98,7 @@ Renvoie les collections autorisées sous une forme stable :
 }
 ```
 
-Les clés sont illustratives. Pour un accès `Membre`, `loadAll` renvoie les collections complètes. Pour un accès `Salarie`, le serveur ne renvoie que sa fiche membre, ses interventions, ses lignes de BV, ses BV associés, sa formation et les études auxquelles il a participé sous forme réduite (numéro, résumé, date, statut). Les clients, factures, configuration, autres membres et autres études ne sont pas transmis. Le serveur conserve les données existantes et ne remplace pas une collection absente par une collection vide lors d'une écriture partielle. Le client v3 peut charger `temps` pour audit/migration, mais ne l'utilise pas comme collection active d'interventions.
+Les clés sont illustratives. Pour un accès `Membre`, `loadAll` renvoie les collections complètes. Pour un accès `Salarie`, le serveur ne renvoie que sa fiche membre, ses interventions, ses lignes de BV, ses BV associés, sa formation et les études auxquelles il a participé sous forme réduite (numéro, résumé, date, statut). Les clients, factures, autres membres et autres études ne sont pas transmis. Seuls les paramètres nécessaires à la paie (SMIC, taux salariaux/patronaux et chômage) sont projetés depuis la configuration. Pour un BV partagé entre plusieurs personnes, ses montants globaux ne sont pas transmis au salarié. Le serveur conserve les données existantes et ne remplace pas une collection absente par une collection vide lors d'une écriture partielle. Le client v3 peut charger `temps` pour audit/migration, mais ne l'utilise pas comme collection active d'interventions.
 
 ### Gestion des accès\n\n- `adminAcces` est réservé aux accès `Membre`. Il liste les personnes de la collection `membres` et crée automatiquement un accès `Salarie` pour chaque fiche sans rôle d'accès, avec un code aléatoire de 8 caractères maximum transmis une seule fois dans la réponse.\n- `adminDefinirRole`, `adminRegenererCode`, `adminDesactiver` et `adminReactiver` sont réservés aux accès `Membre`. Un changement de rôle régénère le code et invalide l'ancien.\n- `changerMonCode` permet à chacun de renouveler son propre code. Les empreintes SHA-256 seulement sont conservées. Le dernier accès `Membre` actif ne peut pas être rétrogradé ou désactivé.\n- Les rôles d'accès ne remplacent pas le champ métier `role` de la fiche membre (président, trésorier, etc.).\n\n### `save`
 
