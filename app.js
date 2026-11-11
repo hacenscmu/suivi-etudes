@@ -418,8 +418,8 @@ function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);con
 // Widgets : grille de 9 colonnes, taille minimale [largeur, hauteur] en cases ; chaque ligne est complétée pour prendre toute la largeur.
 let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[2,2],alert:[3,3],enc:[3,3],cli:[3,3]},DDEF={jeh:[3,2]},DFULL=['banner','kpis'];
 let DEDIT=false,WDRAG=null;
-// nombre de cases selon la largeur de l'écran : 9 sur téléphone, jusqu'à 18 sur grand écran (≈ 80 px par case)
-function dashCols(){const v=document.getElementById('view'),w=(v&&v.clientWidth)||window.innerWidth;return Math.max(9,Math.min(18,Math.round(w/80)))}
+// nombre de cases selon la largeur de l'écran : 3 sur téléphone (blocs l'un sous l'autre, pleine largeur), puis ≈ 80 px par case jusqu'à 18
+function dashCols(){const v=document.getElementById('view'),w=(v&&v.clientWidth)||window.innerWidth;return w<600?3:Math.max(9,Math.min(18,Math.round(w/80)))}
 let DRSZ=null;window.addEventListener('resize',()=>{clearTimeout(DRSZ);DRSZ=setTimeout(()=>{if(tab==='dash'&&dashCols()!==DCOLS)render()},150)});
 function dashSize(L,k){const m=DMIN[k],s=L.size[k]||DDEF[k]||[];return [Math.min(DCOLS,Math.max(m[0],s[0]|0)),Math.min(8,Math.max(m[1],s[1]|0))]}
 function packDash(L,ks){const rows=[];let cur=[],used=0;
@@ -463,7 +463,7 @@ function vDash(D){
   const L=dashLayout();
   DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='',seg=[];
   const tb=k=>{const [w,h]=dashSize(L,k),m=DMIN[k];return `<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><span class="wsz"><button type="button" data-wsz="${k}:w:-1" ${w<=m[0]?'disabled':''} aria-label="Moins large">−</button><b>↔ ${w}</b><button type="button" data-wsz="${k}:w:1" ${w>=DCOLS?'disabled':''} aria-label="Plus large">+</button></span><span class="wsz"><button type="button" data-wsz="${k}:h:-1" ${h<=m[1]?'disabled':''} aria-label="Moins haut">−</button><b>↕ ${h}</b><button type="button" data-wsz="${k}:h:1" ${h>=8?'disabled':''} aria-label="Plus haut">+</button></span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`};
-  const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))">${packDash(L,seg).map(r=>r.map(x=>`<div class="wgc" data-wk="${x.k}" style="grid-column:span ${x.W};grid-row:span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')).join('')}</div>`;seg=[]};
+  const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${packDash(L,seg).map(r=>r.map(x=>`<div class="wgc" data-wk="${x.k}" style="grid-column:span ${x.W};grid-row:span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')).join('')}</div>`;seg=[]};
   ks.forEach(k=>{if(DFULL.includes(k)){flush();out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`}else seg.push(k)});flush();
   const hid=DASH_BLOCKS.filter(([k])=>L.hide[k]);
   const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, − / + pour sa largeur (↔) et sa hauteur (↕). Chaque ligne s’étire pour remplir l’écran.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
@@ -1040,7 +1040,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=25;
+const VERSION=26;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
