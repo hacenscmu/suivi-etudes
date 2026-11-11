@@ -30,7 +30,7 @@ ok('hors ligne : bannière « en attente »',(await p.textContent('#syncBanner')
 ok('hors ligne : serveur inchangé',srv.lireDonnees().factures.facture_0001.etat==='Payée');
 await p.reload();await p.waitForTimeout(600);
 ok('rechargement hors ligne : données du cache, modif en attente visible',(await p.textContent('#syncBanner')).includes('gardée'));
-offline=false;await p.click('#tabs [data-page="Réglages"]');ok('Réglages en pleine largeur',await p.locator('.app').evaluate(el=>el.classList.contains('settings-active')&&getComputedStyle(el).maxWidth==='none'));await p.click('#syncNow');await p.waitForTimeout(600);
+offline=false;await p.click('#tabs [data-page="Réglages"]');ok('Réglages en pleine largeur',await p.locator('.app').evaluate(el=>el.classList.contains('settings-active')&&getComputedStyle(el).maxWidth==='none'&&getComputedStyle(el).width===window.innerWidth+'px'));await p.click('#syncNow');await p.waitForTimeout(600);
 ok('retour réseau : modif envoyée',srv.lireDonnees().factures.facture_0001.etat==='Émise'&&srv.lireDonnees().factures.facture_0001._v===3);
 const D=()=>srv.lireDonnees();
 await p.click('#tabs [data-page="Études"]');ok('largeur standard rétablie hors Réglages',await p.locator('.app').evaluate(el=>!el.classList.contains('settings-active')&&getComputedStyle(el).maxWidth!=='none'));await p.click('#addClient');await remplir({raisonSociale:'Novalys',relationType:'longue_duree',cadenceFacturation:'mensuelle',dateProchaineFacture:'2026-10-10'});
