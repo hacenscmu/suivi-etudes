@@ -243,7 +243,7 @@
         const actions = s.statut === "En attente"
           ? '<div class="item-actions"><button class="action" data-signalement="ajouter" data-id="' + s.id + '">Créer la ligne</button><button class="ghost" data-signalement="refuser" data-id="' + s.id + '">Refuser</button></div>'
           : "";
-        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(membre?.nomComplet || membre?.nom || "Salarié") + ' · ' + escapeHtml(etude?.num || "Étude") + '</strong><small>' + escapeHtml(s.date) + ' · ' + Number(s.minutesIndividuelles || 0) + ' min individuelles · ' + Number(s.nbPersonnes || 1) + ' personne(s)' + (s.commentaire ? ' · ' + escapeHtml(s.commentaire) : '') + '</small></div><span class="pill ' + (s.statut === "Ajoutée" ? "green" : s.statut === "Refusée" ? "muted" : "pink") + '">' + escapeHtml(s.statut) + '</span>' + actions + '</div>';
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(membre?.nomComplet || membre?.nom || "Salarié") + ' · ' + escapeHtml(etude?.num || s.numEtude || "Étude") + '</strong><small>' + escapeHtml(s.date) + ' · ' + Number(s.minutesIndividuelles || 0) + ' min individuelles · ' + Number(s.nbPersonnes || 1) + ' personne(s)' + (s.commentaire ? ' · ' + escapeHtml(s.commentaire) : '') + '</small></div><span class="pill ' + (s.statut === "Ajoutée" ? "green" : s.statut === "Refusée" ? "muted" : "pink") + '">' + escapeHtml(s.statut) + '</span>' + actions + '</div>';
       }).join("") || '<div class="empty">Aucun signalement à traiter.</div>') + "</section>";
   }
 
@@ -392,7 +392,7 @@
       heading("Mes interventions", data.interventions.length + " ligne(s)") +
       '<section class="listbox rows">' + (data.interventions.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(i => {
         const e = etude(i.etudeId);
-        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(e?.num || "Étude") + '</strong><small>' + escapeHtml(i.date || "") + " · " + escapeHtml(i.statut || "") + '</small></div><div class="amount">' + jeh(Number(i.minutesIndividuelles || 0) / 480) + " JEH</div></div>";
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(e?.num || s.numEtude || "Étude") + '</strong><small>' + escapeHtml(i.date || "") + " · " + escapeHtml(i.statut || "") + '</small></div><div class="amount">' + jeh(Number(i.minutesIndividuelles || 0) / 480) + " JEH</div></div>";
       }).join("") || '<div class="empty">Aucune intervention enregistrée.</div>') + "</section>" +
       heading("Mes bulletins de versement", bvs.length + " BV · " + money(netDejaRecu) + " net enregistré") +
       '<section class="listbox rows">' + (bvs.map(bv => {
@@ -781,7 +781,7 @@
       titre: "Signaler une ligne JEH manquante",
       valeurs: { date: aujourdHui(), nb: 1 },
       champs: [
-        { name: "etudeId", label: "Étude concernée", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
+        { name: "numEtude", label: "Numéro de l’étude", required: true },
         { name: "date", label: "Date de l’intervention", type: "date", required: true },
         { name: "duree", label: "Durée totale (minutes)", type: "number", required: true },
         { name: "nb", label: "Nombre de personnes", type: "number", required: true },
@@ -790,7 +790,7 @@
       onValider: async d => {
         if (!(d.duree > 0) || !(d.nb >= 1) || d.nb % 1) return "Indique une durée positive et un nombre entier de personnes.";
         try {
-          await synchro.signalerJEH({ etudeId: d.etudeId, date: d.date, duree: d.duree, nb: d.nb, commentaire: d.commentaire || "" });
+          await synchro.signalerJEH({ numEtude: d.numEtude, date: d.date, duree: d.duree, nb: d.nb, commentaire: d.commentaire || "" });
           await synchro.synchroniser(); data = synchro.lireEtat(); render(); return null;
         } catch (e) { return e.message || e.code; }
       }
