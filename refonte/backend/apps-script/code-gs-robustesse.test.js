@@ -252,7 +252,7 @@ test("le dernier compte Membre ne peut pas se rétrograder ni se désactiver", a
   const down = await body(s, req("adminDefinirRole", { membreId: "membre_0001", role: "Salarie" }));
   assert.equal(down.error.code, "LAST_ADMIN");
   const off = await body(s, req("adminDesactiver", { membreId: "membre_0001" }));
-  assert.equal(off.error.code, "LAST_ADMIN");
+  assert.equal(off.error.code, "SELF_DEACTIVATE");
   assert.equal((await body(s, req("ping"))).data.role, "Membre");
 });
 
