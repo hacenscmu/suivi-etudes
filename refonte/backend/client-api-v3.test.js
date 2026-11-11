@@ -161,3 +161,27 @@ test("autorise uniquement la fiche config/main et interdit sa suppression", asyn
   await assert.rejects(c.save({ collection: "config", id: "config_0001", record: { id: "config_0001" }, opId: "op_config_0002", expectedVersion: 0 }), e => e.code === "INVALID_REQUEST");
   await assert.rejects(c.delete({ collection: "config", id: "main", opId: "op_config_0003", expectedVersion: 1 }), e => e.code === "INVALID_REQUEST");
 });
+
+
+test("session authentifie le ping et récupère le rôle côté serveur", async () => {
+  let request;
+  const c = client(async r => { request = r; return succes({ authentifie: true, membreId: "membre_0001", role: "Salarie" }); });
+  const session = await c.session();
+  assert.equal(request.action, "ping");
+  assert.equal(request.token, "token-test");
+  assert.equal(session.role, "Salarie");
+});
+
+test("expose les opérations de gestion des accès avec validation des identifiants", async () => {
+  const demandes = [];
+  const c = client(async r => { demandes.push(r); return succes({ role: r.role || "Salarie", code: "ABCDEFGH", active: true, membres: [], codesGeneres: [] }); });
+  await c.adminAcces();
+  await c.definirRole({ membreId: "membre_0001", role: "Membre" });
+  await c.regenererCode({ membreId: "membre_0001" });
+  await c.desactiverAcces({ membreId: "membre_0001" });
+  await c.reactiverAcces({ membreId: "membre_0001" });
+  await c.changerMonCode();
+  assert.deepEqual(demandes.map(r => r.action), ["adminAcces", "adminDefinirRole", "adminRegenererCode", "adminDesactiver", "adminReactiver", "changerMonCode"]);
+  await assert.rejects(c.definirRole({ membreId: "bad", role: "Membre" }), e => e.code === "INVALID_REQUEST");
+  await assert.rejects(c.definirRole({ membreId: "membre_0001", role: "Président" }), e => e.code === "INVALID_REQUEST");
+});
