@@ -740,6 +740,7 @@
     nav();
     banniere();
     const content = document.getElementById("content");
+    document.querySelector(".app")?.classList.toggle("settings-active", current === "Réglages" && session?.role !== "Salarie");
     if (!v.valide) {
       content.innerHTML = '<section class="panel"><h2>Données incohérentes</h2><p>Les indicateurs sont masqués pour éviter un résultat trompeur.</p><ul>' +
         v.anomalies.map(a => "<li>" + escapeHtml(a.raison || a) + "</li>").join("") + "</ul></section>";
