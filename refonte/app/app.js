@@ -766,7 +766,7 @@
           : '<label>Montant HT (€)<input data-field="montantHt" type="number" min="0" step="any" value="' + escapeHtml(l.montantHt ?? "") + '"></label>') +
         '</div>').join("");
       zone.querySelectorAll("[data-field]").forEach(el => {
-        el.addEventListener("input", afficherTotaux);
+        if (el.dataset.field !== "type") el.addEventListener("input", afficherTotaux);
         el.addEventListener("change", () => {
           const index = Number(el.closest("[data-ligne]").dataset.ligne);
           if (el.dataset.field === "type") {
