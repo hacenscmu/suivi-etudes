@@ -12,7 +12,7 @@ await p.click('#nav [data-tab="finances"]');await p.waitForTimeout(300);const f=
 ok('Finances : synthèse',f.includes('ENCAISSÉ HT')&&f.includes('Net à verser'));
 await p.click('[data-fseg="paie"]');await p.waitForTimeout(300);ok('Finances : Paie',(await p.innerText('#view')).includes('Net à virer'));
 ok('aide « par BV »',(await p.content()).includes('Par BV'));
-await p.click('#nav [data-tab="dash"]');await p.waitForTimeout(300);ok('alerte facture périodique',(await p.innerText('body')).includes('Facture périodique à émettre'));
+await p.click('#nav [data-tab="dash"]');await p.waitForTimeout(300);ok('plus d’alerte « facture périodique » (champ retiré)',!(await p.innerText('body')).includes('Facture périodique'));
 await p.click('#nav [data-tab="finances"]');await p.click('[data-fseg="factures"]');await p.waitForTimeout(300);await p.locator('[data-edit^="factures:"]').first().click();await p.waitForTimeout(300);
 const pop=p.waitForEvent('popup');await p.click('[data-pdf]');const w=await pop;await w.waitForLoadState();const h=await w.content();
 ok('facture générée : référence FS-1-202609-01 (nom de l’étude, ici son n°)',/FS-1-202609-01/.test(h));ok('facture : 2,8 JEH × 400 € + frais 70 € = 1 190 € HT, TTC 1 428 €',/1\s190,00/.test(h)&&/1\s428,00/.test(h)&&!h.includes('Attention : le total'));
