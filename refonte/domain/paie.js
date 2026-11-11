@@ -9,7 +9,7 @@
  */
 const num = v => (v === "" || v == null || !Number.isFinite(Number(v)) ? 0 : Number(v));
 const somme = o => Object.values(o || {}).reduce((s, v) => s + num(v), 0);
-const DEFAUT = { smic: 12.02, cot: { maladie: 0.013, retraiteP: 0.069, retraiteD: 0.004, csgD: 0.068, csgND: 0.029 }, patr: { maladie: 0.13, at: 0.0123, retraiteP: 0.0855, retraiteD: 0.0211, famille: 0.0525, autres: 0 }, chomage: 0 };
+const DEFAUT = { smic: 12.31, cot: { maladie: 0.013, retraiteP: 0.069, retraiteD: 0.004, csgD: 0.068, csgND: 0.029 }, patr: { maladie: 0.13, at: 0.0123, retraiteP: 0.0855, retraiteD: 0.0211, famille: 0.0525, autres: 0 }, chomage: 0 };
 
 function calculerPaie({ interventions = [], membres = [], config = {} }) {
   const c = { ...DEFAUT, ...config };
