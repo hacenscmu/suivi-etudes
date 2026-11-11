@@ -245,3 +245,13 @@ test("seul un membre peut changer le rôle, régénérer ou désactiver un accè
   assert.equal(off.data.active, false);
   assert.equal((await body(s, { action: "loadAll", apiVersion: 3, token: promotion.data.code })).error.code, "AUTH_INVALID");
 });
+
+
+test("le dernier compte Membre ne peut pas se rétrograder ni se désactiver", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: { membres: { membre_0001: { id: "membre_0001", nomComplet: "Administratrice", _v: 1 } } }, membre: "membre_0001" });
+  const down = await body(s, req("adminDefinirRole", { membreId: "membre_0001", role: "Salarie" }));
+  assert.equal(down.error.code, "LAST_ADMIN");
+  const off = await body(s, req("adminDesactiver", { membreId: "membre_0001" }));
+  assert.equal(off.error.code, "LAST_ADMIN");
+  assert.equal((await body(s, req("ping"))).data.role, "Membre");
+});
