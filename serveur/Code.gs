@@ -8,7 +8,7 @@
 // Tout nom présent dans les données (JEH, formation) sans rôle Membre devient automatiquement Salarié.
 // Une seule action dans l'éditeur, la première fois : exécuter creerMonCode() pour obtenir le premier code Membre.
 
-const COLLECTIONS = ['etudes', 'factures', 'temps', 'formation', 'clients', 'config', 'appareils'];
+const COLLECTIONS = ['etudes', 'factures', 'temps', 'formation', 'clients', 'config', 'appareils', 'signalements'];
 const TAILLE_MAX = 100000;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sans 0/O, 1/I/L
 
@@ -44,7 +44,8 @@ function doPost(e) {
     if (b.action === 'ping') return out_({ ok: 1, membre: qui, role: role, admin: role === 'membre' });
     if (b.action === 'loadAll') return out_(verrou_(function () { return role === 'membre' ? loadAll_() : vueSalarie_(qui); }));
     if (b.action === 'changerMonCode') return out_(verrou_(function () { return { ok: 1, membre: qui, code: nouveauCode_(qui, role) }; }));
-    if (role !== 'membre') return out_({ error: 'lecture' });                      // un salarié ne modifie rien
+    if (b.action === 'signaler') return out_(verrou_(function () { return signaler_(b, qui); })); // seule écriture permise à un salarié
+    if (role !== 'membre') return out_({ error: 'lecture' });                      // un salarié ne modifie rien d'autre
     if (b.action === 'save' || b.action === 'delete') return out_(verrou_(function () { return ecrire_(b, qui); }));
     if (['membres', 'creerCode', 'reinitialiserCode', 'desactiver', 'reactiver', 'changerRole'].indexOf(b.action) >= 0) return out_(verrou_(function () { return gererMembres_(b, qui); }));
     return out_({ error: 'action' });
@@ -81,7 +82,8 @@ function loadAll_() {
 // Vue Salarié : uniquement ses lignes de JEH, ses niveaux de formation, le n° et le résumé de ses études,
 // et les réglages nécessaires au calcul de sa paie. Aucune facture, aucun client, aucun autre intervenant.
 function vueSalarie_(qui) {
-  var tout = loadAll_(), moi = ncl_(qui), out = { etudes: {}, temps: {}, formation: {}, config: {} };
+  var tout = loadAll_(), moi = ncl_(qui), out = { etudes: {}, temps: {}, formation: {}, config: {}, signalements: {} };
+  Object.keys(tout.signalements || {}).forEach(function (id) { var g = tout.signalements[id]; if (ncl_(g.par) === moi) out.signalements[id] = g; });
   var nums = {};
   Object.keys(tout.temps || {}).forEach(function (id) { var t = tout.temps[id]; if (ncl_(t.prenom) === moi) { out.temps[id] = t; if (t.etude) nums[t.etude] = 1; } });
   Object.keys(tout.formation || {}).forEach(function (id) { var f = tout.formation[id]; if (ncl_(f.nom) === moi) {
@@ -119,6 +121,18 @@ function ecrire_(b, qui) {
   var s = JSON.stringify(nouveau);
   if (ligne > 0) sh.getRange(ligne, 3).setValue(s); else sh.appendRow([b.col, b.id, s]);
   return { ok: 1, version: nouveau._v };
+}
+
+// Signalement d'une ligne de JEH manquante : le nom est imposé par le serveur (celui du code utilisé).
+function signaler_(b, qui) {
+  var d = b.signalement;
+  if (!d || typeof d !== 'object') return { error: 'json' };
+  var txt = function (v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }, nb = function (v) { return typeof v === 'number' && isFinite(v) && v >= 0 ? v : null; };
+  var o = { par: qui, date: txt(d.date, 10), etude: txt(d.etude, 40), min: nb(d.min), nb: nb(d.nb) || 1, note: txt(d.note, 500), statut: 'nouveau', le: new Date().toISOString(), _v: 1 };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(o.date) || !o.min) return { error: 'incomplet' };
+  var id = 'g' + Utilities.getUuid().replace(/-/g, '').slice(0, 12);
+  sheet_().appendRow(['signalements', id, JSON.stringify(o)]);
+  return { ok: 1, id: id };
 }
 
 // ---------- Codes et rôles ----------

@@ -43,8 +43,8 @@ const INVOICED=['Acompte facturé','Facture intermédiaire','Solde facturé'];
 const BV_STAT=['Pas payé','Payé','A venir','Non effectué'];
 
 /* ---------- état ---------- */
-const S={etudes:{},factures:{},temps:{},formation:{},clients:{},cfg:null};
-let loaded={etudes:false,factures:false,temps:false,formation:false,clients:false,cfg:false};
+const S={etudes:{},factures:{},temps:{},formation:{},clients:{},signalements:{},cfg:null};
+let loaded={etudes:false,factures:false,temps:false,formation:false,clients:false,signalements:false,cfg:false};
 let db=null,userCap=null,canWrite=true,tab=(lsGet('suivi.tab')==='temps'&&(lsSet('suivi.fseg','jeh'),lsSet('suivi.tab','finances')),['factures','remun'].includes(lsGet('suivi.tab'))&&lsSet('suivi.tab','finances'),['dash','etudes','finances','temps','formation','params'].includes(lsGet('suivi.tab'))?lsGet('suivi.tab'):'dash'),mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
 let dirty=false,pendingRender=false,timeoutNote=false,dbErr='';
 // un mandat finit la veille du début du suivant ; le dernier n'a pas de fin
@@ -383,6 +383,7 @@ async function doSync(){
     lsSet('suivi.url',u);location.reload();
   }catch(e){say('Connexion impossible : vérifiez l’adresse et le réseau.',1)}
 }
+function toastMsg(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
 let codeDemande=false;function demanderCode(){if(codeDemande)return;codeDemande=true;try{openSheet('code')}catch(e){}}
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
 let HSEL='';
@@ -652,7 +653,12 @@ function listTemps(D){
   const jeh=L.reduce((a,t)=>a+num(t.I),0),brut=L.filter(topay).reduce((a,t)=>a+num(t.J),0);
   return `<div class="sum"><b>${L.length}</b> ligne${L.length>1?'s':''} · <b>${nf3.format(Math.round(jeh*1000)/1000)}</b> JEH${brut?' · '+eur0(brut)+' brut à payer':''}</div>`+(L.map(t=>jehCard(t,D)).join('')||emptyMsg('Aucune ligne de temps.'));
 }
-function vTemps(D){return `<h2>JEH</h2>${searchBox('temps')}${chipsRow('temps',[['all','Tout'],['pay','À payer'],['paid','Payé']])}<div id="lst">${listTemps(D)}</div>${fab('temps','Ajouter une ligne de temps')}`}
+function signalementsHtml(){
+  const G=Object.entries(S.signalements).filter(([,g])=>g.statut==='nouveau').sort((a,b)=>String(a[1].le).localeCompare(String(b[1].le)));
+  if(!G.length||SALARIE)return '';
+  return `<div class="card alc"><h3>${ic('bell')}Signalements à traiter<span class="cnt">${G.length}</span></h3>${G.map(([id,g])=>`<div class="sgr"><div><b>${esc(g.par)}</b> · ${g.etude?'étude '+esc(g.etude):'étude non précisée'} · ${sd(dnum(g.date))}<div class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</div></div><div class="mbra"><button class="b" data-sig="ok:${id}">Créer la ligne</button><button class="b ghost" data-sig="non:${id}">Refuser</button></div></div>`).join('')}</div>`;
+}
+function vTemps(D){return `<h2>JEH</h2>${signalementsHtml()}${searchBox('temps')}${chipsRow('temps',[['all','Tout'],['pay','À payer'],['paid','Payé']])}<div id="lst">${listTemps(D)}</div>${fab('temps','Ajouter une ligne de temps')}`}
 function vRemun(D){
   const R=remun(D),T=R.T;
   const cards=R.rows.filter(r=>r.jeh>0||r.dejaPaye>0).map(r=>{
@@ -768,6 +774,8 @@ function vMoi(D){
   return `<h2>Bonjour ${esc(moi.split('.')[0]||moi)}</h2>
   <div class="card"><div class="ftg"><div class="ft acc"><small>À recevoir (prochain BV)</small><b>${eur(r.net)}</b></div><div class="ft"><small>Brut</small><b>${eur(r.brut)}</b></div><div class="ft"><small>JEH à payer</small><b>${f3(r.jeh)}</b></div><div class="ft"><small>Déjà reçu (brut)</small><b>${eur(r.dejaPaye)}</b></div></div>
   ${r.jeh>0&&r.jeh<1?`<div class="eal" style="margin-top:8px">${ic('warn',13)} Moins de 1 JEH : cotisations calculées sur 1 JEH</div>`:''}<div class="small" style="margin-top:8px">${f3(jt)} JEH réalisées en tout · ${nbBV} BV payé${nbBV>1?'s':''}</div></div>
+  <button class="mb solid" data-mn="signaler" style="margin-top:12px">Signaler une ligne JEH manquante</button>
+  ${Object.values(S.signalements).length?`<h3 style="margin:16px 2px 8px">Mes signalements</h3>${Object.values(S.signalements).sort((a,b)=>String(b.le).localeCompare(String(a.le))).map(g=>`<div class="card lcard sgn">${dayBox(dnum(g.date))}<div class="lm"><b>${g.etude?'Étude '+esc(g.etude):'Étude non précisée'}</b><span class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</span></div><span class="jst ${g.statut==='ajoutee'?'ok':g.statut==='refusee'?'warn':'due'}">${{ajoutee:'Ajoutée',refusee:'Refusée'}[g.statut]||'En attente'}</span></div>`).join('')}`:''}
   <h3 style="margin:16px 2px 8px">Mes lignes de JEH</h3>${L.map(ligne).join('')||emptyMsg('Aucune ligne de JEH à votre nom pour le moment.')}
   ${niv.length?`<h3 style="margin:16px 2px 8px">Ma formation</h3><div class="card">${niv.map(([n,v])=>`<div class="stat"><span>Étude ${esc(n)}</span><span>Niveau ${v} · ${['Non formé','Notions','Autonome avec appui','Autonome','Référent'][v]||''}</span></div>`).join('')}</div>`:''}
   <div class="small" style="margin-top:12px">Vous voyez uniquement les données liées à votre nom. Pour une correction, contactez la trésorerie.</div>`;
@@ -843,6 +851,11 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-lact]');if
   saveRow('factures',ED.id);majMontantFacture(ED.id);openEdit(ED.col,ED.id,ED.isNew);render();
   if(a==='add'){const ins=document.querySelectorAll('#edit [data-lf="lib"]');const z=ins[ins.length-1];if(z)z.focus()}});
 document.addEventListener('input',e=>{const t=e.target;if(t.id==='q'){FLT[t.dataset.q].q=t.value;const l=$('#lst');if(l)l.innerHTML=({etudes:listEtudes,factures:listFact,temps:listTemps})[t.dataset.q](compute())}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-sig]');if(!b)return;const [a,id]=b.dataset.sig.split(':'),g=S.signalements[id];if(!g)return;
+  if(a==='non'){if(!confirm('Refuser ce signalement ?'))return;g.statut='refusee';saveRow('signalements',id);render();return}
+  const et=Object.values(S.etudes).find(x=>ncl(x.num)===ncl(g.etude)||ncl(x.code)===ncl(g.etude));
+  const nid=addRow('temps',{date:g.date,prenom:g.par,etude:et?et.num:(g.etude||''),note:g.note||'',min:g.min,nb:g.nb||1,jeh:null,statut:'Pas payé'});
+  g.statut='ajoutee';g.ligne=nid;saveRow('signalements',id);openEdit('temps',nid,true)});
 document.addEventListener('click',e=>{const g=e.target.closest('[data-pdf]');if(g){e.preventDefault();genererFacture(g.dataset.pdf)}});
 document.addEventListener('click',e=>{const h=e.target.closest('[data-fsort]');if(h){FSORT=FSORT===h.dataset.fsort?null:h.dataset.fsort;render()}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(ED||PSEC))closeEdit()});
@@ -982,7 +995,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=19;
+const VERSION=20;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
@@ -1139,6 +1152,12 @@ function sheetHTML(){
     ${adm?`<div class="sh" style="margin:14px 2px 6px">Membres et salariés</div><div class="small" style="margin-bottom:6px">Toute personne présente dans les JEH ou la formation apparaît ici automatiquement comme Salarié, avec un code simple à lui transmettre. Passez-la en Membre pour lui donner tous les droits.</div>${liste}<button class="mb solid" data-mn="nouveau" style="margin-top:10px">+ Nouveau membre</button>`:'<div class="small" style="margin-top:12px">Seule la trésorerie (administrateur) peut créer ou désactiver les codes des membres.</div>'}
     <div class="msg" id="mm" hidden></div>${back}`;
   }
+  if(sheetView==='signaler')return `<h2>Signaler une ligne JEH manquante</h2><div class="small" style="margin-bottom:10px">La trésorerie la vérifiera puis l’ajoutera. Votre nom est joint automatiquement.</div>
+    <div class="fld"><label>Date du travail</label><input id="sg_date" type="date" value="${dstr(TODAY)}"></div>
+    <div class="fld"><label>Étude (n° ou nom)</label><input id="sg_et" list="sg_etl" autocomplete="off"><datalist id="sg_etl">${Object.values(S.etudes).map(e=>`<option value="${esc(e.num)}">${esc(e.resume||'')}</option>`).join('')}</datalist></div>
+    <div class="f2"><div class="fld"><label>Durée (minutes)</label><input id="sg_min" type="number" inputmode="numeric" min="1" placeholder="ex. 120"></div><div class="fld"><label>Nombre de personnes</label><input id="sg_nb" type="number" inputmode="numeric" min="1" value="1"></div></div>
+    <div class="fld"><label>Commentaire</label><input id="sg_note" placeholder="ex. analyse échantillon 3"></div>
+    <div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="envoyersig">Envoyer</button><button class="mb ghost" data-mn="close">Annuler</button>`;
   if(sheetView==='nouveau')return `<h2>Nouveau membre</h2><div class="small" style="margin-bottom:10px">Son nom tel qu’il est saisi dans l’appli (ex. Alex.M). Un code d’accès lui sera créé.</div><input id="mnom" style="width:100%;margin-bottom:8px" placeholder="Prénom.N" autocomplete="off"><select id="mrole" style="width:100%;margin-bottom:10px"><option value="salarie">Salarié : voit seulement ses données</option><option value="membre">Membre : tous les droits</option></select><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="creer">Créer son code</button><button class="mb ghost" data-mn="membres">‹ Retour</button>`;
   if(sheetView==='codeaffiche')return `<h2>Code d’accès ${CODE.soi?'de votre téléphone':'de '+esc(CODE.nom)}</h2><div class="small" style="margin-bottom:10px">${CODE.soi?'Votre nouveau code est déjà enregistré sur ce téléphone. Notez-le pour vos autres appareils'+(CODE.role==='salarie'?'.':' : il ne sera plus affiché.'):'À transmettre en privé à '+esc(CODE.nom)+'. '+(CODE.role==='salarie'?'Il reste visible dans la liste des membres.':'Il ne sera plus affiché ; en cas de perte, créez-lui un nouveau code.')}</div><div class="codebox" id="codev">${esc(CODE.code)}</div><button class="mb solid" data-mn="copier">Copier le code</button>${navigator.share?'<button class="mb" data-mn="partager">Partager…</button>':''}<div class="msg" id="mm" hidden></div><button class="mb ghost" data-mn="membres">‹ Membres</button>`;
   if(sheetView==='import')return `<h2>Importer un fichier</h2><div class="small" style="margin-bottom:10px">Fichier modèle Excel (.xlsx), tableau .csv, ou sauvegarde .json exportée depuis l’appli.</div><input type="file" id="imf" accept=".xlsx,.csv,.txt,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="width:100%"><div class="msg" id="imm" hidden></div><div id="imb"></div><button class="mb ghost" data-mn="close">Fermer</button>`;
@@ -1160,7 +1179,11 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-mn]');if(!b)return;
   const a=b.dataset.mn;
   if(a==='close'){sheetView=null;drawSheet();return}
-  if(['home','addr','import','restore','code','nouveau'].includes(a)){openSheet(a);return}
+  if(['home','addr','import','restore','code','nouveau','signaler'].includes(a)){openSheet(a);return}
+  if(a==='envoyersig'){const v=id=>(($('#'+id)||{}).value||'').trim(),min=Number(v('sg_min')),nb=Number(v('sg_nb'))||1;
+    if(!v('sg_date')||!(min>0))return mmsg('Indiquez au moins la date et la durée.',1);
+    mmsg('Envoi…');try{await api({action:'signaler',signalement:{date:v('sg_date'),etude:v('sg_et'),min,nb,note:v('sg_note')}});sheetView=null;drawSheet();if(db)await db.sync();render();toastMsg('Signalement envoyé à la trésorerie.')}
+    catch(x){mmsg(String(x.message)==='incomplet'?'Indiquez la date et la durée.':'Envoi impossible : vérifiez la connexion.',1)}return}
   if(a==='membres'){MEMB=null;openSheet('membres');if(lsGet('suivi.admin')==='1'){try{const r=await api({action:'membres'});MEMB=r.membres||[]}catch(x){MEMB=[];mmsg(String(x.message)==='admin'?'Réservé aux administrateurs.':'Liste indisponible (réseau ?).',1)}drawSheet()}return}
   if(['creer','reinit','desact','react','moncode'].includes(a)){
     const nom=a==='creer'?(($('#mnom')||{}).value||'').trim():b.dataset.nom;
@@ -1238,7 +1261,7 @@ render();
   const timer=setTimeout(()=>{timeoutNote=true;renderStatus()},10000);
   const clear=()=>{if(Object.values(loaded).every(Boolean)){clearTimeout(timer);timeoutNote=false;renderStatus()}};
   const fail=e=>{dbErr=(e&&e.code==='revoked')?'L’accès aux données a été retiré.':'Lecture des données impossible pour le moment.';renderStatus()};
-  ['etudes','factures','temps','formation','clients'].forEach(col=>{
+  ['etudes','factures','temps','formation','clients','signalements'].forEach(col=>{
     db.collection(col).onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{o[d.id]=Object.assign({},d.data())});S[col]=o;loaded[col]=true;clear();afterSnap()},fail);
   });
   db.collection('appareils').onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{o[d.id]=Object.assign({},d.data())});S.devs=o;if(tab==='params')afterSnap()},()=>{});

@@ -81,6 +81,24 @@ await p.click('[data-mn="desact"][data-nom="Alex.M"]');await p.waitForTimeout(80
   await p2.waitForTimeout(300);const tz=await p2.innerText('body');  if(process.argv[2])await p2.screenshot({path:process.argv[2]+'-moi.png'});
   ok('appli salarié : onglets Moi et Paramètres seulement',(await p2.locator('#nav button').count())===2&&tz.includes('Bonjour Zoé'));
   ok('appli salarié : ses JEH et ce qu’elle va recevoir, rien d’autre',tz.includes('À recevoir')&&tz.includes('Étude 1')&&!tz.includes('Alex.M')&&!tz.includes('1 428'));
+  // signalement d'une ligne manquante par le salarié
+  await p2.click('[data-mn="signaler"]');await p2.fill('#sg_et','1');await p2.fill('#sg_min','120');await p2.fill('#sg_note','analyse échantillon 3');await p2.click('[data-mn="envoyersig"]');await p2.waitForTimeout(1500);
+  const sig=rows.filter(r=>r[0]==='signalements').map(r=>JSON.parse(r[2]));
+  ok('signalement enregistré, avec le nom imposé par le serveur',sig.length===1&&sig[0].par==='Zoé.B'&&sig[0].min===120&&sig[0].statut==='nouveau');
+  ok('signalement visible dans « Mes signalements » (en attente)',(await p2.innerText('#view')).includes('En attente'));
+  ok('un salarié ne peut pas signaler au nom d’un autre',(()=>{appel({token:zoe.code,action:'signaler',signalement:{date:'2026-10-02',min:60,par:'Alex.M'}});return rows.filter(r=>r[0]==='signalements').every(r=>JSON.parse(r[2]).par==='Zoé.B')})());
+  if(process.argv[2])await p2.screenshot({path:process.argv[2]+'-moi2.png'});
   await p2.close();
+  // un membre traite le signalement
+  {const t2=JSON.parse(props.TOKENS);t2['Pauline.D'].active=true;props.TOKENS=JSON.stringify(t2);}
+  const codeM=S.creerMonCode();
+  const p3=await ctx.newPage();await p3.goto('http://localhost:8766/index.html');await p3.evaluate(c=>{localStorage.clear();localStorage.setItem('suivi.url','https://script.google.com/macros/s/TEST/exec');localStorage.setItem('suivi.token',c);localStorage.setItem('suivi.role','membre');localStorage.setItem('suivi.tab','finances');localStorage.setItem('suivi.fseg','jeh')},codeM);
+  await p3.reload();await p3.waitForTimeout(2000);
+  ok('membre : « Signalements à traiter » dans Finances › JEH',(await p3.innerText('#view')).includes('Signalements à traiter'));
+  if(process.argv[2])await p3.screenshot({path:process.argv[2]+'-sig.png'});
+  await p3.click('[data-sig^="ok:"]');await p3.waitForTimeout(2500);
+  const lignes=rows.filter(r=>r[0]==='temps').map(r=>JSON.parse(r[2])).filter(x=>x.prenom==='Zoé.B'&&x.min===120);
+  ok('« Créer la ligne » : ligne JEH préremplie créée, signalement marqué ajouté',lignes.length===1&&lignes[0].note==='analyse échantillon 3'&&JSON.parse(rows.find(r=>r[0]==='signalements')[2]).statut==='ajoutee');
+  await p3.close();
   ok('aucune erreur JavaScript',errs.length===0||console.log(errs));
   await b.close();console.log(pass+' réussis, '+fail+' échoués');process.exitCode=fail?1:0})();
