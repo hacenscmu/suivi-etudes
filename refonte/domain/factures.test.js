@@ -100,3 +100,12 @@ test("refuse les taux TVA et lignes invalides", () => {
   assert.equal(r.valide, false);
   assert.ok(r.anomalies.length >= 3);
 });
+
+ 
+test("refuse un prix ou un montant de frais laissé vide", () => {
+  const { calculerFactureParLignes } = require("./factures");
+  for (const lignes of [
+    [{ type: "prestation", quantite: 1, prixUnitaireHt: null }],
+    [{ type: "frais", montantHt: null }],
+  ]) assert.equal(calculerFactureParLignes({ lignes }).valide, false);
+});
