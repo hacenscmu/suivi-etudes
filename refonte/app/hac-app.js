@@ -346,6 +346,951 @@
     module.exports = { STATUTS_ETUDE, STATUTS_CA_SIGNE, analyserEtude, dateValide };
     
     },
+    "domain/interventions.js": function(require, module, exports) {
+    /**
+     * HAC refonte — interventions individuelles.
+     *
+     * Le nouveau modèle enregistre explicitement les minutes attribuées à
+     * chaque membre. Il ne devine pas si les anciennes minutes étaient
+     * individuelles ou collectives : cette conversion exige un arbitrage
+     * dans l'adaptateur historique.
+     */
+    const STATUTS_INTERVENTION = Object.freeze(["Pas payé", "Payé", "A venir", "Non effectué"]);
+    const STATUTS_TRAVAILLE = new Set(["Pas payé", "Payé"]);
+    
+    function dateValide(value) {
+      if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const [y, m, d] = value.split("-").map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      return dt.getUTCFullYear() === y && dt.getUTCMonth() === m - 1 && dt.getUTCDate() === d;
+    }
+    
+    function analyserIntervention(intervention, { plafondJehHt = 300 } = {}) {
+      const anomalies = [];
+      const alertes = [];
+      if (!intervention || typeof intervention !== "object" || Array.isArray(intervention)) {
+        return { valide: false, anomalies: ["Intervention invalide"], alertes };
+      }
+      for (const champ of ["id", "etudeId", "membreId"]) {
+        if (typeof intervention[champ] !== "string" || !intervention[champ].trim()) {
+          anomalies.push("Identifiant " + champ + " absent ou invalide");
+        }
+      }
+      if (!dateValide(intervention.date)) anomalies.push("Date d'intervention absente ou invalide");
+      if (!STATUTS_INTERVENTION.includes(intervention.statut)) anomalies.push("Statut d'intervention absent ou inconnu");
+    
+      const minutes = intervention.minutesIndividuelles === "" || intervention.minutesIndividuelles == null
+        ? null : Number(intervention.minutesIndividuelles);
+      if (minutes === null || !Number.isFinite(minutes) || minutes <= 0) {
+        anomalies.push("Durée individuelle absente ou invalide");
+      }
+    
+      const prixJehHt = intervention.prixJehHt === "" || intervention.prixJehHt == null
+        ? null : Number(intervention.prixJehHt);
+      if (prixJehHt !== null && (!Number.isFinite(prixJehHt) || prixJehHt < 0)) {
+        anomalies.push("Prix HT/JEH invalide");
+      }
+    
+      if (prixJehHt !== null && Number.isFinite(prixJehHt) && plafondJehHt !== null && prixJehHt > plafondJehHt) {
+        alertes.push("Prix de la JEH intervenant supérieur au plafond HAC de " + plafondJehHt + " € HT");
+      }
+    
+      const jeh = minutes !== null && Number.isFinite(minutes) && minutes > 0 ? minutes / 480 : null;
+      const travaille = STATUTS_TRAVAILLE.has(intervention.statut);
+      return {
+        valide: anomalies.length === 0,
+        anomalies,
+        alertes,
+        minutesIndividuelles: minutes,
+        jeh,
+        jehTravaillees: travaille && jeh !== null ? jeh : 0,
+        statutTravaille: travaille,
+        montantClientHt: jeh !== null && prixJehHt !== null ? jeh * prixJehHt : null,
+      };
+    }
+    
+    function agregerInterventions(interventions, options = {}) {
+      if (!Array.isArray(interventions)) {
+        return { valide: false, totalJehTravaillees: null, parMembre: [], parEtude: [], anomalies: ["La liste des interventions doit être un tableau"], alertes: [] };
+      }
+      const parMembre = new Map();
+      const parEtude = new Map();
+      let totalJehTravaillees = 0;
+      const anomalies = [];
+      const alertes = [];
+      interventions.forEach((intervention, index) => {
+        const analyse = analyserIntervention(intervention, options);
+        analyse.alertes.forEach(raison => alertes.push({ index, raison }));
+        analyse.anomalies.forEach(raison => anomalies.push({ index, raison }));
+        if (!analyse.valide || !analyse.statutTravaille) return;
+        totalJehTravaillees += analyse.jehTravaillees;
+        parMembre.set(intervention.membreId, (parMembre.get(intervention.membreId) || 0) + analyse.jehTravaillees);
+        parEtude.set(intervention.etudeId, (parEtude.get(intervention.etudeId) || 0) + analyse.jehTravaillees);
+      });
+      return {
+        valide: anomalies.length === 0,
+        totalJehTravaillees: anomalies.length ? null : totalJehTravaillees,
+        parMembre: [...parMembre].map(([membreId, jeh]) => ({ membreId, jeh })),
+        parEtude: [...parEtude].map(([etudeId, jeh]) => ({ etudeId, jeh })),
+        anomalies,
+        alertes,
+      };
+    }
+    
+    module.exports = { STATUTS_INTERVENTION, STATUTS_TRAVAILLE, analyserIntervention, agregerInterventions, dateValide };
+    
+    },
+    "domain/bv.js": function(require, module, exports) {
+    /**
+     * HAC refonte — validation métier des bulletins de versement.
+     *
+     * Un BV regroupe des lignes, une par personne.
+     * Règle « minimum de 1 JEH par BV » (app.js v11 l. 181, 186, 490) : ce n'est PAS
+     * une interdiction. Un BV de 0,5 JEH est valide : la personne est payée sur 0,5 JEH,
+     * mais cotisations et charges sont calculées sur une assiette de 1 JEH.
+     * L'assiette est calculée PAR PERSONNE (les cotisations sont individuelles) :
+     * assietteJeh = max(jeh, 1) si jeh > 0, sinon 0.
+     */
+    
+    const { estIdValide } = require("./identites");
+    
+    function assietteJeh(jeh) {
+      return jeh > 0 ? Math.max(jeh, 1) : 0;
+    }
+    
+    function validerBV(bv) {
+      const anomalies = [];
+      if (!bv || typeof bv !== "object") {
+        return { valide: false, totalJeh: 0, anomalies: ["Bulletin de versement invalide"] };
+      }
+    
+      const lignes = Array.isArray(bv.lignes) ? bv.lignes : [];
+      if (lignes.length === 0) anomalies.push("Le BV doit contenir au moins une ligne");
+    
+      const personnes = new Set();
+      const assiettes = [];
+      let totalJeh = 0;
+    
+      lignes.forEach((ligne, index) => {
+        if (!ligne || typeof ligne !== "object") {
+          anomalies.push({ index, raison: "Ligne invalide" });
+          return;
+        }
+    
+        const personneId = ligne.personneId;
+        if (typeof personneId !== "string" || personneId.trim() === "") {
+          anomalies.push({ index, raison: "Identifiant de personne manquant" });
+        } else if (personnes.has(personneId)) {
+          anomalies.push({ index, raison: "Une personne apparaît plusieurs fois sur le même BV" });
+        } else {
+          personnes.add(personneId);
+        }
+    
+        const jeh = Number(ligne.jeh);
+        if (ligne.jeh === "" || ligne.jeh == null || !Number.isFinite(jeh) || jeh < 0) {
+          anomalies.push({ index, raison: "Nombre de JEH absent ou invalide" });
+        } else {
+          totalJeh += jeh;
+          assiettes.push({ personneId, jeh, assietteJeh: assietteJeh(jeh) });
+        }
+      });
+    
+      return { valide: anomalies.length === 0, totalJeh, assiettes, anomalies };
+    }
+    
+    
+    function analyserCollectionBVs({ bvs = [], lignesBV = [], membres = [] } = {}) {
+      const anomalies = [];
+      if (![bvs, lignesBV, membres].every(Array.isArray)) {
+        return { valide: false, resume: [], anomalies: ["Les collections BV, lignesBV et membres doivent être des tableaux"] };
+      }
+    
+      const membresIds = new Set(membres.map(m => m?.id).filter(id => typeof id === "string" && id.trim()));
+      const bvsParId = new Map();
+      bvs.forEach((bv, index) => {
+        if (!bv || typeof bv !== "object" || !estIdValide(bv.id)) {
+          anomalies.push({ collection: "bvs", index, raison: "Identifiant de BV absent ou invalide" });
+          return;
+        }
+        if (bvsParId.has(bv.id)) {
+          anomalies.push({ collection: "bvs", index, raison: "Identifiant de BV dupliqué", id: bv.id });
+          return;
+        }
+        bvsParId.set(bv.id, { bv, index, lignes: [] });
+      });
+    
+      const ligneIds = new Set();
+      lignesBV.forEach((ligne, index) => {
+        if (!ligne || typeof ligne !== "object") {
+          anomalies.push({ collection: "lignesBV", index, raison: "Ligne invalide" });
+          return;
+        }
+        if (!estIdValide(ligne.id)) {
+          anomalies.push({ collection: "lignesBV", index, raison: "Identifiant de ligne absent ou invalide" });
+        } else if (ligneIds.has(ligne.id)) {
+          anomalies.push({ collection: "lignesBV", index, raison: "Identifiant de ligne dupliqué", id: ligne.id });
+        } else {
+          ligneIds.add(ligne.id);
+        }
+    
+        const parent = estIdValide(ligne.bvId) ? bvsParId.get(ligne.bvId) : null;
+        if (!parent) {
+          anomalies.push({ collection: "lignesBV", index, raison: "BV parent introuvable" });
+        } else {
+          parent.lignes.push({ ligne, index });
+        }
+        if (!estIdValide(ligne.membreId) || !membresIds.has(ligne.membreId)) {
+          anomalies.push({ collection: "lignesBV", index, raison: "Membre lié introuvable" });
+        }
+        const jeh = Number(ligne.jeh);
+        if (ligne.jeh === "" || ligne.jeh == null || !Number.isFinite(jeh) || jeh < 0) {
+          anomalies.push({ collection: "lignesBV", index, raison: "Nombre de JEH absent ou invalide" });
+        }
+      });
+    
+      const resume = [];
+      for (const [bvId, entry] of bvsParId) {
+        const personnes = new Set();
+        const assiettes = [];
+        let totalJeh = 0;
+        entry.lignes.forEach(({ ligne, index }) => {
+          if (typeof ligne.membreId === "string" && personnes.has(ligne.membreId)) {
+            anomalies.push({ collection: "lignesBV", index, raison: "Une personne apparaît plusieurs fois sur le même BV" });
+          }
+          if (typeof ligne.membreId === "string") personnes.add(ligne.membreId);
+          const jeh = Number(ligne.jeh);
+          if (ligne.jeh !== "" && ligne.jeh != null && Number.isFinite(jeh) && jeh >= 0) {
+            totalJeh += jeh;
+            assiettes.push({ membreId: ligne.membreId, jeh, assietteJeh: assietteJeh(jeh) });
+          }
+        });
+        if (entry.lignes.length === 0) {
+          anomalies.push({ collection: "bvs", index: entry.index, raison: "Le BV ne contient aucune ligne" });
+        }
+        resume.push({ bvId, nombreLignes: entry.lignes.length, nombrePersonnes: personnes.size, totalJeh, assiettes });
+      }
+    
+      return { valide: anomalies.length === 0, resume, anomalies };
+    }
+    
+    module.exports = { validerBV, analyserCollectionBVs, assietteJeh };
+    
+    },
+    "domain/tableau-de-bord.js": function(require, module, exports) {
+    /**
+     * HAC refonte — agrégats du tableau de bord.
+     *
+     * Ce module ne lit aucune source externe et ne modifie aucune donnée.
+     * Les JEH sont calculées uniquement via les statuts métier autorisés.
+     * Le CA signé vient des études ; facturation et encaissement viennent
+     * exclusivement des factures liées par etudeId.
+     */
+    
+    const { analyserIntervention, agregerInterventions } = require("./interventions");
+    const { analyserFacture } = require("./factures");
+    const { STATUTS_ETUDE, STATUTS_CA_SIGNE } = require("./etudes");
+    
+    function dateValide(value) {
+      if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+      const [y, m, d] = value.split("-").map(Number);
+      const date = new Date(Date.UTC(y, m - 1, d));
+      return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+    }
+    
+    function montantValide(value) {
+      if (value === "" || value == null) return null;
+      const n = Number(value);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    }
+    
+    function calculerTableauDeBord({
+      etudes = [],
+      factures = [],
+      interventions = [],
+      dateFin = new Date().toISOString().slice(0, 10),
+      nombreMois = 6,
+      tva = 0.2,
+      plafondJehHt = 300,
+    } = {}) {
+      const anomalies = [];
+      if (![etudes, factures, interventions].every(Array.isArray)) {
+        return { valide: false, anomalies: ["Les collections du tableau de bord doivent être des tableaux"] };
+      }
+      if (!dateValide(dateFin) || !Number.isInteger(nombreMois) || nombreMois < 1 || nombreMois > 24 || !Number.isFinite(tva) || tva < 0 || tva > 1) {
+        return { valide: false, anomalies: ["Paramètres de période ou taux de TVA invalides"] };
+      }
+    
+      let caSigne = 0;
+      let caSigneComplet = true;
+      const etudeIds = new Set();
+    
+      etudes.forEach((etude, index) => {
+        if (!etude || typeof etude !== "object" || typeof etude.id !== "string" || !etude.id) {
+          anomalies.push({ collection: "etudes", index, raison: "Étude ou identifiant invalide" });
+          caSigneComplet = false;
+          return;
+        }
+        if (etudeIds.has(etude.id)) {
+          anomalies.push({ collection: "etudes", index, raison: "Identifiant d'étude dupliqué" });
+          caSigneComplet = false;
+          return;
+        }
+        etudeIds.add(etude.id);
+        if (!STATUTS_ETUDE.includes(etude.statut)) {
+          anomalies.push({ collection: "etudes", index, raison: "Statut d'étude absent ou inconnu" });
+          caSigneComplet = false;
+          return;
+        }
+        const montant = montantValide(etude.montant);
+        if (STATUTS_CA_SIGNE.has(etude.statut)) {
+          if (montant === null) {
+            anomalies.push({ collection: "etudes", index, raison: "Montant signé absent ou invalide" });
+            caSigneComplet = false;
+          } else {
+            caSigne += montant / (1 + tva);
+          }
+        } else if (etude.montant !== undefined && etude.montant !== null && etude.montant !== "" && montant === null) {
+          anomalies.push({ collection: "etudes", index, raison: "Montant d'étude invalide" });
+          caSigneComplet = false;
+        }
+      });
+    
+      let montantFacture = 0;
+      let encaisse = 0;
+      let facturesCompletes = true;
+    
+      factures.forEach((facture, index) => {
+        if (!facture || typeof facture !== "object" || typeof facture.etudeId !== "string" || !etudeIds.has(facture.etudeId)) {
+          anomalies.push({ collection: "factures", index, raison: "Facture sans lien d'étude valide" });
+          facturesCompletes = false;
+          return;
+        }
+        const montant = montantValide(facture.montant);
+        const analyse = analyserFacture(facture);
+        if (montant === null || analyse.anomalie) {
+          anomalies.push({ collection: "factures", index, raison: montant === null ? "Montant absent ou invalide" : analyse.anomalie });
+          facturesCompletes = false;
+          return;
+        }
+        montantFacture += montant / (1 + tva);
+        if (analyse.payee) encaisse += montant / (1 + tva);
+      });
+    
+      const calculInterventions = agregerInterventions(interventions, { plafondJehHt });
+      calculInterventions.anomalies.forEach(a => anomalies.push({ collection: "interventions", ...a }));
+    
+      const fin = new Date(dateFin + "T00:00:00.000Z");
+      const debut = new Date(Date.UTC(fin.getUTCFullYear(), fin.getUTCMonth() - (nombreMois - 1), 1));
+      const mois = [];
+      for (let i = 0; i < nombreMois; i++) {
+        const d = new Date(Date.UTC(debut.getUTCFullYear(), debut.getUTCMonth() + i, 1));
+        const key = d.toISOString().slice(0, 7);
+        mois.push({ mois: key, jeh: 0 });
+      }
+      const moisIndex = new Map(mois.map((m, i) => [m.mois, i]));
+      interventions.forEach(ligne => {
+        const analyse = analyserIntervention(ligne);
+        if (!analyse.valide || !analyse.statutTravaille) return;
+        const idx = moisIndex.get(ligne.date.slice(0, 7));
+        if (idx !== undefined) mois[idx].jeh += analyse.jeh;
+      });
+    
+      return {
+        valide: anomalies.length === 0,
+        nombreEtudes: etudes.length,
+        caSigne: caSigneComplet ? caSigne : null,
+        montantFacture: facturesCompletes ? montantFacture : null,
+        encaisse: facturesCompletes ? encaisse : null,
+        resteAEncaisser: facturesCompletes ? montantFacture - encaisse : null,
+        totalJehTravaillees: calculInterventions.totalJehTravaillees,
+        jehParMois: calculInterventions.valide ? mois : null,
+        jehParMembre: calculInterventions.valide ? calculInterventions.parMembre : null,
+        alertesInterventions: calculInterventions.alertes,
+        anomalies,
+      };
+    }
+    
+    module.exports = { calculerTableauDeBord };
+    
+    },
+    "application/lecture.js": function(require, module, exports) {
+    /**
+     * HAC refonte — couche de lecture applicative.
+     *
+     * Assemble les domaines métier en un seul modèle de lecture pour l'interface.
+     * Aucun accès réseau, aucune écriture et aucune correction silencieuse.
+     */
+    const { estIdValide } = require("../domain/identites");
+    const { analyserCollectionBVs } = require("../domain/bv");
+    const { calculerTableauDeBord } = require("../domain/tableau-de-bord");
+    
+    const COLLECTIONS = Object.freeze([
+      "clients",
+      "membres",
+      "etudes",
+      "factures",
+      "interventions",
+      "bvs",
+      "lignesBV",
+      "formation",
+    ]);
+    
+    function creerEtatVide() {
+      return Object.fromEntries(COLLECTIONS.map(nom => [nom, []]));
+    }
+    
+    function libellePersonne(personne) {
+      if (!personne) return "Référence inconnue";
+      return personne.raisonSociale || personne.nomComplet || personne.nom ||
+        personne.name || personne.client || personne.id;
+    }
+    
+    function indexer(collection) {
+      return new Map(collection.map(item => [item.id, item]));
+    }
+    
+    function validerEtat(etat) {
+      const anomalies = [];
+      if (!etat || typeof etat !== "object" || Array.isArray(etat)) {
+        return { valide: false, anomalies: ["L'état applicatif doit être un objet"] };
+      }
+    
+      for (const nom of COLLECTIONS) {
+        if (!Array.isArray(etat[nom])) {
+          anomalies.push({ collection: nom, raison: "Collection absente ou non tabulaire" });
+        }
+      }
+      if (anomalies.length) return { valide: false, anomalies };
+    
+      const index = {};
+      for (const nom of COLLECTIONS) {
+        const ids = new Set();
+        index[nom] = new Map();
+        etat[nom].forEach((objet, position) => {
+          if (!objet || typeof objet !== "object" || Array.isArray(objet) || !estIdValide(objet.id)) {
+            anomalies.push({ collection: nom, index: position, raison: "Objet ou identifiant stable invalide" });
+            return;
+          }
+          if (ids.has(objet.id)) {
+            anomalies.push({ collection: nom, index: position, id: objet.id, raison: "Identifiant dupliqué" });
+            return;
+          }
+          ids.add(objet.id);
+          index[nom].set(objet.id, objet);
+        });
+      }
+    
+      const verifierLien = (collection, indexObjet, champ, cible) => {
+        const objet = etat[collection][indexObjet];
+        if (objet[champ] == null || objet[champ] === "") return;
+        if (!estIdValide(objet[champ]) || !index[cible].has(objet[champ])) {
+          anomalies.push({ collection, index: indexObjet, champ, raison: "Référence " + cible + " introuvable ou invalide" });
+        }
+      };
+    
+      etat.etudes.forEach((_, i) => verifierLien("etudes", i, "clientId", "clients"));
+      etat.factures.forEach((_, i) => verifierLien("factures", i, "etudeId", "etudes"));
+      etat.interventions.forEach((_, i) => {
+        verifierLien("interventions", i, "etudeId", "etudes");
+        verifierLien("interventions", i, "membreId", "membres");
+      });
+      etat.lignesBV.forEach((_, i) => {
+        verifierLien("lignesBV", i, "bvId", "bvs");
+        verifierLien("lignesBV", i, "membreId", "membres");
+      });
+    
+      const membresAvecFormation = new Set();
+      etat.formation.forEach((fiche, i) => {
+        if (!estIdValide(fiche.membreId) || !index.membres.has(fiche.membreId)) {
+          anomalies.push({ collection: "formation", index: i, raison: "Membre de formation introuvable ou invalide" });
+        }
+        if (fiche.membreId && membresAvecFormation.has(fiche.membreId)) {
+          anomalies.push({ collection: "formation", index: i, raison: "Plusieurs grilles de formation pour le même membre" });
+        }
+        if (fiche.membreId) membresAvecFormation.add(fiche.membreId);
+        if (typeof fiche.nom !== "string" || !fiche.nom.trim()) {
+          anomalies.push({ collection: "formation", index: i, raison: "Nom de formation absent ou invalide" });
+        }
+        if (!fiche.niveaux || typeof fiche.niveaux !== "object" || Array.isArray(fiche.niveaux)) {
+          anomalies.push({ collection: "formation", index: i, raison: "Grille de niveaux invalide" });
+        } else {
+          for (const [etudeId, niveau] of Object.entries(fiche.niveaux)) {
+            if (!estIdValide(etudeId) || !index.etudes.has(etudeId)) {
+              anomalies.push({ collection: "formation", index: i, raison: "Étude de formation introuvable ou invalide" });
+            }
+            if (!Number.isInteger(niveau) || niveau < 0 || niveau > 4) {
+              anomalies.push({ collection: "formation", index: i, raison: "Niveau de formation hors de 0 à 4" });
+            }
+          }
+        }
+      });
+    
+      const analyseBVs = analyserCollectionBVs({
+        bvs: etat.bvs,
+        lignesBV: etat.lignesBV,
+        membres: etat.membres,
+      });
+      analyseBVs.anomalies.forEach(anomalie => anomalies.push({
+        collection: anomalie.collection || "bvs",
+        index: anomalie.index,
+        raison: anomalie.raison || anomalie,
+      }));
+    
+      return { valide: anomalies.length === 0, anomalies };
+    }
+    
+    function construireVueApplication(etat, options = {}) {
+      const validation = validerEtat(etat);
+      if (!validation.valide) {
+        return {
+          valide: false,
+          anomalies: validation.anomalies,
+          tableauDeBord: null,
+          listes: null,
+        };
+      }
+    
+      const clients = indexer(etat.clients);
+      const membres = indexer(etat.membres);
+      const etudes = indexer(etat.etudes);
+    
+      const tableauDeBord = calculerTableauDeBord({
+        etudes: etat.etudes,
+        factures: etat.factures,
+        interventions: etat.interventions,
+        dateFin: options.dateFin,
+        nombreMois: options.nombreMois ?? 6,
+        tva: options.tva ?? 0.2,
+      });
+    
+      if (!tableauDeBord.valide) {
+        return {
+          valide: false,
+          anomalies: tableauDeBord.anomalies,
+          tableauDeBord: null,
+          listes: null,
+        };
+      }
+    
+      const etudesVue = etat.etudes.map(etude => ({
+        ...etude,
+        clientLibelle: etude.clientId
+          ? libellePersonne(clients.get(etude.clientId))
+          : etude.client || "Client non renseigné",
+        factures: etat.factures.filter(f => f.etudeId === etude.id),
+      })).sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    
+      const facturesVue = etat.factures.map(facture => ({
+        ...facture,
+        etudeLibelle: etudes.get(facture.etudeId)?.num || facture.etudeId,
+      }));
+    
+      const interventionsVue = etat.interventions.map(intervention => ({
+        ...intervention,
+        etudeLibelle: etudes.get(intervention.etudeId)?.num || intervention.etudeId,
+        membreLibelle: libellePersonne(membres.get(intervention.membreId)),
+      }));
+    
+      const lignesParBV = new Map();
+      etat.lignesBV.forEach(ligne => {
+        if (!lignesParBV.has(ligne.bvId)) lignesParBV.set(ligne.bvId, []);
+        lignesParBV.get(ligne.bvId).push({
+          ...ligne,
+          membreLibelle: libellePersonne(membres.get(ligne.membreId)),
+        });
+      });
+    
+      const bvsVue = etat.bvs.map(bv => ({
+        ...bv,
+        lignes: lignesParBV.get(bv.id) || [],
+      }));
+    
+      return {
+        valide: true,
+        anomalies: [],
+        tableauDeBord,
+        listes: {
+          clients: etat.clients.map(client => ({ ...client, libelle: libellePersonne(client) })),
+          membres: etat.membres.map(membre => ({ ...membre, libelle: libellePersonne(membre) })),
+          etudes: etudesVue,
+          factures: facturesVue,
+          interventions: interventionsVue,
+          bvs: bvsVue,
+        },
+      };
+    }
+    
+    module.exports = { COLLECTIONS, creerEtatVide, validerEtat, construireVueApplication };
+    
+    },
+    "application/commandes.js": function(require, module, exports) {
+    /**
+     * HAC refonte — commandes applicatives en mémoire.
+     *
+     * Prépare et applique des ajouts/modifications immuables sur un état de travail.
+     * Ce module ne persiste rien et ne remplace pas les contrôles de version du serveur.
+     */
+    const { COLLECTIONS, construireVueApplication } = require("./lecture");
+    
+    function preparerAjout({ etat, collection, donnees, creerId }) {
+      if (!COLLECTIONS.includes(collection)) {
+        return { valide: false, anomalies: ["Collection inconnue"] };
+      }
+      if (!etat || !Array.isArray(etat[collection])) {
+        return { valide: false, anomalies: ["État ou collection invalide"] };
+      }
+      if (!donnees || typeof donnees !== "object" || Array.isArray(donnees)) {
+        return { valide: false, anomalies: ["Les données à ajouter doivent être un objet"] };
+      }
+      if (typeof creerId !== "function") {
+        return { valide: false, anomalies: ["Un générateur d'identifiant stable doit être fourni"] };
+      }
+      const id = creerId(collection);
+      if (typeof id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/.test(id)) {
+        return { valide: false, anomalies: ["Le générateur a fourni un identifiant invalide"] };
+      }
+      if (etat[collection].some(item => item?.id === id)) {
+        return { valide: false, anomalies: ["Cet identifiant existe déjà"] };
+      }
+      if (Object.prototype.hasOwnProperty.call(donnees, "id") && donnees.id !== id) {
+        return { valide: false, anomalies: ["L'identifiant des données ne peut pas remplacer celui généré"] };
+      }
+      return {
+        valide: true,
+        commande: {
+          type: "ajouter",
+          collection,
+          id,
+          enregistrement: { ...donnees, id },
+        },
+      };
+    }
+    
+    function preparerModification({ etat, collection, id, modifications }) {
+      if (!COLLECTIONS.includes(collection) || !etat || !Array.isArray(etat[collection])) {
+        return { valide: false, anomalies: ["État ou collection invalide"] };
+      }
+      if (typeof id !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/.test(id)) {
+        return { valide: false, anomalies: ["Identifiant stable invalide"] };
+      }
+      if (!modifications || typeof modifications !== "object" || Array.isArray(modifications)) {
+        return { valide: false, anomalies: ["Les modifications doivent être un objet"] };
+      }
+      if (Object.prototype.hasOwnProperty.call(modifications, "id")) {
+        return { valide: false, anomalies: ["L'identifiant stable est immuable"] };
+      }
+      const index = etat[collection].findIndex(item => item?.id === id);
+      if (index < 0) return { valide: false, anomalies: ["Enregistrement introuvable"] };
+    
+      return {
+        valide: true,
+        commande: {
+          type: "modifier",
+          collection,
+          id,
+          modifications: { ...modifications },
+        },
+      };
+    }
+    
+    function appliquerCommande(etat, commande) {
+      if (!etat || typeof etat !== "object" || !commande || typeof commande !== "object") {
+        return { valide: false, etat, anomalies: ["État ou commande invalide"] };
+      }
+      if (!COLLECTIONS.includes(commande.collection) || !Array.isArray(etat[commande.collection])) {
+        return { valide: false, etat, anomalies: ["Collection inconnue ou invalide"] };
+      }
+    
+      const collection = commande.collection;
+      const copie = { ...etat };
+      if (commande.type === "ajouter") {
+        if (!commande.enregistrement || commande.enregistrement.id !== commande.id ||
+            etat[collection].some(item => item?.id === commande.id)) {
+          return { valide: false, etat, anomalies: ["Ajout invalide ou identifiant déjà utilisé"] };
+        }
+        copie[collection] = [...etat[collection], { ...commande.enregistrement }];
+      } else if (commande.type === "modifier") {
+        const index = etat[collection].findIndex(item => item?.id === commande.id);
+        if (index < 0 || !commande.modifications ||
+            Object.prototype.hasOwnProperty.call(commande.modifications, "id")) {
+          return { valide: false, etat, anomalies: ["Modification invalide ou enregistrement introuvable"] };
+        }
+        copie[collection] = etat[collection].map((item, i) =>
+          i === index ? { ...item, ...commande.modifications } : item
+        );
+      } else {
+        return { valide: false, etat, anomalies: ["Type de commande non pris en charge"] };
+      }
+    
+      const validation = construireVueApplication(copie);
+      if (!validation.valide) {
+        return { valide: false, etat, anomalies: validation.anomalies };
+      }
+      return { valide: true, etat: copie, anomalies: [] };
+    }
+    
+    module.exports = { preparerAjout, preparerModification, appliquerCommande };
+    
+    },
+    "domain/clients.js": function(require, module, exports) {
+    /**
+     * HAC refonte — relation client et cadence de facturation.
+     *
+     * La durée de la relation commerciale et la périodicité de facturation
+     * sont deux notions distinctes. Une relation longue durée (type CDI) ne
+     * signifie pas automatiquement une facturation mensuelle ou récurrente.
+     * Rien n'est déduit du nombre d'études passées.
+     */
+    const TYPES_RELATION = new Set(["ponctuelle", "longue_duree"]);
+    const CADENCES = new Set(["mensuelle", "trimestrielle", "semestrielle", "annuelle"]);
+    
+    function resoudreRelation(client, etude = null) {
+      const type = etude?.relationType ?? client?.relationType ?? "ponctuelle";
+      if (!TYPES_RELATION.has(type)) {
+        return { type: "invalide", cadenceFacturation: null, anomalie: "Type de relation absent ou inconnu" };
+      }
+    
+      let cadenceFacturation;
+      if (etude && Object.prototype.hasOwnProperty.call(etude, "cadenceFacturationMode")) {
+        const mode = etude.cadenceFacturationMode;
+        if (mode === "client") cadenceFacturation = client?.cadenceFacturation ?? null;
+        else if (mode === "aucune") cadenceFacturation = null;
+        else if (mode === "personnalisee") {
+          cadenceFacturation = etude.cadenceFacturation ?? null;
+          if (!CADENCES.has(cadenceFacturation)) {
+            return { type, cadenceFacturation: null, anomalie: "Cadence personnalisée absente ou inconnue" };
+          }
+        } else {
+          return { type, cadenceFacturation: null, anomalie: "Mode de cadence absent ou inconnu" };
+        }
+      } else {
+        // Compatibilité des anciennes fiches : une cadence présente sur l'étude surcharge le client.
+        cadenceFacturation = etude && Object.prototype.hasOwnProperty.call(etude, "cadenceFacturation")
+          ? etude.cadenceFacturation
+          : client?.cadenceFacturation ?? null;
+      }
+    
+      if (cadenceFacturation !== null && !CADENCES.has(cadenceFacturation)) {
+        return { type, cadenceFacturation: null, anomalie: "Cadence de facturation inconnue" };
+      }
+      return { type, cadenceFacturation, anomalie: null };
+    }
+    
+    function calculerProchaineEcheance({ dateReference, cadence }) {
+      if (!CADENCES.has(cadence)) return null;
+      if (typeof dateReference !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(dateReference)) return null;
+    
+      const [year, month, day] = dateReference.split("-").map(Number);
+      const date = new Date(Date.UTC(year, month - 1, day));
+      if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    
+      const monthsToAdd = { mensuelle: 1, trimestrielle: 3, semestrielle: 6, annuelle: 12 }[cadence];
+      const targetMonthIndex = month - 1 + monthsToAdd;
+      const targetYear = year + Math.floor(targetMonthIndex / 12);
+      const targetMonth = targetMonthIndex % 12;
+      const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+      const targetDay = Math.min(day, lastDay);
+    
+      return [
+        String(targetYear).padStart(4, "0"),
+        String(targetMonth + 1).padStart(2, "0"),
+        String(targetDay).padStart(2, "0"),
+      ].join("-");
+    }
+    
+    function analyserAlerteClient(client, etude = null) {
+      const relation = resoudreRelation(client, etude);
+      if (relation.anomalie) {
+        return { alerteActivable: false, prochaineEcheance: null, anomalie: relation.anomalie };
+      }
+      if (relation.type !== "longue_duree" || relation.cadenceFacturation === null) {
+        return { alerteActivable: false, prochaineEcheance: null, anomalie: null };
+      }
+    
+      const dateReference = etude?.dateProchaineFacture ?? client?.dateProchaineFacture;
+      const prochaineEcheance = calculerProchaineEcheance({
+        dateReference,
+        cadence: relation.cadenceFacturation,
+      });
+      if (!prochaineEcheance) {
+        return {
+          alerteActivable: false,
+          prochaineEcheance: null,
+          anomalie: "Date de référence de facturation manquante ou invalide",
+        };
+      }
+      return { alerteActivable: true, prochaineEcheance, anomalie: null };
+    }
+    
+    module.exports = {
+      TYPES_RELATION,
+      CADENCES,
+      resoudreRelation,
+      calculerProchaineEcheance,
+      analyserAlerteClient,
+    };
+    
+    },
+    "domain/alertes.js": function(require, module, exports) {
+    /**
+     * HAC — alertes par étude : portage des 22 alertes de l'app v12 (app.js, ALERTS / alertsOf / finStatus)
+     * sur le modèle v3 (identifiants stables, interventions individuelles).
+     * Règles reprises à l'identique, avec les corrections v12 : statut financier sur TOUTES les factures,
+     * frais hors JEH, et minimum 1 JEH = assiette (jamais une alerte).
+     */
+    const DEFAUTS = { tva: 0.2, relance1: 3, relance2: 10, cnje: { date: "", min: 80, max: 450, maxInt: 300 } };
+    const SIGNEES = ["Convention signée", "Convention étudiant avant réalisation", "En réalisation", "Archivée"]; // L_STAT v11
+    const EN_COURS = ["Faisabilité", "Devis envoyé", "Devis signé", "Convention envoyée", "Convention signée", "Convention étudiant avant réalisation", "En réalisation"];
+    const FACTUREES = ["Acompte facturé", "Facture intermédiaire", "Solde facturé"];
+    
+    const ALERTES = [
+      ["retard", "Retard de paiement (+ relances)", "Facture émise et échéance dépassée."],
+      ["arch_reste", "Archivée mais reste à encaisser", "Le client doit encore payer."],
+      ["arch_solde", "Archivée sans solde encaissé", "Le solde n’est pas marqué encaissé."],
+      ["arch_bv", "Archivée mais BV non payés", "Un intervenant est encore « À payer »."],
+      ["enc_sup", "Encaissé supérieur au montant", "Erreur de saisie ou trop-perçu."],
+      ["acompte", "Facturer l’acompte", "Convention signée ou en réalisation sans facture."],
+      ["echeance", "Renseigner l’échéance", "Facture émise sans date d’échéance."],
+      ["temps", "Renseigner le temps de travail", "En réalisation sans intervention."],
+      ["jeh_manq", "Prix de la JEH manquant", "Interventions mais prix JEH client vide."],
+      ["rem_sup", "Rémunérations > montant HT", "Les rémunérations dépassent le montant."],
+      ["payer_bv", "Payer les BV", "Solde encaissé, intervenants « À payer »."],
+      ["archiver", "Tout est soldé : archiver", "Rien à encaisser, BV payés."],
+      ["refusee", "Étude refusée mais facturée", "Refusée avec facture."],
+      ["solde_reste", "Solde encaissé mais reste à encaisser", "Montant ou encaissé à corriger."],
+      ["solde_af", "Facturer le solde", "Étude archivée, solde pas encore facturé."],
+      ["date", "Renseigner la date de création", "Étude sans date."],
+      ["double", "N° d’étude en double", "Deux études avec le même numéro."],
+      ["cnje_cli", "CNJE : JEH client hors fourchette", "Prix JEH client hors min–max."],
+      ["cnje_int", "CNJE : JEH intervenant trop élevée", "Au-dessus du plafond intervenant."],
+      ["cnje_fact", "CNJE : JEH facturées non entières", "(Montant HT − frais) ÷ prix JEH non entier."],
+      ["cnje_rem", "CNJE : JEH rémunérées non entières", "Par intervenant sur une étude."],
+      ["cnje_diff", "CNJE : facturées ≠ rémunérées", "Les deux totaux diffèrent."],
+    ];
+    
+    const num = v => (v === "" || v == null || !Number.isFinite(Number(v)) ? 0 : Number(v));
+    const estNum = v => v !== "" && v != null && Number.isFinite(Number(v));
+    const jour = s => { const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || ""); if (!m) return null; const t = Date.UTC(+m[1], +m[2] - 1, +m[3]), d = new Date(t); return d.getUTCDate() === +m[3] && d.getUTCMonth() === +m[2] - 1 ? t / 864e5 : null; };
+    const entier = x => Math.abs(x - Math.round(x)) <= 0.005;
+    
+    /** Statut financier calculé (finStatus v12). */
+    function statutFinancier(etude, factures) {
+      const inv = [...factures].sort((a, b) => String(a.date || "").localeCompare(String(b.date || ""))), st = etude.statut;
+      const paye = f => f.etat === "Payée";
+      if (st === "Refusé / sans suite") return inv.length ? (inv.some(f => !paye(f)) ? "Facture émise" : "Encaissé") : "";
+      if (inv.some(f => f.type === "Solde")) return inv.every(paye) ? "Solde encaissé" : "Solde facturé";
+      const impayee = inv.find(f => !paye(f));
+      if (impayee) return impayee.type === "Intermédiaire" ? "Facture intermédiaire" : "Acompte facturé";
+      const last = inv[inv.length - 1];
+      if (!last) return st === "Archivée" ? (num(etude.montant) > 0 ? "Solde à facturer" : "") : SIGNEES.includes(st) ? "Acompte à facturer" : "";
+      if (st === "Archivée") return "Solde à facturer";
+      return last.type === "Intermédiaire" ? "Intermédiaire encaissé" : "Acompte encaissé";
+    }
+    
+    /**
+     * Calcule, pour chaque étude, ses indicateurs et alertes.
+     * @returns {Map<string, {facture, encaisse, reste, echeance, bv, alertes:[{cle, texte}]}>}
+     */
+    function calculerAlertes({ etudes = [], factures = [], interventions = [], config = {}, aujourdhui }) {
+      const c = { ...DEFAUTS, ...config, cnje: { ...DEFAUTS.cnje, ...(config.cnje || {}) } };
+      const tva = num(c.tva), AUJ = jour(aujourdhui), cnjeDate = jour(c.cnje.date);
+      const off = c.alertesOff || {}, actif = cle => c.alertesOn !== false && !off[cle];
+      const nums = {}; etudes.forEach(e => { if (e.num) nums[e.num] = (nums[e.num] || 0) + 1; });
+      const res = new Map();
+      for (const e of etudes) {
+        const inv = factures.filter(f => f.etudeId === e.id), ls = interventions.filter(i => i.etudeId === e.id);
+        const st = e.statut, fa = statutFinancier(e, inv), montant = num(e.montant);
+        const encaisse = inv.filter(f => f.etat === "Payée").reduce((s, f) => s + num(f.montant), 0);
+        const reste = SIGNEES.includes(st) ? montant - encaisse : null;
+        const ech = inv.filter(f => f.etat !== "Payée" && jour(f.echeance) !== null).map(f => jour(f.echeance));
+        const echeance = ech.length ? Math.min(...ech) : null;
+        const echeanceManquante = inv.some(f => f.etat !== "Payée" && jour(f.echeance) === null);
+        const realisees = ls.filter(i => i.statut === "Payé" || i.statut === "Pas payé");
+        const bv = !ls.length ? "" : ls.some(i => i.statut === "Pas payé") ? "À payer" : ls.some(i => i.statut === "A venir") ? "À venir" : ls.some(i => i.statut === "Payé") ? "Payé" : "Non effectué";
+        const jehInter = i => num(i.minutesIndividuelles) / 480;
+        const jehFact = estNum(e.jeh) && num(e.jeh) && montant ? Math.max(0, montant / (1 + tva) - num(e.frais)) / num(e.jeh) : null;
+        const jehRem = ls.length ? realisees.reduce((s, i) => s + jehInter(i), 0) : null;
+        const remun = realisees.reduce((s, i) => s + jehInter(i) * num(i.prixJehHt), 0);
+        const A = [], add = (cle, texte) => { if (actif(cle)) A.push({ cle, texte }); };
+    
+        if (FACTUREES.includes(fa) && echeance !== null && AUJ !== null && echeance < AUJ) {
+          const r = AUJ - echeance;
+          add("retard", "Retard de " + r + " j" + (r > c.relance2 ? " : 2e relance" : r >= c.relance1 ? " : 1re relance par mail" : ""));
+        }
+        if (st === "Archivée" && reste > 0) add("arch_reste", "Archivée mais reste à encaisser");
+        if (st === "Archivée" && fa !== "Solde encaissé") add("arch_solde", "Archivée sans solde encaissé");
+        if (st === "Archivée" && bv === "À payer") add("arch_bv", "Archivée mais BV non payés");
+        if (montant > 0 && encaisse > montant) add("enc_sup", "Encaissé supérieur au montant");
+        if (fa === "Acompte à facturer") add("acompte", "Facturer l’acompte");
+        if (fa === "Solde à facturer") add("solde_af", "Facturer le solde");
+        if (FACTUREES.includes(fa) && echeanceManquante && st !== "Archivée" && st !== "Refusé / sans suite") add("echeance", "Renseigner l’échéance de paiement");
+        if (st === "En réalisation" && !ls.length) add("temps", "Renseigner le temps de travail");
+        if (ls.length && !estNum(e.jeh)) add("jeh_manq", "Prix de la JEH client manquant");
+        if (montant > 0 && remun > montant / (1 + tva) + 1e-9) add("rem_sup", "Rémunérations supérieures au montant HT");
+        if (fa === "Solde encaissé" && st !== "Archivée" && bv === "À payer") add("payer_bv", "Payer les BV");
+        if (fa === "Solde encaissé" && st !== "Archivée" && st !== "Refusé / sans suite" && montant > 0 && bv !== "À payer" && reste <= 0) add("archiver", "Tout est soldé : archiver l’étude");
+        if (st === "Refusé / sans suite" && inv.length) add("refusee", "Étude refusée mais facturée");
+        if (fa === "Solde encaissé" && reste > 0) add("solde_reste", "Solde encaissé mais reste à encaisser");
+        if (jour(e.date) === null) add("date", "Renseigner la date de création");
+        if (e.num && nums[e.num] > 1) add("double", "N° d’étude en double");
+        const cnje = cnjeDate !== null && ((jour(e.date) !== null && jour(e.date) >= cnjeDate) || (st !== "Archivée" && st !== "Refusé / sans suite"));
+        if (cnje) {
+          if (estNum(e.jeh) && (num(e.jeh) < c.cnje.min || num(e.jeh) > c.cnje.max)) add("cnje_cli", "CNJE : JEH client (" + num(e.jeh) + " €) hors de " + c.cnje.min + "–" + c.cnje.max + " €");
+          const maxInt = ls.length ? Math.max(...ls.map(i => num(i.prixJehHt))) : null;
+          if (maxInt !== null && maxInt > c.cnje.maxInt) add("cnje_int", "CNJE : JEH intervenant (" + maxInt + " €) supérieure à " + c.cnje.maxInt + " €");
+          if (jehFact > 0 && !entier(jehFact)) add("cnje_fact", "CNJE : nb de JEH facturées non entier (" + Math.round(jehFact * 1000) / 1000 + ")");
+          const parMembre = {}; realisees.forEach(i => { parMembre[i.membreId] = (parMembre[i.membreId] || 0) + jehInter(i); });
+          if (Object.values(parMembre).some(x => !entier(x))) add("cnje_rem", "CNJE : JEH rémunérées non entières");
+          if (["Convention étudiant avant réalisation", "En réalisation", "Archivée"].includes(st) && (jehFact > 0 || jehRem !== null) && Math.abs(num(jehFact) - num(jehRem)) > 0.005)
+            add("cnje_diff", "CNJE : JEH facturées (" + Math.round(num(jehFact) * 1000) / 1000 + ") ≠ JEH rémunérées (" + Math.round(num(jehRem) * 1000) / 1000 + ")");
+        }
+        res.set(e.id, { facture: fa, encaisse, reste, echeance: echeance === null ? "" : new Date(echeance * 864e5).toISOString().slice(0, 10), bv, jehFacturees: jehFact, jehRemunerees: jehRem, alertes: A });
+      }
+      return res;
+    }
+    
+    module.exports = { ALERTES, EN_COURS, statutFinancier, calculerAlertes };
+    
+    },
+    "domain/paie.js": function(require, module, exports) {
+    /**
+     * HAC — rémunérations (portage de remun / vRemun v12) sur le modèle v3, avec la règle « minimum 1 JEH par BV ».
+     *
+     * Prochain BV d'une personne = ses interventions « Pas payé » (fait, pas encore payé) :
+     *   brut = Σ JEH × prix JEH intervenant HT ;  assiette = max(JEH, 1) si JEH > 0
+     *   net  = brut − assiette × base JEH × taux salariaux ;  coût Junior = brut × (1 + chômage) + assiette × base JEH × taux patronaux
+     *   base JEH = 4 h de SMIC (paramètre smic). Les taux viennent des réglages (cot, patr, chomage).
+     * Déjà payé = interventions « Payé » (brut seulement : leur ventilation en BV historiques n'est pas connue).
+     */
+    const num = v => (v === "" || v == null || !Number.isFinite(Number(v)) ? 0 : Number(v));
+    const somme = o => Object.values(o || {}).reduce((s, v) => s + num(v), 0);
+    const DEFAUT = { smic: 12.31, cot: { maladie: 0.013, retraiteP: 0.069, retraiteD: 0.004, csgD: 0.068, csgND: 0.029 }, patr: { maladie: 0.13, at: 0.0123, retraiteP: 0.0855, retraiteD: 0.0211, famille: 0.0525, autres: 0 }, chomage: 0 };
+    
+    function calculerPaie({ interventions = [], membres = [], config = {} }) {
+      const c = { ...DEFAUT, ...config };
+      const base = 4 * num(c.smic), cotTot = somme(c.cot), patrTot = somme(c.patr), chom = num(c.chomage);
+      const lignes = membres.map(m => {
+        const L = interventions.filter(i => i.membreId === m.id);
+        const jeh = i => num(i.minutesIndividuelles) / 480;
+        const aPayer = L.filter(i => i.statut === "Pas payé"), payees = L.filter(i => i.statut === "Payé");
+        const jehAPayer = aPayer.reduce((s, i) => s + jeh(i), 0), sansPrix = aPayer.some(i => !(num(i.prixJehHt) > 0)), brut = aPayer.filter(i => num(i.prixJehHt) > 0).reduce((s, i) => s + jeh(i) * num(i.prixJehHt), 0);
+        const assiette = jehAPayer > 0 ? Math.max(jehAPayer, 1) : 0;
+        return {
+          membreId: m.id, nom: m.nomComplet, jehAPayer, brut, assiette,
+          net: sansPrix ? 0 : brut - assiette * base * cotTot,
+          cout: sansPrix ? 0 : brut * (1 + chom) + assiette * base * patrTot,
+          jehDejaPayees: payees.reduce((s, i) => s + jeh(i), 0),
+          dejaPaye: payees.reduce((s, i) => s + jeh(i) * num(i.prixJehHt), 0),
+          sansPrix,
+        };
+      }).filter(r => r.jehAPayer > 0 || r.jehDejaPayees > 0);
+      const total = lignes.reduce((t, r) => ({ brut: t.brut + r.brut, net: t.net + r.net, cout: t.cout + r.cout, jeh: t.jeh + r.jehAPayer }), { brut: 0, net: 0, cout: 0, jeh: 0 });
+      return { lignes, total, parametres: { baseJeh: base, cotTot, patrTot, chomage: chom } };
+    }
+    
+    module.exports = { calculerPaie };
+    
+    },
     "backend/client-api-v3.js": function(require, module, exports) {
     /**
      * Client backend HAC API v3.
