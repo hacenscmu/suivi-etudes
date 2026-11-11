@@ -76,6 +76,53 @@
     return '<div class="section-head"><div><h2>' + title + '</h2><span>' + sub + "</span></div>" + action + "</div>";
   }
 
+  // Préférences d'affichage locales : aucun champ métier ni synchronisation supplémentaire.
+  const CLE_DISPOSITION_DASHBOARD = "hac.v3.dashboard.disposition";
+  function lireDispositionDashboard() {
+    const defaut = { ordre: ["activite", "encaissement"], visibles: { activite: true, encaissement: true } };
+    try {
+      const p = JSON.parse(localStorage.getItem(CLE_DISPOSITION_DASHBOARD) || "null");
+      if (!p || typeof p !== "object") return defaut;
+      const ordre = Array.isArray(p.ordre) ? p.ordre.filter(x => ["activite", "encaissement"].includes(x)) : [];
+      return {
+        ordre: [...new Set([...ordre, "activite", "encaissement"])],
+        visibles: { activite: p.visibles?.activite !== false, encaissement: p.visibles?.encaissement !== false },
+      };
+    } catch { return defaut; }
+  }
+
+  function ouvrirDispositionDashboard() {
+    const p = lireDispositionDashboard();
+    formulaire({
+      titre: "Personnaliser le tableau de bord",
+      valeurs: {
+        visibleActivite: p.visibles.activite ? "oui" : "non",
+        positionActivite: String(p.ordre.indexOf("activite") + 1),
+        visibleEncaissement: p.visibles.encaissement ? "oui" : "non",
+        positionEncaissement: String(p.ordre.indexOf("encaissement") + 1),
+      },
+      champs: [
+        { name: "visibleActivite", label: "Graphique des JEH travaillées", type: "select", required: true, options: [["oui", "Afficher"], ["non", "Masquer"]] },
+        { name: "positionActivite", label: "Position du graphique JEH", type: "select", required: true, options: [["1", "En premier"], ["2", "En second"]] },
+        { name: "visibleEncaissement", label: "Graphique des encaissements", type: "select", required: true, options: [["oui", "Afficher"], ["non", "Masquer"]] },
+        { name: "positionEncaissement", label: "Position du graphique encaissement", type: "select", required: true, options: [["1", "En premier"], ["2", "En second"]] },
+      ],
+      onValider: d => {
+        if (d.visibleActivite === "oui" && d.visibleEncaissement === "oui" && d.positionActivite === d.positionEncaissement) {
+          return "Choisis deux positions différentes lorsque les deux graphiques sont affichés.";
+        }
+        const ordre = Number(d.positionActivite) < Number(d.positionEncaissement)
+          ? ["activite", "encaissement"] : ["encaissement", "activite"];
+        try {
+          localStorage.setItem(CLE_DISPOSITION_DASHBOARD, JSON.stringify({
+            ordre, visibles: { activite: d.visibleActivite === "oui", encaissement: d.visibleEncaissement === "oui" },
+          }));
+        } catch { return "Impossible d’enregistrer les préférences sur cet appareil."; }
+        return null;
+      },
+    });
+  }
+
   function dashboard(v) {
     const d = v.tableauDeBord;
     const mois = d.jehParMois || [];
@@ -130,18 +177,27 @@
         escapeHtml(client.raisonSociale || "Client") + "</strong><small>" + detail + escapeHtml(texte) + "</small></div></button>";
     }).join("");
     const alerts = alertsEtudes + alertsClients;
+    const panneaux = {
+      activite: '<section class="panel"><h3>Activité des étudiants</h3><div class="sub">Durées individuelles converties en JEH</div><div class="bars">' +
+        mois.map((m, i) => '<div class="barcol"><b>' + m.jeh.toLocaleString("fr-FR") + '</b><div class="bar ' + (i === mois.length - 1 ? "hot" : "") +
+          '" style="height:' + (m.jeh / max * 100) + '%"></div><small>' + escapeHtml(m.mois.slice(5)) + "</small></div>").join("") +
+        "</div></section>",
+      encaissement: '<section class="panel"><h3>Encaissement</h3><div class="sub">Part du CA signé déjà encaissée</div><div class="ring-wrap"><div class="ring" style="background:conic-gradient(var(--pink) 0 ' +
+        percent + '%,#f4eaf0 ' + percent + '% 100%)"></div><div class="ring-info"><strong>' + money(d.encaisse) + '</strong><small>sur ' + money(d.caSigne) +
+        ' HT signés</small></div></div><div class="sub">' + money(d.resteAEncaisser) + " HT restent à encaisser</div></section>",
+    };
+    const disposition = lireDispositionDashboard();
+    const graphiques = disposition.ordre.filter(id => disposition.visibles[id]).map(id => panneaux[id]);
+    const zoneGraphiques = graphiques.length
+      ? '<div class="grid' + (graphiques.length === 1 ? ' one' : '') + '">' + graphiques.join("") + "</div>"
+      : '<section class="panel"><div class="empty">Tous les graphiques sont masqués. Utilise « Personnaliser » pour en réafficher.</div></section>';
     return '<div class="stats">' +
       '<div class="stat"><div class="label">JEH travaillées · étudiants</div><strong>' + (d.totalJehTravaillees ?? "—").toLocaleString?.("fr-FR") + '</strong><small>Interventions réalisées uniquement</small></div>' +
       '<div class="stat"><div class="label">Chiffre d’affaires signé HT</div><strong>' + money(d.caSigne) + '</strong><small>' + d.nombreEtudes + " études suivies</small></div>" +
-      '<div class="stat"><div class="label">Déjà encaissé HT</div><strong>' + money(d.encaisse) + '</strong><small>' + percent + " % du CA signé</small></div>" +
+      '<div class="stat"><div class="label">Déjà encaissé HT</div><strong>' + money(d.encaisse) + '</strong><small>' + percent + " % du CA signé</small></div>' +
       '<div class="stat"><div class="label">Reste à encaisser HT</div><strong>' + money(d.resteAEncaisser) + '</strong><small>' + facturesOuvertes.length + " facture(s) non payée(s)</small></div>" +
-      "</div>" + heading("Activité", "JEH réellement travaillées · 6 derniers mois") +
-      '<div class="grid"><section class="panel"><h3>Activité des étudiants</h3><div class="sub">Durées individuelles converties en JEH</div><div class="bars">' +
-      mois.map((m, i) => '<div class="barcol"><b>' + m.jeh.toLocaleString("fr-FR") + '</b><div class="bar ' + (i === mois.length - 1 ? "hot" : "") +
-        '" style="height:' + (m.jeh / max * 100) + '%"></div><small>' + escapeHtml(m.mois.slice(5)) + "</small></div>").join("") +
-      '</div></section><section class="panel"><h3>Encaissement</h3><div class="sub">Part du CA signé déjà encaissée</div><div class="ring-wrap"><div class="ring" style="background:conic-gradient(var(--pink) 0 ' +
-      percent + '%,#f4eaf0 ' + percent + '% 100%)"></div><div class="ring-info"><strong>' + money(d.encaisse) + '</strong><small>sur ' + money(d.caSigne) +
-      ' HT signés</small></div></div><div class="sub">' + money(d.resteAEncaisser) + " HT restent à encaisser</div></section></div>" +
+      "</div>" + heading("Activité", "JEH réellement travaillées · 6 derniers mois", '<button class="ghost action" id="dashboardLayout">Personnaliser</button>') +
+      zoneGraphiques +
       heading("Alertes à traiter", (parEtude.length + alertesClients.length) + " élément(s) concerné(s)") +
       '<section class="panel">' + (alerts || '<div class="empty">Aucune alerte. Tout est à jour.</div>') + "</section>";
   }
@@ -551,6 +607,7 @@
     brancher("[data-filtre]", el => { filtreEtudes = el.dataset.filtre; render(); });
     brancher("[data-payer]", el => creerBVPour(el.dataset.payer));
     brancher("[data-reglage]", el => ouvrirReglage(el.dataset.reglage));
+    brancher("#dashboardLayout", () => ouvrirDispositionDashboard());
     brancher("#exportJson", () => exporter());
     brancher("[data-client]", el => ouvrirClient(el.dataset.client));
     brancher("[data-invoice]", el => ouvrirFacture(el.dataset.invoice));
