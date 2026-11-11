@@ -2,7 +2,7 @@
 (() => {
   "use strict";
   const { creerEtatVide, construireVueApplication, preparerAjout, preparerModification, appliquerCommande } = window.HAC;
-  const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, resoudreRelation, EN_COURS, ALERTES, calculerPaie } = window.HAC;
+  const { creerSynchro, creerClientApiV3, stockageNavigateur, prefixeStockageUtilisateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, resoudreRelation, EN_COURS, ALERTES, calculerPaie } = window.HAC;
   let filtreEtudes = "En cours";
   let etudeOuverte = null;
   let clientOuvert = null;
@@ -32,6 +32,8 @@
   const lireConnexion = () => { try { return JSON.parse(localStorage.getItem(CONN) || "null"); } catch { return null; } };
   let connexion = lireConnexion();
   let synchro = null;
+  let prefixeStockageActif = null;
+  let cleSession = null;
   let session = null;
   let data = creerEtatVide();
   let etatSynchro = { source: "vide", enAttente: 0, blocage: null };
@@ -434,7 +436,7 @@
         try {
           const r = await synchro.definirRole({ membreId: el.dataset.role, role: el.value });
           if (r.code) {
-            if (el.dataset.role === session?.membreId) { connexion = { ...connexion, token: r.code }; localStorage.setItem(CONN, JSON.stringify(connexion)); session.role = r.role; localStorage.setItem("hac.v3.session", JSON.stringify(session)); }
+            if (el.dataset.role === session?.membreId) { connexion = { ...connexion, token: r.code }; localStorage.setItem(CONN, JSON.stringify(connexion)); session.role = r.role; localStorage.setItem(cleSession, JSON.stringify(session)); }
             alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.role)?.nom || "ce membre") + " : " + r.code);
           }
           if (session?.role === "Salarie") { dialog.close(); current = "Mon espace"; render(); return; }
@@ -860,28 +862,32 @@
   }
   function deconnecter() {
     if (!confirm("Déconnecter cet appareil ? Les modifications non envoyées seront perdues.")) return;
-    Object.keys(localStorage).filter(k => k.startsWith("hac.v3.")).forEach(k => localStorage.removeItem(k));
+    if (prefixeStockageActif) Object.keys(localStorage).filter(k => k.startsWith(prefixeStockageActif)).forEach(k => localStorage.removeItem(k));
+    if (cleSession) localStorage.removeItem(cleSession);
+    localStorage.removeItem(CONN);
     location.reload();
   }
   async function demarrer() {
+    prefixeStockageActif = await prefixeStockageUtilisateur(connexion.token);
+    cleSession = prefixeStockageActif + "session";
     const client = creerClientApiV3({ transport: connexion.essai ? transportEssai() : transportFetch(connexion.url), obtenirToken: () => connexion.token });
-    synchro = creerSynchro({ client, stockage: stockageNavigateur(), creerOpId: () => nouvelId("op") });
+    synchro = creerSynchro({ client, stockage: stockageNavigateur(prefixeStockageActif), creerOpId: () => nouvelId("op") });
     try {
       etatSynchro = await synchro.demarrer();
       if (connexion.essai) session = { role: "Membre", membreId: "demo" };
       else {
         try {
           session = await synchro.session();
-          localStorage.setItem("hac.v3.session", JSON.stringify(session));
+          localStorage.setItem(cleSession, JSON.stringify(session));
         } catch (e) {
           if (e.code !== "NETWORK_ERROR") throw e;
-          try { session = JSON.parse(localStorage.getItem("hac.v3.session") || "null"); } catch { session = null; }
+          try { session = JSON.parse(localStorage.getItem(cleSession) || "null"); } catch { session = null; }
           if (!session) throw e;
         }
       }
     }
     catch (e) {
-      if (e.code === "AUTH_INVALID" || e.code === "AUTH_REQUIRED" || e.code === "AUTH_ROLE_REQUIRED") { localStorage.removeItem(CONN); localStorage.removeItem("hac.v3.session"); afficherConnexion("Accès refusé ou rôle non attribué. Contactez un membre de l’association."); return; }
+      if (e.code === "AUTH_INVALID" || e.code === "AUTH_REQUIRED" || e.code === "AUTH_ROLE_REQUIRED") { localStorage.removeItem(CONN); localStorage.removeItem(cleSession); afficherConnexion("Accès refusé ou rôle non attribué. Contactez un membre de l’association."); return; }
       afficherConnexion("Connexion impossible : " + (e.message || e.code)); return;
     }
     if (session?.role === "Salarie") current = "Mon espace";
