@@ -448,9 +448,17 @@
       return "<label>" + escapeHtml(c.label) + input + (c.aide ? '<small class="sub">' + escapeHtml(c.aide) + "</small>" : "") + "</label>";
     }).join("");
     dialog.innerHTML = '<form method="dialog"><div class="section-head"><h2>' + escapeHtml(titre) + '</h2><button class="ghost close-dialog" value="cancel" aria-label="Fermer">×</button></div>' + html +
-      '<p class="sub" data-erreur style="color:var(--red)"></p><div class="dialog-actions"><button class="ghost" value="cancel">Annuler</button><button class="action" data-ok value="default">Enregistrer</button></div></form>';
+      '<p class="sub" data-erreur style="color:var(--red)"></p><div class="dialog-actions">' +
+      (supprimer ? '<button type="button" class="ghost danger" data-delete>Supprimer</button>' : "") +
+      '<button class="ghost" value="cancel">Annuler</button><button class="action" data-ok value="default">Enregistrer</button></div></form>';
     document.body.appendChild(dialog);
     dialog.addEventListener("close", () => dialog.remove());
+    if (supprimer) dialog.querySelector("[data-delete]").addEventListener("click", async () => {
+      if (!confirm("Supprimer cette fiche ? Cette action sera synchronisée avec le serveur et ne pourra pas être annulée depuis l’application.")) return;
+      const erreur = await supprimer();
+      if (erreur) { dialog.querySelector("[data-erreur]").textContent = erreur; return; }
+      dialog.close(); render();
+    });
     dialog.querySelector("form").addEventListener("submit", async ev => {
       if (!ev.submitter?.hasAttribute("data-ok")) return;
       ev.preventDefault();
@@ -461,6 +469,13 @@
       dialog.close(); render();
     });
     dialog.showModal();
+  }
+
+  async function supprimerEnregistrement(collection, id) {
+    const r = await synchro.supprimer(collection, id);
+    if (!r.valide) return r.anomalies.map(a => a.raison || a).join(" · ");
+    data = synchro.lireEtat(); await majStatut();
+    return null;
   }
 
   async function enregistrer(collection, id, donnees, prefixe) {
@@ -502,7 +517,7 @@
       d.dateProchaineFacture = d.dateProchaineFacture || null;
       d.client = data.clients.find(c => c.id === d.clientId)?.raisonSociale || "";
       return enregistrer("etudes", id, d, "etude");
-    } });
+    }, supprimer: id ? () => supprimerEnregistrement("etudes", id) : null });
   }
   function ficheClient(id) {
     const c = data.clients.find(x => x.id === id);
@@ -557,7 +572,7 @@
       if (d.relationType !== "longue_duree") { d.cadenceFacturation = null; d.dateProchaineFacture = null; }
       else { d.cadenceFacturation = d.cadenceFacturation || null; d.dateProchaineFacture = d.dateProchaineFacture || null; }
       return enregistrer("clients", id, d, "client");
-    } });
+    }, supprimer: id ? () => supprimerEnregistrement("clients", id) : null });
   }
   function ouvrirFacture(id, preset = {}) {
     const f = id ? data.factures.find(x => x.id === id) : preset;
@@ -569,14 +584,16 @@
       { name: "date", label: "Date d’émission", type: "date" },
       { name: "echeance", label: "Échéance", type: "date" },
       { name: "datePaiement", label: "Date de paiement", type: "date" },
-    ], onValider: d => { if (d.etat === "Payée" && !d.datePaiement) d.datePaiement = aujourdHui(); return enregistrer("factures", id, d, "facture"); } });
+    ], onValider: d => { if (d.etat === "Payée" && !d.datePaiement) d.datePaiement = aujourdHui(); return enregistrer("factures", id, d, "facture"); },
+      supprimer: id ? () => supprimerEnregistrement("factures", id) : null });
   }
   function ouvrirMembre(id) {
     const m = id ? data.membres.find(x => x.id === id) : {};
     formulaire({ titre: id ? "Modifier le membre" : "Nouveau membre", valeurs: m, champs: [
       { name: "nomComplet", label: "Prénom et nom", required: true },
       { name: "role", label: "Rôle (facultatif)" },
-    ], onValider: d => enregistrer("membres", id, d, "membre") });
+    ], onValider: d => enregistrer("membres", id, d, "membre"),
+      supprimer: id ? () => supprimerEnregistrement("membres", id) : null });
   }
   function ouvrirIntervention(id, preset = {}) {
     const i = id ? data.interventions.find(x => x.id === id) : preset;
@@ -592,7 +609,7 @@
       if (!(d.nb >= 1) || d.nb % 1) return "Le nombre de personnes doit être un entier d’au moins 1.";
       const { duree, nb, ...reste } = d;
       return enregistrer("interventions", id, { ...reste, minutesIndividuelles: Math.round((duree / nb) * 100) / 100 }, "interv");
-    } });
+    }, supprimer: id ? () => supprimerEnregistrement("interventions", id) : null });
   }
   function ouvrirBV() {
     formulaire({ titre: "Nouveau bulletin de versement", valeurs: { date: aujourdHui() }, champs: [
