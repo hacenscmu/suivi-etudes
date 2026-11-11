@@ -42,7 +42,7 @@ jobs:
       - name: Vérifier que le bundle commité est à jour
         run: git diff --exit-code -- refonte/demo/hac-core.js refonte/app/hac-app.js
       - name: Vérifier la syntaxe de l’application v3
-        run: node --check refonte/app/app.js && node --check refonte/app/e2e-navigateur.js && node --check refonte/app/e2e-essai.js
+        run: node --check refonte/app/app.js && node --check refonte/app/e2e-navigateur.js && node --check refonte/app/e2e-essai.js && node --check refonte/app/e2e-salarie.js
       - name: Installer Playwright et Chromium
         run: |
           npm install --no-save --no-package-lock playwright
@@ -58,6 +58,7 @@ jobs:
           done
           node refonte/app/e2e-navigateur.js
           node refonte/app/e2e-essai.js
+          node refonte/app/e2e-salarie.js
       - name: Vérifier l’interface isolée
         run: node refonte/demo/validate-demo.mjs
       - name: Vérifier la syntaxe du candidat Apps Script v3
