@@ -416,18 +416,25 @@ function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(
 function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
 function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{}}}
 // Widgets : grille de 9 colonnes, taille minimale [largeur, hauteur] en cases ; chaque ligne est complétée pour prendre toute la largeur.
-let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[2,2],alert:[3,2],enc:[4,4],cli:[4,4]},DDEF={jeh:[3,2]},DFULL=['banner','kpis'];
+let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[2,1],alert:[3,2],enc:[4,3],cli:[4,3]},DDEF={jeh:[3,1]},DFULL=['banner','kpis'];
 let DEDIT=false,WDRAG=null;
 // nombre de cases selon la largeur de l'écran : 3 sur téléphone (blocs l'un sous l'autre, pleine largeur), puis ≈ 80 px par case jusqu'à 18
 function dashCols(){const v=document.getElementById('view'),w=(v&&v.clientWidth)||window.innerWidth;return w<600?3:Math.max(9,Math.min(18,Math.round(w/80)))}
 let DRSZ=null;window.addEventListener('resize',()=>{clearTimeout(DRSZ);DRSZ=setTimeout(()=>{if(tab==='dash'&&dashCols()!==DCOLS)render()},150)});
 function dashSize(L,k){const m=DMIN[k],s=L.size[k]||DDEF[k]||[];return [Math.min(DCOLS,Math.max(m[0],s[0]|0)),Math.min(8,Math.max(m[1],s[1]|0))]}
-function packDash(L,ks){const rows=[];let cur=[],used=0;
-  ks.forEach(k=>{const [w,h]=dashSize(L,k);if(used+w>DCOLS&&cur.length){rows.push(cur);cur=[];used=0}cur.push({k,w,h});used+=w});if(cur.length)rows.push(cur);
-  rows.forEach(r=>{const sum=r.reduce((a,x)=>a+x.w,0),ex=DCOLS-sum,H=Math.max(...r.map(x=>x.h));
-    const add=r.map(x=>ex*x.w/sum),fl=add.map(Math.floor);let rest=ex-fl.reduce((a,b)=>a+b,0);
-    add.map((a,i)=>[a-fl[i],i]).sort((a,b)=>b[0]-a[0]||a[1]-b[1]).forEach(([,i])=>{if(rest>0){fl[i]++;rest--}});
-    r.forEach((x,i)=>{x.W=x.w+fl[i];x.H=H})});return rows}
+// Rangement : les blocs se suivent en lignes ; un bloc qui tient sous le précédent (hauteur cumulée ≤ hauteur de la ligne) s'empile dessous.
+// Ensuite chaque ligne s'étire pour remplir toute la largeur, et chaque pile pour remplir toute la hauteur.
+function packDash(L,ks){const N=DCOLS,rows=[];let r=null;
+  ks.forEach(k=>{const [w,h]=dashSize(L,k),it={k,w,h};
+    if(r){const used=r.cols.reduce((a,c)=>a+c.cw,0),last=r.cols[r.cols.length-1];
+      if(last.sum+h<=r.H&&used-last.cw+Math.max(last.cw,w)<=N){last.items.push(it);last.sum+=h;last.cw=Math.max(last.cw,w);return}
+      if(used+w<=N){r.cols.push({items:[it],sum:h,cw:w});r.H=Math.max(r.H,h);return}}
+    r={cols:[{items:[it],sum:h,cw:w}],H:h};rows.push(r)});
+  const split=(tot,ws)=>{const s=ws.reduce((a,b)=>a+b,0),ex=tot-s,add=ws.map(x=>ex*x/s),fl=add.map(Math.floor);let rest=ex-fl.reduce((a,b)=>a+b,0);
+    add.map((a,i)=>[a-fl[i],i]).sort((a,b)=>b[0]-a[0]||a[1]-b[1]).forEach(([,i])=>{if(rest>0){fl[i]++;rest--}});return ws.map((x,i)=>x+fl[i])};
+  const out=[];let y=0;rows.forEach(r=>{const W=split(N,r.cols.map(c=>c.cw));let x=0;
+    r.cols.forEach((c,ci)=>{const Hs=split(r.H,c.items.map(i=>i.h));let yy=y;c.items.forEach((it,ii)=>{out.push({k:it.k,x,y:yy,W:W[ci],H:Hs[ii]});yy+=Hs[ii]});x+=W[ci]});y+=r.H});
+  return out}
 function dashSec(){const L=dashLayout(),lab=Object.fromEntries(DASH_BLOCKS);
   return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Pour la taille des blocs : bouton ✎ du tableau de bord. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
 function vDash(D){
@@ -463,7 +470,7 @@ function vDash(D){
   const L=dashLayout();
   DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='',seg=[];
   const tb=k=>{const [w,h]=dashSize(L,k),m=DMIN[k];return `<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><span class="wsz"><button type="button" data-wsz="${k}:w:-1" ${w<=m[0]?'disabled':''} aria-label="Moins large">−</button><b>↔ ${w}</b><button type="button" data-wsz="${k}:w:1" ${w>=DCOLS?'disabled':''} aria-label="Plus large">+</button></span><span class="wsz"><button type="button" data-wsz="${k}:h:-1" ${h<=m[1]?'disabled':''} aria-label="Moins haut">−</button><b>↕ ${h}</b><button type="button" data-wsz="${k}:h:1" ${h>=8?'disabled':''} aria-label="Plus haut">+</button></span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`};
-  const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${packDash(L,seg).map(r=>r.map(x=>`<div class="wgc" data-wk="${x.k}" style="grid-column:span ${x.W};grid-row:span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')).join('')}</div>`;seg=[]};
+  const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${packDash(L,seg).map(x=>`<div class="wgc${x.H===1?' wh1':''}" data-wk="${x.k}" style="grid-column:${x.x+1}/span ${x.W};grid-row:${x.y+1}/span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')}</div>`;seg=[]};
   ks.forEach(k=>{if(DFULL.includes(k)){flush();out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`}else seg.push(k)});flush();
   const hid=DASH_BLOCKS.filter(([k])=>L.hide[k]);
   const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, − / + pour sa largeur (↔) et sa hauteur (↕). Chaque ligne s’étire pour remplir l’écran.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
@@ -1040,7 +1047,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=28;
+const VERSION=29;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
