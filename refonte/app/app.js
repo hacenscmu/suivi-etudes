@@ -354,14 +354,14 @@
     return heading("À verser (prochain BV)", money(P.total.net) + " net en tout · coût Junior " + money(P.total.cout)) +
       '<section class="listbox rows">' + (aVerser.map(r => '<div class="item"><div class="item-main"><strong>' + escapeHtml(r.nom) + " · " + money(r.net) + ' net</strong><small>' +
         f3(r.jehAPayer) + " JEH · brut " + money(r.brut) + " · coût Junior " + money(r.cout) + (r.assiette > r.jehAPayer ? " · cotisé sur 1 JEH" : "") +
-        (r.sansPrix ? ' · <span class="accent">prix JEH intervenant manquant</span>' : "") + " · déjà payé " + money(r.dejaPaye) +
-        '</small></div><button class="action" data-payer="' + r.membreId + '">Créer le BV</button></div>').join("") || '<div class="empty">Personne à payer pour le moment.</div>') + "</section>" +
+        (r.sansPrix ? ' · <span class="accent">prix JEH intervenant manquant ou invalide : BV bloqué</span>' : "") + " · déjà payé " + money(r.dejaPaye) +
+        '</small></div>' + (r.sansPrix ? '<span class="pill">À corriger</span>' : '<button class="action" data-payer="' + r.membreId + '">Créer le BV</button>') + '</div>').join("") || '<div class="empty">Personne à payer pour le moment.</div>') + "</section>" +
       '<details class="sub" style="margin-top:8px"><summary>Comment c’est calculé ?</summary>Pour chaque personne : les interventions « Fait, pas encore payé ». Brut = JEH × prix JEH intervenant. Net = brut − cotisations salariales ; coût Junior = brut + charges patronales. Base d’une JEH : 4 h de SMIC. En dessous de 1 JEH, cotisations et charges sont calculées sur 1 JEH. « Créer le BV » enregistre le bulletin et passe ces lignes à « Payé ».</details>';
   }
   async function creerBVPour(membreId) {
     const P = calculerPaie({ interventions: data.interventions, membres: data.membres, config: synchro?.lireConfig() || {} });
     const r = P.lignes.find(x => x.membreId === membreId);
-    if (!r || !(r.jehAPayer > 0)) return;
+    if (!r || !(r.jehAPayer > 0) || r.sansPrix) { if (r?.sansPrix) alert("BV impossible : renseignez un prix JEH strictement positif pour chaque intervention à payer."); return; }
     if (!confirm("Créer le BV de " + r.nom + " (" + money(r.net) + " net) et passer ses lignes à « Payé » ?")) return;
     const bvId = nouvelId("bv"), ligneId = nouvelId("ligne");
     const bv = { id: bvId, date: aujourdHui(), reference: "BV " + r.nom + " " + aujourdHui(), brut: Math.round(r.brut * 100) / 100, net: Math.round(r.net * 100) / 100, coutJunior: Math.round(r.cout * 100) / 100 };
