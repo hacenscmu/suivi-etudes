@@ -369,6 +369,7 @@ function gererAcces_(q, qui, role) {
     return reponse_(true, {role: acces.role, code: codeNouveau}, null, {revision: revision_()});
   }
   if (q.action === 'adminDesactiver' || q.action === 'adminReactiver') {
+    if (q.action === 'adminDesactiver' && cible === qui) return erreur_('SELF_DEACTIVATE', 'Vous ne pouvez pas désactiver votre propre accès');
     if (q.action === 'adminDesactiver' && acces.role === 'Membre' && acces.active === true && nbAdminsActifs_() <= 1) return erreur_('LAST_ADMIN', 'Le dernier accès Membre ne peut pas être désactivé');
     t = jetons_(); t[cible].active = q.action === 'adminReactiver';
     if (t[cible].active) delete t[cible].revoque; else t[cible].revoque = new Date().toISOString();
