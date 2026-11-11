@@ -30,10 +30,10 @@ ok('hors ligne : bannière « en attente »',(await p.textContent('#syncBanner')
 ok('hors ligne : serveur inchangé',srv.lireDonnees().factures.facture_0001.etat==='Payée');
 await p.reload();await p.waitForTimeout(600);
 ok('rechargement hors ligne : données du cache, modif en attente visible',(await p.textContent('#syncBanner')).includes('gardée'));
-offline=false;await p.click('#tabs [data-page="Réglages"]');await p.click('#syncNow');await p.waitForTimeout(600);
+offline=false;await p.click('#tabs [data-page="Réglages"]');ok('Réglages en pleine largeur',await p.locator('.app').evaluate(el=>el.classList.contains('settings-active')&&getComputedStyle(el).maxWidth==='none'));await p.click('#syncNow');await p.waitForTimeout(600);
 ok('retour réseau : modif envoyée',srv.lireDonnees().factures.facture_0001.etat==='Émise'&&srv.lireDonnees().factures.facture_0001._v===3);
 const D=()=>srv.lireDonnees();
-await p.click('#tabs [data-page="Études"]');await p.click('#addClient');await remplir({raisonSociale:'Novalys',relationType:'longue_duree',cadenceFacturation:'mensuelle',dateProchaineFacture:'2026-10-10'});
+await p.click('#tabs [data-page="Études"]');ok('largeur standard rétablie hors Réglages',await p.locator('.app').evaluate(el=>!el.classList.contains('settings-active')&&getComputedStyle(el).maxWidth!=='none'));await p.click('#addClient');await remplir({raisonSociale:'Novalys',relationType:'longue_duree',cadenceFacturation:'mensuelle',dateProchaineFacture:'2026-10-10'});
 const cli=Object.values(D().clients).find(c=>c.raisonSociale==='Novalys');ok('client créé (longue durée + cadence)',cli&&cli.relationType==='longue_duree'&&cli.cadenceFacturation==='mensuelle');await p.click('#tabs [data-page="Accueil"]');ok('alerte de facture périodique affichée',(await p.textContent('#content')).includes('Facture périodique à émettre'));await p.click('#tabs [data-page="Études"]');
 await p.click('#addStudy');await remplir({clientId:cli.id,num:'HAC-002',statut:'Convention signée',montant:1428,jeh:400,frais:70});
 const et=Object.values(D().etudes).find(e=>e.num==='HAC-002');ok('étude créée avec prix JEH et frais',et&&et.jeh===400&&et.frais===70&&et.clientId===cli.id);
