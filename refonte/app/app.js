@@ -372,7 +372,7 @@
     return heading("Bonjour " + escapeHtml(m.nomComplet || m.nom || ""), "Votre espace personnel") +
       '<section class="stats">' + tuile("JEH à régler", jeh(paie.jehAPayer)) + tuile("Brut à régler", money(paie.brut)) +
       tuile("Net estimé à recevoir", money(paie.net)) + tuile("Net déjà versé (BV)", money(netDejaRecu)) + "</section>" +
-      '<section class="panel"><p class="sub">Le net à recevoir est une estimation calculée avec les taux par défaut tant que les paramètres de paie ne sont pas transmis à cet espace. Les versements déjà effectués sont repris depuis vos bulletins de versement.</p></section>' +
+      '<section class="panel"><p class="sub">Le net à recevoir est calculé avec les paramètres de paie en vigueur. Les versements déjà effectués sont repris depuis vos bulletins de versement.</p></section>' +
       heading("Mes interventions", data.interventions.length + " ligne(s)") +
       '<section class="listbox rows">' + (data.interventions.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(i => {
         const e = etude(i.etudeId);
