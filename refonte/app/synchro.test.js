@@ -181,7 +181,7 @@ test("le préfixe de cache est isolé par empreinte du jeton et ne révèle pas 
   const cryptoApi = { subtle: { digest: async (algorithm, bytes) => {
     assert.equal(algorithm, "SHA-256");
     assert.ok(bytes instanceof Uint8Array);
-    return new Uint8Array(32).fill(bytes[0]).buffer;
+    return new Uint8Array(32).fill(bytes[bytes.length - 1]).buffer;
   } } };
   const a = await prefixeStockageUtilisateur("compte-A", cryptoApi);
   const b = await prefixeStockageUtilisateur("compte-B", cryptoApi);
