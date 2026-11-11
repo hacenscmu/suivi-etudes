@@ -55,3 +55,12 @@ test("numéro en double et date manquante", () => {
   assert.ok(cles(r.get("etude_0001")).includes("double"));
   assert.ok(cles(r.get("etude_0002")).includes("date"));
 });
+
+
+test("signale une échéance manquante même si une autre facture impayée a une date", () => {
+  const r = run(E(), [
+    F({ type: "Acompte", etat: "Émise", echeance: "2026-11-20" }),
+    F({ type: "Intermédiaire", etat: "Émise", echeance: null }),
+  ], [I()]);
+  assert.ok(cles(r).includes("echeance"));
+});
