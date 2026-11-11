@@ -5,6 +5,7 @@
   const { creerSynchro, creerClientApiV3, stockageNavigateur, transportFetch, creerServeurMemoireV3, calculerAlertes, analyserAlerteClient, resoudreRelation, EN_COURS, ALERTES, calculerPaie } = window.HAC;
   let filtreEtudes = "En cours";
   let etudeOuverte = null;
+  let clientOuvert = null;
   const alertesParEtude = () => calculerAlertes({ etudes: donneesVues().etudes, factures: donneesVues().factures, interventions: donneesVues().interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() });
   // ---- Mode essai : un serveur v3 simulé sur ce téléphone, avec des données d'exemple. Aucune donnée réelle. ----
   const JETON_ESSAI = "essai-local-hac-v3";
@@ -503,10 +504,52 @@
       return enregistrer("etudes", id, d, "etude");
     } });
   }
+  function ficheClient(id) {
+    const c = data.clients.find(x => x.id === id);
+    if (!c) { clientOuvert = null; return studies(view()); }
+    const etudes = data.etudes.filter(e => e.clientId === id);
+    const ids = new Set(etudes.map(e => e.id));
+    const factures = data.factures.filter(f => ids.has(f.etudeId));
+    const totalFacture = factures.reduce((n, f) => n + Number(f.montant || 0), 0);
+    const encaisse = factures.filter(f => f.etat === "Payée").reduce((n, f) => n + Number(f.montant || 0), 0);
+    const relation = c.relationType === "longue_duree" ? "Longue durée" : "Ponctuelle";
+    const cadence = c.cadenceFacturation ? ({ mensuelle: "Mensuelle", trimestrielle: "Trimestrielle", semestrielle: "Semestrielle", annuelle: "Annuelle" }[c.cadenceFacturation] || c.cadenceFacturation) : "Aucune périodicité définie";
+    const prochaine = analyserAlerteClient(c);
+    const tuile = (label, valeur) => '<div class="stat"><div class="label">' + label + '</div><strong>' + valeur + "</strong></div>";
+    return '<button class="ghost action" id="retourClients">‹ Clients</button>' +
+      heading(escapeHtml(c.raisonSociale), relation, '<button class="action" data-modifier-client="' + id + '">Modifier la fiche</button>') +
+      '<section class="panel"><h3>Informations client</h3><div class="client-details">' +
+      (c.contact ? '<div><small>Contact</small><strong>' + escapeHtml(c.contact) + "</strong></div>" : "") +
+      (c.email ? '<div><small>E-mail</small><strong><a href="mailto:' + escapeHtml(c.email) + '">' + escapeHtml(c.email) + "</a></strong></div>" : "") +
+      (c.telephone ? '<div><small>Téléphone</small><strong><a href="tel:' + escapeHtml(c.telephone) + '">' + escapeHtml(c.telephone) + "</a></strong></div>" : "") +
+      (c.adresse ? '<div><small>Adresse</small><strong>' + escapeHtml(c.adresse) + "</strong></div>" : "") +
+      (c.siret ? '<div><small>SIRET</small><strong>' + escapeHtml(c.siret) + "</strong></div>" : "") +
+      (c.notes ? '<div class="client-notes"><small>Notes</small><p>' + escapeHtml(c.notes) + "</p></div>" : "") +
+      (!c.contact && !c.email && !c.telephone && !c.adresse && !c.siret && !c.notes ? '<p class="sub">Les coordonnées et notes pourront être ajoutées en modifiant cette fiche.</p>' : "") +
+      "</div></section>" +
+      heading("Relation commerciale", "Paramètres de collaboration et de facturation") +
+      '<section class="panel"><div class="client-details"><div><small>Type de relation</small><strong>' + relation + "</strong></div><div><small>Facturation périodique</small><strong>" + cadence + "</strong></div>" +
+      (c.dateProchaineFacture ? '<div><small>Date de référence</small><strong>' + dateFr(c.dateProchaineFacture) + "</strong></div>" : "") +
+      (prochaine.prochaineEcheance ? '<div><small>Prochaine échéance calculée</small><strong>' + dateFr(prochaine.prochaineEcheance) + "</strong></div>" : "") +
+      "</div>" + (prochaine.anomalie ? '<p class="sub accent">Date de référence de facturation à vérifier.</p>' : "") + "</section>" +
+      heading("Activité", etudes.length + " étude(s)") +
+      '<div class="stats">' + tuile("Études", etudes.length) + tuile("Factures", factures.length) + tuile("Facturé TTC", money(totalFacture)) + tuile("Encaissé TTC", money(encaisse)) + "</div>" +
+      heading("Études associées", "Touchez une étude pour ouvrir son suivi") +
+      '<section class="listbox rows">' + (etudes.map(e => '<button type="button" class="item invoice-button" data-etude="' + e.id + '"><div class="item-main"><strong>' + escapeHtml(e.num || "Étude") + '</strong><small>' + escapeHtml(e.statut || "") + " · " + dateFr(e.date) + '</small></div><div class="amount">' + money(e.montant) + " TTC</div></button>").join("") || '<div class="empty">Aucune étude associée.</div>') + "</section>" +
+      heading("Factures", factures.length + " facture(s)") +
+      '<section class="listbox rows">' + (factures.map(f => '<button type="button" class="item invoice-button" data-invoice="' + f.id + '"><div class="item-main"><strong>' + escapeHtml(f.type || "Facture") + '</strong><small>' + dateFr(f.date) + (f.echeance ? " · échéance " + dateFr(f.echeance) : "") + '</small></div><span class="pill ' + (f.etat === "Payée" ? "green" : "pink") + '">' + escapeHtml(f.etat || "État à renseigner") + '</span><div class="amount">' + money(f.montant) + " TTC</div></button>").join("") || '<div class="empty">Aucune facture associée.</div>') + "</section>";
+  }
+
   function ouvrirClient(id) {
     const c = id ? data.clients.find(x => x.id === id) : {};
     formulaire({ titre: id ? "Modifier le client" : "Nouveau client", valeurs: { relationType: "ponctuelle", cadenceFacturation: "", dateProchaineFacture: "", ...c }, champs: [
-      { name: "raisonSociale", label: "Nom du client", required: true },
+      { name: "raisonSociale", label: "Raison sociale / nom du client", required: true },
+      { name: "contact", label: "Nom du contact" },
+      { name: "email", label: "E-mail", type: "email" },
+      { name: "telephone", label: "Téléphone", type: "tel" },
+      { name: "adresse", label: "Adresse" },
+      { name: "siret", label: "SIRET" },
+      { name: "notes", label: "Notes internes" },
       { name: "relationType", label: "Type de collaboration", type: "select", required: true, options: [["ponctuelle", "Ponctuelle (mission délimitée)"], ["longue_duree", "Longue durée (relation durable, type CDI)"]] },
       { name: "cadenceFacturation", label: "Cadence de facturation", type: "select", options: [["mensuelle", "Mensuelle"], ["trimestrielle", "Trimestrielle"], ["semestrielle", "Semestrielle"], ["annuelle", "Annuelle"]], aide: "Facultative : renseignez-la uniquement si une facture périodique est prévue." },
       { name: "dateProchaineFacture", label: "Date de référence de facturation", type: "date", aide: "Date de la dernière facture ou du dernier jalon ; la prochaine échéance est calculée avec la cadence." },
@@ -582,7 +625,7 @@
     }
     content.innerHTML = ({
       Accueil: () => dashboard(v),
-      Études: () => (etudeOuverte ? rapport(etudeOuverte) : studies(v)),
+      Études: () => (clientOuvert ? ficheClient(clientOuvert) : etudeOuverte ? rapport(etudeOuverte) : studies(v)),
       Finances: () => finances(v),
       Équipe: () => team(v),
       Réglages: settings,
@@ -598,8 +641,10 @@
     brancher("#addMembre", () => ouvrirMembre());
     brancher("#addInterv", () => ouvrirIntervention());
     brancher("#addBV", () => ouvrirBV());
-    brancher("[data-etude]", el => { etudeOuverte = el.dataset.etude; current = "Études"; render(); window.scrollTo(0, 0); });
-    brancher("#retourEtudes", () => { etudeOuverte = null; render(); });
+    brancher("[data-etude]", el => { clientOuvert = null; etudeOuverte = el.dataset.etude; current = "Études"; render(); window.scrollTo(0, 0); });
+    brancher("#retourEtudes", () => { etudeOuverte = null; clientOuvert = null; render(); });
+    brancher("#retourClients", () => { clientOuvert = null; render(); });
+    brancher("[data-modifier-client]", el => ouvrirClient(el.dataset.modifierClient));
     brancher("[data-modifier-etude]", el => ouvrirEtude(el.dataset.modifierEtude));
     brancher("[data-facture-pour]", el => ouvrirFacture(null, { etudeId: el.dataset.facturePour }));
     brancher("[data-interv-pour]", el => ouvrirIntervention(null, { etudeId: el.dataset.intervPour }));
@@ -609,7 +654,7 @@
     brancher("[data-reglage]", el => ouvrirReglage(el.dataset.reglage));
     brancher("#dashboardLayout", () => ouvrirDispositionDashboard());
     brancher("#exportJson", () => exporter());
-    brancher("[data-client]", el => ouvrirClient(el.dataset.client));
+    brancher("[data-client]", el => { clientOuvert = el.dataset.client; etudeOuverte = null; current = "Études"; render(); window.scrollTo(0, 0); });
     brancher("[data-invoice]", el => ouvrirFacture(el.dataset.invoice));
     brancher("[data-membre]", el => ouvrirMembre(el.dataset.membre));
     brancher("[data-interv]", el => ouvrirIntervention(el.dataset.interv));
