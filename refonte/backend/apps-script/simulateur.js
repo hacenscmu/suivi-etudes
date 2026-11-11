@@ -38,6 +38,7 @@ function creerServeurAppsScriptSimule({ token, donnees = {}, maxBytes, membre = 
     Utilities: {
       DigestAlgorithm: { SHA_256: 1 }, Charset: { UTF_8: 1 },
       computeDigest: (a, s) => [...crypto.createHash("sha256").update(s, "utf8").digest()].map(b => (b > 127 ? b - 256 : b)),
+      getUuid: () => crypto.randomUUID(),
       newBlob: s => ({ getBytes: () => ({ length: Buffer.byteLength(s, "utf8") }) }),
     },
     PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] ?? null, setProperty: (k, v) => { props[k] = v; } }) },
