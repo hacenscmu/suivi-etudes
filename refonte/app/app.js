@@ -742,7 +742,7 @@
     const form = dialog.querySelector("form");
     const zone = dialog.querySelector("[data-lignes]");
     const lireLignes = () => [...zone.querySelectorAll("[data-ligne]")].map(el => {
-      const val = name => el.querySelector('[data-field="' + name + '"]').value.trim();
+      const val = name => el.querySelector('[data-field="' + name + '"]')?.value.trim() ?? "";
       const type = val("type");
       return type === "prestation"
         ? { type, designation: val("designation"), quantite: val("quantite") === "" ? null : Number(val("quantite")), prixUnitaireHt: val("prixUnitaireHt") === "" ? null : Number(val("prixUnitaireHt")) }
@@ -783,7 +783,8 @@
         el.addEventListener("change", () => {
           const index = Number(el.closest("[data-ligne]").dataset.ligne);
           if (el.dataset.field === "type") {
-            const designation = el.closest("[data-ligne]").querySelector('[data-field="designation"]').value;
+            lignes = lireLignes();
+            const designation = lignes[index].designation;
             lignes[index] = el.value === "prestation"
               ? { type: "prestation", designation, quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === form.elements.etudeId.value)?.jeh ?? "" }
               : { type: "frais", designation, montantHt: 0 };
@@ -791,11 +792,11 @@
           } else afficherTotaux();
         });
       });
-      zone.querySelectorAll("[data-remove]").forEach(btn => btn.addEventListener("click", () => { lignes.splice(Number(btn.dataset.remove), 1); rendreLignes(); }));
+      zone.querySelectorAll("[data-remove]").forEach(btn => btn.addEventListener("click", () => { lignes = lireLignes(); lignes.splice(Number(btn.dataset.remove), 1); rendreLignes(); }));
       afficherTotaux();
     };
-    dialog.querySelector("[data-add-prestation]").addEventListener("click", () => { lignes.push({ type: "prestation", designation: "Prestation JEH", quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === form.elements.etudeId.value)?.jeh ?? "" }); rendreLignes(); });
-    dialog.querySelector("[data-add-frais]").addEventListener("click", () => { lignes.push({ type: "frais", designation: "Frais hors JEH", montantHt: 0 }); rendreLignes(); });
+    dialog.querySelector("[data-add-prestation]").addEventListener("click", () => { lignes = lireLignes(); lignes.push({ type: "prestation", designation: "Prestation JEH", quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === form.elements.etudeId.value)?.jeh ?? "" }); rendreLignes(); });
+    dialog.querySelector("[data-add-frais]").addEventListener("click", () => { lignes = lireLignes(); lignes.push({ type: "frais", designation: "Frais hors JEH", montantHt: 0 }); rendreLignes(); });
     form.elements.etudeId.addEventListener("change", afficherTotaux);
     form.elements.date.addEventListener("change", afficherTotaux);
     if (id) dialog.querySelector("[data-delete]").addEventListener("click", async () => {
