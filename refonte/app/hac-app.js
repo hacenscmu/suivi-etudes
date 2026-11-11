@@ -1245,9 +1245,17 @@
       };
     }
     
-    module.exports = { creerSynchro, stockageNavigateur, transportFetch };
-    
+    async function prefixeStockageUtilisateur(token, cryptoApi = globalThis.crypto) {
+      if (typeof token !== "string" || !token.trim()) throw new TypeError("Un jeton est nécessaire pour isoler le stockage local");
+      if (!cryptoApi?.subtle?.digest || typeof TextEncoder !== "function") throw new Error("Web Crypto est nécessaire pour isoler le stockage local par compte");
+      const empreinte = await cryptoApi.subtle.digest("SHA-256", new TextEncoder().encode(token));
+      const hex = Array.from(new Uint8Array(empreinte), b => b.toString(16).padStart(2, "0")).join("");
+      return "hac.v3.user." + hex + ".";
     }
+    
+    module.exports = { creerSynchro, stockageNavigateur, transportFetch, prefixeStockageUtilisateur };
+    
+    },
   };
   const cache = Object.create(null);
 
