@@ -20,6 +20,8 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
 (async()=>{
  const cree=await serveur.transport({apiVersion:3,action:'signalerJEH',token:SALARIE,etudeId:'etude_0001',date:'2026-10-03',duree:240,nb:2,commentaire:'Oubli'});
  if(!cree.body.ok)throw new Error(cree.body.error.message);
+ const refusInitial=await serveur.transport({apiVersion:3,action:'signalerJEH',token:SALARIE,etudeId:'etude_0001',date:'2026-10-04',duree:60,nb:1,commentaire:'Deuxième oubli'});
+ if(!refusInitial.body.ok)throw new Error(refusInitial.body.error.message);
  const browser=await chromium.launch(),page=await browser.newPage(),erreurs=[];
  page.on('pageerror',e=>erreurs.push(e.message));
  page.on('dialog',async d=>{console.log('DIALOG '+d.message());await d.accept();});
@@ -39,10 +41,15 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
  await page.click('[data-signalement="ajouter"]');
  await page.waitForFunction(()=>document.querySelector('#content')?.innerText.includes('Ajoutée'),{timeout:5000});
  const records=serveur.lireDonnees();
- const signalement=Object.values(records.signalementsJEH||{})[0];
+ const signalement=Object.values(records.signalementsJEH||{}).find(x=>x.date==='2026-10-03');
  const ligne=Object.values(records.interventions||{}).find(x=>x.signalementId===signalement.id);
  ok('le signalement passe à Ajoutée et son statut est affiché',signalement.statut==='Ajoutée'&&await page.locator('#content').innerText().then(t=>t.includes('Ajoutée')));
  ok('une intervention est créée avec le salarié, l’étude, la date et la durée répartie',!!ligne&&ligne.membreId===SALARIE_ID&&ligne.etudeId==='etude_0001'&&ligne.date==='2026-10-03'&&ligne.minutesIndividuelles===120);
+ await page.click('[data-signalement="refuser"]');
+ await page.waitForFunction(()=>document.querySelector('#content')?.innerText.includes('Refusée'),{timeout:5000});
+ const apresRefus=serveur.lireDonnees();
+ const refus=Object.values(apresRefus.signalementsJEH||{}).find(x=>x.date==='2026-10-04');
+ ok('le refus est affiché et ne crée aucune intervention',refus?.statut==='Refusée'&&!Object.values(apresRefus.interventions||{}).some(x=>x.signalementId===refus.id));
  ok('aucune erreur JavaScript',erreurs.length===0);
  await browser.close();
  if(process.exitCode)process.exit(process.exitCode);
