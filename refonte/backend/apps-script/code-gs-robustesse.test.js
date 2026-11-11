@@ -479,3 +479,16 @@ test("une facture déjà déduite par une facture ultérieure ne peut être modi
   assert.equal(suppr.error.code, "INVALID_REQUEST");
   assert.match(suppr.error.message, /déduit encore/);
 });
+
+
+test("une intervention payée ou liée à un BV ne peut pas être supprimée côté serveur", async () => {
+  const donnees = {
+    etudes: { etude_0001: { id: "etude_0001", num: "HAC-001", date: "2026-09-01", statut: "En réalisation", montant: 1000, jeh: 400, _v: 1 } },
+    membres: { membre_0001: { id: "membre_0001", nomComplet: "A", _v: 1 } },
+    interventions: { interv_0001: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-11-01", statut: "Payé", minutesIndividuelles: 60, prixJehHt: 300, _v: 1 } },
+  };
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees });
+  const r = await body(s, req("delete", { collection: "interventions", id: "interv_0001", expectedVersion: 1, opId: "op_del_paid_iv_0001" }));
+  assert.equal(r.error.code, "INVALID_REQUEST");
+  assert.match(r.error.message, /payée ou liée à un BV/);
+});
