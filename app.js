@@ -416,12 +416,12 @@ function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(
 function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
 function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{}}}
 // Widgets : grille de 9 colonnes, taille minimale [largeur, hauteur] en cases ; chaque ligne est complétée pour prendre toute la largeur.
-let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[3,2],alert:[2,3],enc:[3,3],cli:[3,3]},DFULL=['banner','kpis'];
+let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[2,2],alert:[3,3],enc:[3,3],cli:[3,3]},DDEF={jeh:[3,2]},DFULL=['banner','kpis'];
 let DEDIT=false,WDRAG=null;
 // nombre de cases selon la largeur de l'écran : 9 sur téléphone, jusqu'à 18 sur grand écran (≈ 80 px par case)
 function dashCols(){const v=document.getElementById('view'),w=(v&&v.clientWidth)||window.innerWidth;return Math.max(9,Math.min(18,Math.round(w/80)))}
 let DRSZ=null;window.addEventListener('resize',()=>{clearTimeout(DRSZ);DRSZ=setTimeout(()=>{if(tab==='dash'&&dashCols()!==DCOLS)render()},150)});
-function dashSize(L,k){const m=DMIN[k],s=L.size[k]||[];return [Math.min(DCOLS,Math.max(m[0],s[0]|0)),Math.min(8,Math.max(m[1],s[1]|0))]}
+function dashSize(L,k){const m=DMIN[k],s=L.size[k]||DDEF[k]||[];return [Math.min(DCOLS,Math.max(m[0],s[0]|0)),Math.min(8,Math.max(m[1],s[1]|0))]}
 function packDash(L,ks){const rows=[];let cur=[],used=0;
   ks.forEach(k=>{const [w,h]=dashSize(L,k);if(used+w>DCOLS&&cur.length){rows.push(cur);cur=[];used=0}cur.push({k,w,h});used+=w});if(cur.length)rows.push(cur);
   rows.forEach(r=>{const sum=r.reduce((a,x)=>a+x.w,0),ex=DCOLS-sum,H=Math.max(...r.map(x=>x.h));
@@ -1040,7 +1040,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=24;
+const VERSION=25;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
