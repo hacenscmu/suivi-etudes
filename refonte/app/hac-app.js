@@ -1270,15 +1270,15 @@
         const L = interventions.filter(i => i.membreId === m.id);
         const jeh = i => num(i.minutesIndividuelles) / 480;
         const aPayer = L.filter(i => i.statut === "Pas payé"), payees = L.filter(i => i.statut === "Payé");
-        const jehAPayer = aPayer.reduce((s, i) => s + jeh(i), 0), brut = aPayer.reduce((s, i) => s + jeh(i) * num(i.prixJehHt), 0);
+        const jehAPayer = aPayer.reduce((s, i) => s + jeh(i), 0), sansPrix = aPayer.some(i => !(num(i.prixJehHt) > 0)), brut = aPayer.filter(i => num(i.prixJehHt) > 0).reduce((s, i) => s + jeh(i) * num(i.prixJehHt), 0);
         const assiette = jehAPayer > 0 ? Math.max(jehAPayer, 1) : 0;
         return {
           membreId: m.id, nom: m.nomComplet, jehAPayer, brut, assiette,
-          net: brut - assiette * base * cotTot,
-          cout: brut * (1 + chom) + assiette * base * patrTot,
+          net: sansPrix ? 0 : brut - assiette * base * cotTot,
+          cout: sansPrix ? 0 : brut * (1 + chom) + assiette * base * patrTot,
           jehDejaPayees: payees.reduce((s, i) => s + jeh(i), 0),
           dejaPaye: payees.reduce((s, i) => s + jeh(i) * num(i.prixJehHt), 0),
-          sansPrix: aPayer.some(i => !num(i.prixJehHt)),
+          sansPrix,
         };
       }).filter(r => r.jehAPayer > 0 || r.jehDejaPayees > 0);
       const total = lignes.reduce((t, r) => ({ brut: t.brut + r.brut, net: t.net + r.net, cout: t.cout + r.cout, jeh: t.jeh + r.jehAPayer }), { brut: 0, net: 0, cout: 0, jeh: 0 });
