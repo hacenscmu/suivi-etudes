@@ -480,7 +480,7 @@ button.b.ghost:disabled{opacity:.4}
   .card h3{font-size:12px;gap:5px}.card .hint{display:none}
   .legend{font-size:10.5px;gap:2px 8px}
   .tiles{grid-template-columns:1fr;gap:6px;margin-top:6px}.tile{padding:6px}.tile b,.tile b.tm{font-size:17px}.tile small{font-size:10.5px}.tile .ti{display:none}
-  .jehk2 .jk-g,.jehk2 .jk-m{display:none}.wgc .jehk2 .jk-n{justify-content:center;text-align:center;flex:1}
+  .jehk2 .jk-m{display:none}.wgc .jehk2 .jk-n{justify-content:center;text-align:center;flex:1}
   .jehk2 .jk-h small{font-size:10.5px}
   .jehk2 .jehbig{font-size:44px;letter-spacing:-1.5px}
   .ali{flex-direction:column;align-items:flex-start;gap:4px;padding:8px}.aln{width:100%;min-width:0}.alx{font-size:11.5px}.ali .chev{display:none}
@@ -535,3 +535,19 @@ button.b.ghost:disabled{opacity:.4}
 .wrs::before{content:"";position:absolute;right:6px;bottom:6px;width:16px;height:16px;border-right:4px solid var(--ink);border-bottom:4px solid var(--ink);border-radius:0 0 8px 0}
 .wrs i{position:absolute;right:30px;bottom:6px;font:700 11px/1 inherit;font-style:normal;background:var(--ink);color:var(--card);padding:4px 6px;border-radius:7px;white-space:nowrap}
 .wrsz{z-index:6;align-self:start;justify-self:start}.wrsz>.card{outline:3px solid var(--acc)!important}
+
+/* v34 : grille libre — ombre de l'emplacement pendant un déplacement */
+.wghost{border:2px dashed var(--acc);border-radius:18px;background:color-mix(in srgb,var(--acc) 10%,transparent);pointer-events:none;z-index:1}
+.wdrg{z-index:6}
+
+/* v35 : crayon → « Terminé » ; aide de disposition sur une ligne ; histogramme JEH masqué seulement si vraiment étroit */
+.pen.on{width:auto;padding:0 14px;background:var(--acc);color:#fff;border-color:transparent;font:600 13.5px/1 inherit}
+.wbar2{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 2px 10px}.wbar2 small{flex:1 1 100%;color:var(--mute);font-size:12px}.wbar2 small svg{vertical-align:-2px}
+@container (max-width:250px){.jehk2 .jk-g{display:none}}
+
+.wdrg{box-shadow:0 16px 40px rgba(0,0,0,.28)!important;opacity:.92;transform:scale(1.02);z-index:50}
+.wins{display:none}
+.legend .lgi{vertical-align:-3px;margin-right:4px;flex:none}.legend span{display:inline-flex;align-items:center}
+
+/* v39 : cartes études — nom de l'étude en gras, client en discret */
+.ec2 .et b{font-size:16px;font-weight:800}.ec2 .et .ecl{color:var(--mute);font-size:12.5px;font-weight:500}

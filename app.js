@@ -291,6 +291,8 @@ function donut(parts,center,sub){
 function legendHtml(parts){return '<div class="legend">'+parts.map(p=>`<span><i style="background:${p.c}"></i>${esc(p.l)} · ${p.v}</span>`).join('')+'</div>'}
 function smooth(a){const f=(x,i)=>x[i]===null?null:((x[i-1]==null?x[i]:x[i-1])+2*x[i]+(x[i+1]==null?x[i]:x[i+1]))/4;const o=a.map((_,i)=>f(a,i));return o}
 let GRAD=0;
+// icônes de légende des courbes (les mêmes que les tuiles sous le graphique)
+const LGI=['<path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/>', '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/>', '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/>', '<path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/>'];
 // Dans un widget, la courbe est redessinée aux dimensions exactes de sa case (pas de bandes vides, texte net).
 let LCS={},LCN=0;
 function fitCharts(){document.querySelectorAll('.wgc .chartbox[data-lc]').forEach(b=>{const a=LCS[b.dataset.lc];if(!a)return;const w=Math.round(b.clientWidth),h=Math.round(b.clientHeight);if(w<40||h<30)return;const t=document.createElement('div');t.innerHTML=lineChart(a[0],a[1],a[2],a[3],w,h);const nb=t.querySelector('.chartbox');nb.removeAttribute('data-lc');b.replaceWith(nb)})}
@@ -298,7 +300,7 @@ window.addEventListener('resize',()=>{clearTimeout(window.__fc);window.__fc=setT
 function lineChart(pts,series,fmt,int,W0,H0){
   let lc='';if(!W0){if(LCN%40===0&&LCN)LCS={};LCS[++LCN]=[pts,series,fmt,int];lc=' data-lc="'+LCN+'"'}
   const W=W0||560,H=H0||230,nar=W<220,pl=nar?6:44,pr=nar?6:10,pt=nar?6:12,pb=nar?6:26;
-  const sm=series.map(s=>({c:s.c,l:s.l,a:smooth(smooth(s.v)),area:s.area}));
+  const sm=series.map(s=>({c:s.c,l:s.l,a:smooth(smooth(s.v)),area:s.area,ico:s.ico}));
   let mx=0;sm.forEach(s=>s.a.forEach(v=>{if(v!==null&&v>mx)mx=v}));if(mx<=0)mx=1;
   const nice=int?Math.max(4,Math.ceil(mx/4)*4):(()=>{const p=Math.pow(10,Math.floor(Math.log10(mx)));const m=mx/p;return (m<=1?1:m<=2?2:m<=5?5:10)*p})();
   const X=i=>pl+(W-pl-pr)*i/(pts.length-1),Y=v=>pt+(H-pt-pb)*(1-v/nice);
@@ -312,7 +314,7 @@ function lineChart(pts,series,fmt,int,W0,H0){
     fills+=`<path d="${d}L${X(lastI)} ${Y(0)}L${X(s.a.findIndex(v=>v!==null))} ${Y(0)}Z" fill="url(#${id})"/>`;
     lines+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`});
   g+=fills+lines;
-  return `<div class="chartbox"${lc}><svg viewBox="0 0 ${W} ${H}" role="img"><defs>${defs}</defs>${g}</svg></div><div class="legend">${sm.map(s=>`<span><i style="background:${s.c}"></i>${esc(s.l)}</span>`).join('')}</div>`;
+  return `<div class="chartbox"${lc}><svg viewBox="0 0 ${W} ${H}" role="img"><defs>${defs}</defs>${g}</svg></div><div class="legend">${sm.map(s=>`<span>${s.ico?`<svg class="lgi" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:${s.c}" aria-hidden="true">${s.ico}</svg>`:`<i style="background:${s.c}"></i>`}${esc(s.l)}</span>`).join('')}</div>`;
 }
 
 /* ---------- champs de saisie ---------- */
@@ -404,7 +406,7 @@ function render(){
   const views={moi:vMoi,dash:vDash,etudes:vEtudes,finances:vFinances,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams};
   const scrolls=[...document.querySelectorAll('.tw')].map(e=>e.scrollLeft);
   v.innerHTML=views[tab](D);fitCharts();
-  const hs=$('#hsel');if(hs)hs.innerHTML=tab==='finances'?HSEL:tab==='dash'?HSEL+'<button class="pen" type="button" data-dashed="1" aria-label="Modifier le tableau de bord"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>':'';
+  const hs=$('#hsel');if(hs)hs.innerHTML=tab==='finances'?HSEL:tab==='dash'?HSEL+(DEDIT?'<button class="pen on" type="button" data-dashed="1" aria-label="Terminer la disposition">Terminé</button>':'<button class="pen" type="button" data-dashed="1" aria-label="Modifier le tableau de bord"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>'):'';
   
   document.querySelectorAll('.tw').forEach((e,i)=>{if(scrolls[i])e.scrollLeft=scrolls[i]});
   if(fk){const [c,id,f]=fk.split('|');const el=v.querySelector(`[data-c="${c}"][data-id="${id}"][data-f="${f}"]`);if(el){el.focus({preventScroll:true});try{if(el.setSelectionRange&&el.type!=='number'&&el.type!=='date')el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}
@@ -414,9 +416,9 @@ const DASH_BLOCKS=[['banner','Bandeau des alertes'],['kpis','Recette, CA signé,
 // disposition propre à chaque appareil (non synchronisée)
 function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(e){return {}}}
 function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
-function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{}}}
+function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{},grid:c.grid||{}}}
 // Widgets : grille de 9 colonnes, taille minimale [largeur, hauteur] en cases ; chaque ligne est complétée pour prendre toute la largeur.
-let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[2,1],alert:[3,2],enc:[4,3],cli:[4,3]},DDEF={jeh:[3,1]},DFULL=['banner','kpis'];
+let DCOLS=9;const DMIN={vue:[3,2],det:[3,2],jeh:[2,2],alert:[3,2],enc:[4,3],cli:[4,3]},DDEF={jeh:[3,2]},DFULL=['banner','kpis'];
 let DEDIT=false,WDRAG=null;
 // nombre de cases selon la largeur de l'écran : 3 sur téléphone (blocs l'un sous l'autre, pleine largeur), puis ≈ 80 px par case jusqu'à 18
 function dashCols(){const v=document.getElementById('view'),w=(v&&v.clientWidth)||window.innerWidth;return w<600?3:Math.max(9,Math.min(18,Math.round(w/80)))}
@@ -435,6 +437,29 @@ function packDash(L,ks){const N=DCOLS,rows=[];let r=null;
   const out=[];let y=0;rows.forEach(r=>{const W=split(N,r.cols.map(c=>c.cw));let x=0;
     r.cols.forEach((c,ci)=>{const Hs=split(r.H,c.items.map(i=>i.h));let yy=y;c.items.forEach((it,ii)=>{out.push({k:it.k,x,y:yy,W:W[ci],H:Hs[ii]});yy+=Hs[ii]});x+=W[ci]});y+=r.H});
   return out}
+// Disposition en lignes (propre à chaque appareil et à chaque nombre de colonnes) : on choisit la ligne, l'ordre et la largeur de chaque bloc.
+// Chaque ligne remplit toute la largeur ; tous les blocs d'une ligne prennent la hauteur du plus haut (par défaut : la plus grande des hauteurs minimales).
+function dashNorm(lines,fixed){const N=DCOLS,out=[];let q=lines.map(l=>l.slice());
+  for(let i=0;i<q.length;i++){const l=q[i].map(it=>{const m=DMIN[it.k];return {k:it.k,w:Math.min(N,Math.max(m[0],it.w|0)),h:Math.min(12,Math.max(m[1],it.h|0))}});if(!l.length)continue;
+    const over=[];let sum=()=>l.reduce((a,x)=>a+x.w,0);
+    for(let j=l.length-1;j>=0&&sum()>N;j--){if(l[j].k===fixed)continue;l[j].w=Math.max(DMIN[l[j].k][0],l[j].w-(sum()-N))}
+    while(sum()>N&&l.length>1){let j=l.length-1;if(l[j].k===fixed)j--;over.unshift(l.splice(j,1)[0])}
+    let ex=N-sum();if(ex>0){const oth=l.filter(x=>x.k!==fixed),tg=oth.length?oth:l,s0=tg.reduce((a,x)=>a+x.w,0);let r=ex;tg.forEach((x,ii)=>{const a=ii===tg.length-1?r:Math.floor(ex*x.w/s0);x.w+=a;r-=a})}
+    out.push(l);if(over.length)q.splice(i+1,0,over)}
+  return out}
+function dashLines(L,ks){let G=L.grid[DCOLS];let lines;
+  if(Array.isArray(G))lines=G.map(l=>l.filter(it=>ks.includes(it.k)));
+  else{lines=[];let cur=[],u=0;ks.forEach(k=>{const [w,h]=dashSize(L,k);if(u+w>DCOLS&&cur.length){lines.push(cur);cur=[];u=0}cur.push({k,w,h:DMIN[k][1]});u+=w});if(cur.length)lines.push(cur)}
+  const seen=new Set(lines.flat().map(x=>x.k)),add=ks.filter(k=>!seen.has(k));if(add.length)lines.push(add.map(k=>({k,w:DMIN[k][0],h:DMIN[k][1]})));
+  return dashNorm(lines.filter(l=>l.length))}
+function linesPos(lines){const P={};let yy=0;lines.forEach(l=>{const H=Math.max(...l.map(x=>x.h));let xx=0;l.forEach(x=>{P[x.k]={x:xx,y:yy,w:x.w,h:H};xx+=x.w});yy+=H});return P}
+function applyMove(lines,k,t){if(t.before===k)return lines;let L2=lines.map(l=>l.map(x=>Object.assign({},x)));const src=L2.findIndex(l=>l.some(x=>x.k===k)),it=L2[src].find(x=>x.k===k);
+  L2[src]=L2[src].filter(x=>x!==it);
+  if(t.nl!=null){it.w=DMIN[k][0];L2.splice(t.nl,0,[it])}
+  else{if(t.li!==src)it.w=DMIN[k][0];const l=L2[t.li];const i=t.before?l.findIndex(x=>x.k===t.before):l.length;l.splice(i<0?l.length:i,0,it)}
+  return dashNorm(L2.filter(l=>l.length),null)}
+function dashSaveLines(lines){const L=dashLayout();L.grid[DCOLS]=lines;dashSave(L)}
+let DLINES=[];
 function dashSec(){const L=dashLayout(),lab=Object.fromEntries(DASH_BLOCKS);
   return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Pour la taille des blocs : bouton ✎ du tableau de bord. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
 function vDash(D){
@@ -465,15 +490,16 @@ function vDash(D){
      return `<div class="card jehk2 trio"><div class="jk-h"><span class="jk-ic">${ic('users',16)}</span><div><b>JEH réalisées</b><small>${d.all?'Tout l’historique':esc(mandatSel)} · par les étudiants</small></div></div>
       <div class="jk-b"><div class="jk-n"><div class="jehbig">${nf1.format(Math.round(d.jehEtud*10)/10)}</div><div class="jk-s">JEH · ${d.nbEtud} étudiant${d.nbEtud>1?'s':''}</div>${cur>0?`<div class="jk-m">+${nf1.format(Math.round(cur*10)/10)} ce mois-ci</div>`:''}</div>
       <div class="jk-g">${d.jehMois.map((m,i)=>`<div class="jk-c${i===5?' cur':''}"><span class="jk-v">${m.v?nf1.format(Math.round(m.v*10)/10):''}</span><span class="jk-bar"><i style="height:${Math.max(4,Math.round(m.v/mx*100))}%"></i></span><small>${esc(m.l)}</small></div>`).join('')}</div></div></div>`})(),
-   enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Montants HT cumulés, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
-   cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Nombre cumulé, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
+   enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Montants HT cumulés, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true,ico:LGI[0]},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep,ico:LGI[1]}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
+   cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Nombre cumulé, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true,ico:LGI[2]},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid,ico:LGI[3]}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
   const L=dashLayout();
-  DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='',seg=[];
-  const tb=k=>{const [w,h]=dashSize(L,k);return `<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',15)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div><span class="wrs" data-wk="${k}" aria-label="Étirer pour agrandir ou réduire"><i>${w}×${h}</i></span>`};
-  const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${packDash(L,seg).map(x=>`<div class="wgc${x.H===1?' wh1':''}" data-wk="${x.k}" style="grid-column:${x.x+1}/span ${x.W};grid-row:${x.y+1}/span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')}</div>`;seg=[]};
-  ks.forEach(k=>{if(DFULL.includes(k)){flush();out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`}else seg.push(k)});flush();
+  DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='';
+  const gk=ks.filter(k=>!DFULL.includes(k)),lines=dashLines(L,gk);DLINES=lines;const P=linesPos(lines);
+  const tb=k=>`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',15)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div><span class="wrs" data-wk="${k}" aria-label="Étirer pour agrandir ou réduire"><i>${P[k].w}×${P[k].h}</i></span>`;
+  ks.filter(k=>DFULL.includes(k)).forEach(k=>{out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`});
+  if(gk.length)out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${gk.map(k=>{const p=P[k];return `<div class="wgc${p.h===1?' wh1':''}" data-wk="${k}" style="grid-column:${p.x+1}/span ${p.w};grid-row:${p.y+1}/span ${p.h}">${B[k]}${DEDIT?tb(k):''}</div>`}).join('')}</div>`;
   const hid=DASH_BLOCKS.filter(([k])=>L.hide[k]);
-  const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, étirez le coin ◢ pour l’agrandir ou le réduire. Chaque ligne s’étire ensuite pour remplir l’écran.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
+  const bar=DEDIT?`<div class="wbar2"><small>Glissez ${ic('move',13)} pour déplacer, étirez le coin ◢ pour redimensionner.</small>${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}<button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button></div>`:'';
   return `<div class="dwrap${DEDIT?' dedit':''}">${bar}${out}</div>`;
 }
 /* ---------- listes en cartes ---------- */
@@ -505,7 +531,7 @@ function cardEtude(e){
   const ini=p=>esc(iniP(p));
   const jf=num(e.J),jr=num(e.R),jeh=(jf>0||jr>0)?`<span title="JEH réalisées sur JEH facturées">${ic('clock',13)}${nf1.format(Math.round(jr*10)/10)} JEH réalisées sur ${nf1.format(Math.round(jf*10)/10)}</span>`:'';
   return `<button class="card ecard ec2" data-open="${e.id}" data-st="${cls}">
-  <div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>N° ${esc(e.num)||'à saisir'}${e.resume?' · '+esc(e.resume):''}</span></div>${pill(e.statut||'Sans statut',cls)}</div>
+  <div class="eh"><div class="et"><b>${esc(e.code||e.resume||('Étude n° '+(e.num||'à saisir')))}</b><span class="ecl">${esc(e.client)||'Sans client'}${e.code||e.resume?' · N° '+(esc(e.num)||'à saisir'):''}${e.code&&e.resume?' · '+esc(e.resume):''}</span></div>${pill(e.statut||'Sans statut',cls)}</div>
   ${m>0?`<div class="eprog"><div class="eph"><span><b>${eur0(e.K)}</b> encaissés sur ${eur0(m)} TTC</span><b>${pct} %</b></div><div class="svt"><i style="width:${pct}%"></i></div></div>`:'<div class="small" style="margin-top:10px">Montant non renseigné</div>'}
   <div class="etags">${e.facture?`<span class="etag">${esc(e.facture)}</span>`:''}${ech!==null?`<span class="etag${late?' late':''}">${late?'En retard · ':'Échéance '}${fdate(ech)}</span>`:''}${e.N==='À payer'?'<span class="etag bv">BV à payer</span>':''}${e.collab==='Récurrente'?`<span class="etag">Récurrente${e.cadence?' · '+esc(e.cadence.toLowerCase()):''}</span>`:''}</div>
   <div class="emeta"><span class="ef3">${pers.length?`<span class="avs">${pers.slice(0,4).map(p=>`<i title="${esc(p)}">${ini(p)}</i>`).join('')}${pers.length>4?`<i>+${pers.length-4}</i>`:''}</span>`:''}${jeh}<span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span></span></div>
@@ -822,22 +848,34 @@ function vParams(D){
 let PSEC=null,DRAG=null;
 document.addEventListener('pointerdown',e=>{const h=e.target.closest('.hdl');if(!h)return;e.preventDefault();const row=h.closest('.li'),rows=[...row.parentElement.children],i=rows.indexOf(row);DRAG={k:h.dataset.k,from:i,to:i,row,rows,y0:e.clientY};row.classList.add('drg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
 document.addEventListener('pointermove',e=>{if(!DRAG)return;const dy=e.clientY-DRAG.y0,H=DRAG.row.offsetHeight+6,n=DRAG.rows.length,f=DRAG.from;DRAG.row.style.transform=`translateY(${dy}px)`;const to=Math.max(0,Math.min(n-1,f+Math.round(dy/H)));DRAG.to=to;DRAG.rows.forEach((r,i)=>{if(r===DRAG.row)return;const sh=(f<to&&i>f&&i<=to)?-H:(f>to&&i<f&&i>=to)?H:0;r.style.transform=sh?`translateY(${sh}px)`:''})});
-document.addEventListener('pointerdown',e=>{const h=e.target.closest('.wdh');if(!h||!DEDIT)return;e.preventDefault();const el=h.closest('[data-wk].wgc,[data-wk].wfull');if(!el)return;WDRAG={k:h.dataset.wk,el,x0:e.clientX,y0:e.clientY};el.classList.add('wdrg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
-document.addEventListener('pointermove',e=>{if(!WDRAG)return;WDRAG.el.style.transform=`translate(${e.clientX-WDRAG.x0}px,${e.clientY-WDRAG.y0}px)`;WDRAG.cx=e.clientX;WDRAG.cy=e.clientY;
-  document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));const t=wTarget(e.clientX,e.clientY);if(t)t.el.classList.add('wtgt')});
-function wTarget(x,y){const el=WDRAG&&WDRAG.el;if(!el)return null;el.style.pointerEvents='none';const u=document.elementFromPoint(x,y);el.style.pointerEvents='';const t=u&&u.closest('.dwrap [data-wk].wgc,.dwrap [data-wk].wfull');if(!t||t===el)return null;const r=t.getBoundingClientRect();return {el:t,k:t.dataset.wk,after:t.classList.contains('wfull')?y>r.top+r.height/2:x>r.left+r.width/2}}
-// Étirer un bloc par son coin (doigt ou souris) : la taille est arrondie à la case, sans descendre sous le minimum.
-let WRS=null;
-document.addEventListener('pointerdown',e=>{const h=e.target.closest('.wrs');if(!h||!DEDIT)return;e.preventDefault();e.stopPropagation();const el=h.closest('.wgc'),g=el.parentElement,cs=getComputedStyle(g),gap=parseFloat(cs.columnGap)||8,r=el.getBoundingClientRect();
-  WRS={k:h.dataset.wk,el,lab:h.querySelector('i'),x0:e.clientX,y0:e.clientY,w0:r.width,h0:r.height,gap,colW:(g.clientWidth-gap*(DCOLS-1))/DCOLS,rowH:parseFloat(cs.gridAutoRows)||92};el.classList.add('wrsz');try{h.setPointerCapture(e.pointerId)}catch(x){}},true);
-document.addEventListener('pointermove',e=>{if(!WRS)return;const R=WRS,m=DMIN[R.k],nw=Math.max(40,R.w0+e.clientX-R.x0),nh=Math.max(40,R.h0+e.clientY-R.y0);
-  R.el.style.width=nw+'px';R.el.style.height=nh+'px';
-  R.cw=Math.max(m[0],Math.min(DCOLS,Math.round((nw+R.gap)/(R.colW+R.gap))));R.ch=Math.max(m[1],Math.min(8,Math.round((nh+R.gap)/(R.rowH+R.gap))));R.lab.textContent=R.cw+'×'+R.ch});
-const endWRS=()=>{if(!WRS)return;const R=WRS;WRS=null;if(R.cw){const L=dashLayout();L.size[R.k]=[R.cw,R.ch];dashSave(L)}render()};
-document.addEventListener('pointerup',endWRS);document.addEventListener('pointercancel',endWRS);
-const endWDrag=()=>{if(!WDRAG)return;const W=WDRAG,t=W.cx!=null?wTarget(W.cx,W.cy):null;WDRAG=null;W.el.style.transform='';W.el.classList.remove('wdrg');document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));
-  if(t&&t.k!==W.k){const L=dashLayout(),o=L.order.filter(k=>k!==W.k);o.splice(o.indexOf(t.k)+(t.after?1:0),0,W.k);L.order=o;dashSave(L)}render()};
-document.addEventListener('pointerup',endWDrag);document.addEventListener('pointercancel',endWDrag);
+// Déplacer (poignée) : le bloc suit le doigt et les autres se décalent en direct pour lui faire de la place (comme des applis qu'on intercale).
+// Étirer (coin ◢) : largeur et hauteur en cases ; les autres blocs de la ligne se partagent le reste de la largeur.
+let WOP=null;
+function wGeo(el){const g=el.parentElement,cs=getComputedStyle(g),gap=parseFloat(cs.columnGap)||8;return {g,gap,colW:(g.clientWidth-gap*(DCOLS-1))/DCOLS,rowH:parseFloat(cs.gridAutoRows)||92}}
+function wPlace(W){const P=linesPos(W.lines);W.g.querySelectorAll('.wgc').forEach(c=>{if(c===W.el)return;const p=P[c.dataset.wk];if(p){c.style.gridColumn=(p.x+1)+'/span '+p.w;c.style.gridRow=(p.y+1)+'/span '+p.h}});
+  const p=P[W.k];W.gh.style.gridColumn=(p.x+1)+'/span '+p.w;W.gh.style.gridRow=(p.y+1)+'/span '+p.h}
+document.addEventListener('pointerdown',e=>{if(!DEDIT)return;const h=e.target.closest('.wdh,.wrs');if(!h)return;const el=h.closest('.wgc');if(!el)return;e.preventDefault();e.stopPropagation();
+  const k=el.dataset.wk,G=wGeo(el),r=el.getBoundingClientRect(),mode=h.classList.contains('wrs')?'rs':'mv';
+  WOP=Object.assign({k,el,mode,x0:e.clientX,y0:e.clientY,r,lines:DLINES},G);
+  if(mode==='mv'){const gh=document.createElement('div');gh.className='wghost';G.g.appendChild(gh);WOP.gh=gh;Object.assign(el.style,{position:'fixed',left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',margin:0});el.classList.add('wdrg');wPlace(WOP)}
+  else el.classList.add('wrsz');
+  try{h.setPointerCapture(e.pointerId)}catch(x){}},true);
+function wDrop(x,y){const W=WOP,cards=[...W.g.querySelectorAll('.wgc')].filter(c=>c!==W.el).map(c=>({k:c.dataset.wk,r:c.getBoundingClientRect()}));cards.push({k:W.k,r:W.gh.getBoundingClientRect()});
+  const bands=W.lines.map((l,li)=>{const rs=cards.filter(c=>l.some(it=>it.k===c.k));return rs.length?{li,top:Math.min(...rs.map(c=>c.r.top)),bot:Math.max(...rs.map(c=>c.r.bottom)),rs}:null}).filter(Boolean);
+  for(const b of bands){const e=Math.min(28,(b.bot-b.top)*.2);if(y<b.top+e)return {nl:b.li};
+    if(y<=b.bot-e){const rs=b.rs.slice().sort((a,c)=>a.r.left-c.r.left);const i=rs.findIndex(c=>x<c.r.left+c.r.width/2);return {li:b.li,before:i<0?null:rs[i].k}}
+    if(y<b.bot+6)return {nl:b.li+1}}
+  return {nl:W.lines.length}}
+document.addEventListener('pointermove',e=>{if(!WOP)return;const W=WOP,m=DMIN[W.k],dx=e.clientX-W.x0,dy=e.clientY-W.y0,cx=W.colW+W.gap,cy=W.rowH+W.gap;
+  if(e.clientY>innerHeight-110)scrollBy(0,12);else if(e.clientY<80)scrollBy(0,-12);
+  if(W.mode==='mv'){W.el.style.left=(W.r.left+dx)+'px';W.el.style.top=(W.r.top+dy)+'px';
+    const t=wDrop(e.clientX,e.clientY),key=JSON.stringify(t);if(key!==W.tk){W.tk=key;const nl=applyMove(W.lines,W.k,t);if(JSON.stringify(nl)!==JSON.stringify(W.lines)){W.lines=nl;wPlace(W)}}}
+  else{const nw=Math.max(40,W.r.width+dx),nh=Math.max(40,W.r.height+dy);W.el.style.width=nw+'px';W.el.style.height=nh+'px';
+    W.nw=Math.max(m[0],Math.min(DCOLS,Math.round((nw+W.gap)/cx)));W.nh=Math.max(m[1],Math.min(12,Math.round((nh+W.gap)/cy)));const l=W.el.querySelector('.wrs i');if(l)l.textContent=W.nw+'×'+W.nh}});
+const endWOP=()=>{if(!WOP)return;const W=WOP;WOP=null;let lines=W.lines;
+  if(W.mode==='rs'&&W.nw){lines=lines.map(l=>l.map(x=>Object.assign({},x)));const l=lines.find(l=>l.some(x=>x.k===W.k)),it=l.find(x=>x.k===W.k);it.w=W.nw;it.h=W.nh;l.forEach(x=>{if(x!==it)x.h=DMIN[x.k][1]});lines=dashNorm(lines,W.k)}
+  dashSaveLines(lines);render()};
+document.addEventListener('pointerup',endWOP);document.addEventListener('pointerup',endWOP);document.addEventListener('pointerup',endWOP);document.addEventListener('pointercancel',endWOP);
 const endDrag=()=>{if(!DRAG)return;const {k,from,to}=DRAG;DRAG=null;if(from!==to){const c=ensureCfg();if(k==='dash'){const L=dashLayout();const [x]=L.order.splice(from,1);L.order.splice(to,0,x);dashSave(L);render()}else{const [x]=c[k].splice(from,1);c[k].splice(to,0,x);saveCfg();render()}}if(PSEC)drawParam()};
 document.addEventListener('pointerup',endDrag);document.addEventListener('pointercancel',endDrag);
 function openParam(k){PSEC=k;ED=null;drawParam()}
@@ -919,7 +957,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.wreset){if(confirm('Revenir à la disposition par défaut ?')){dashSave({});render()}return}
   if(b.dataset.wshow){const L=dashLayout();delete L.hide[b.dataset.wshow];dashSave(L);render();return}
   if(b.dataset.whide){const L=dashLayout();L.hide[b.dataset.whide]=true;dashSave(L);render();return}
-  if(b.dataset.wsz){const [k,a,d]=b.dataset.wsz.split(':'),L=dashLayout(),[w,h]=dashSize(L,k);L.size[k]=a==='w'?[w+ +d,h]:[w,h+ +d];L.size[k]=[Math.max(DMIN[k][0],Math.min(DCOLS,L.size[k][0])),Math.max(DMIN[k][1],Math.min(8,L.size[k][1]))];dashSave(L);render();return}
+  if(false&&b.dataset.wsz){const [k,a,d]=b.dataset.wsz.split(':'),L=dashLayout(),[w,h]=dashSize(L,k);L.size[k]=a==='w'?[w+ +d,h]:[w,h+ +d];L.size[k]=[Math.max(DMIN[k][0],Math.min(DCOLS,L.size[k][0])),Math.max(DMIN[k][1],Math.min(8,L.size[k][1]))];dashSave(L);render();return}
   if(b.dataset.goalerts){FLT.etudes.s='alert';tab='etudes';lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.open){openRep(b.dataset.open);return}
   if(b.dataset.openc!==undefined){OPENC=b.dataset.openc;render();window.scrollTo(0,0);return}
@@ -1060,7 +1098,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=33;
+const VERSION=39;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
