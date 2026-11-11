@@ -366,13 +366,14 @@
     const paie = calculerPaie({ interventions: data.interventions, membres: [m], config: {} }).lignes[0] || {};
     const bvs = [...data.bvs].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     const netDejaRecu = bvs.reduce((s, bv) => s + Number(bv.net || 0), 0);
+    const netPartiel = bvs.some(bv => bv.net === undefined);
     const jeh = n => Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 3 });
     const etude = id => data.etudes.find(e => e.id === id);
     const tuile = (label, valeur) => '<div class="stat"><div class="label">' + label + '</div><strong>' + valeur + "</strong></div>";
     return heading("Bonjour " + escapeHtml(m.nomComplet || m.nom || ""), "Votre espace personnel") +
       '<section class="stats">' + tuile("JEH à régler", jeh(paie.jehAPayer)) + tuile("Brut à régler", money(paie.brut)) +
       tuile("Net estimé à recevoir", money(paie.net)) + tuile("Net déjà versé (BV)", money(netDejaRecu)) + "</section>" +
-      '<section class="panel"><p class="sub">Le net à recevoir est calculé avec les paramètres de paie en vigueur. Les versements déjà effectués sont repris depuis vos bulletins de versement.</p></section>' +
+      '<section class="panel"><p class="sub">Le net à recevoir est calculé avec les paramètres de paie en vigueur. Les versements déjà effectués sont repris depuis vos bulletins de versement.' + (netPartiel ? " Certains anciens BV partagés ne permettent pas d’isoler un montant individuel ; ces totaux sont masqués pour protéger les autres personnes." : "") + '</p></section>' +
       heading("Mes interventions", data.interventions.length + " ligne(s)") +
       '<section class="listbox rows">' + (data.interventions.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(i => {
         const e = etude(i.etudeId);
