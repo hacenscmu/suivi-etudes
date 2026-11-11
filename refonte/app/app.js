@@ -233,10 +233,11 @@
   }
 
   function signalementsJEHHtml() {
-    const enAttente = (data.signalementsJEH || []).filter(s => s.statut === "En attente");
+    const tous = (data.signalementsJEH || []).slice().sort((a,b)=>String(b.cree||"").localeCompare(String(a.cree||"")));
+    const enAttente = tous.filter(s => s.statut === "En attente");
     if (session?.role !== "Membre") return "";
-    return heading("Signalements JEH à traiter", enAttente.length + " en attente") +
-      '<section class="listbox rows">' + (enAttente.map(s => {
+    return heading("Signalements JEH", enAttente.length + " en attente · " + tous.length + " au total") +
+      '<section class="listbox rows">' + (tous.map(s => {
         const membre = data.membres.find(m => m.id === s.membreId);
         const etude = data.etudes.find(e => e.id === s.etudeId);
         return '<div class="item"><div class="item-main"><strong>' + escapeHtml(membre?.nomComplet || membre?.nom || "Salarié") + ' · ' + escapeHtml(etude?.num || "Étude") + '</strong><small>' + escapeHtml(s.date) + ' · ' + Number(s.minutesIndividuelles || 0) + ' min individuelles · ' + Number(s.nbPersonnes || 1) + ' personne(s)' + (s.commentaire ? ' · ' + escapeHtml(s.commentaire) : '') + '</small></div><div class="item-actions"><button class="action" data-signalement="ajouter" data-id="' + s.id + '">Créer la ligne</button><button class="ghost" data-signalement="refuser" data-id="' + s.id + '">Refuser</button></div></div>';
