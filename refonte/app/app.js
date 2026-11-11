@@ -690,16 +690,118 @@
   }
   function ouvrirFacture(id, preset = {}) {
     const f = id ? data.factures.find(x => x.id === id) : preset;
-    formulaire({ titre: id ? "Modifier la facture" : "Nouvelle facture", valeurs: { type: "Acompte", etat: "Émise", date: aujourdHui(), ...f }, champs: [
-      { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
-      { name: "type", label: "Type", type: "select", required: true, options: ["Acompte", "Intermédiaire", "Solde"] },
-      { name: "etat", label: "État", type: "select", required: true, options: ["Émise", "Payée"] },
-      { name: "montant", label: "Montant TTC (€)", type: "number", required: true },
-      { name: "date", label: "Date d’émission", type: "date" },
-      { name: "echeance", label: "Échéance", type: "date" },
-      { name: "datePaiement", label: "Date de paiement", type: "date" },
-    ], onValider: d => { if (d.etat === "Payée" && !d.datePaiement) d.datePaiement = aujourdHui(); return enregistrer("factures", id, d, "facture"); },
-      supprimer: id ? () => supprimerEnregistrement("factures", id) : null });
+    // Les factures historiques saisies en TTC restent éditables dans leur format d'origine.
+    if (id && !Array.isArray(f?.lignes)) {
+      formulaire({ titre: "Modifier la facture historique", valeurs: { type: "Acompte", etat: "Émise", date: aujourdHui(), ...f }, champs: [
+        { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
+        { name: "type", label: "Type", type: "select", required: true, options: ["Acompte", "Intermédiaire", "Solde"] },
+        { name: "etat", label: "État", type: "select", required: true, options: ["Émise", "Payée"] },
+        { name: "montant", label: "Montant TTC (€)", type: "number", required: true },
+        { name: "date", label: "Date d’émission", type: "date" },
+        { name: "echeance", label: "Échéance", type: "date" },
+        { name: "datePaiement", label: "Date de paiement", type: "date" },
+      ], onValider: d => { if (d.etat === "Payée" && !d.datePaiement) d.datePaiement = aujourdHui(); return enregistrer("factures", id, d, "facture"); },
+        supprimer: () => supprimerEnregistrement("factures", id) });
+      return;
+    }
+
+    const dialog = document.createElement("dialog");
+    dialog.className = "study-dialog";
+    const etudeDefaut = f?.etudeId || data.etudes[0]?.id || "";
+    const tva = Number(synchro?.lireConfig()?.tva ?? 0.2);
+    let lignes = Array.isArray(f?.lignes) ? f.lignes.map(l => ({ ...l })) : [
+      { type: "prestation", designation: "Prestation JEH", quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === etudeDefaut)?.jeh ?? "" },
+    ];
+    const optionsEtudes = data.etudes.map(e => '<option value="' + escapeHtml(e.id) + '"' + (e.id === etudeDefaut ? " selected" : "") + ">" + escapeHtml(nomEtude(e)) + "</option>").join("");
+    const options = (items, value) => items.map(v => '<option value="' + escapeHtml(v) + '"' + (v === value ? " selected" : "") + ">" + escapeHtml(v) + "</option>").join("");
+    dialog.innerHTML = '<form method="dialog"><div class="section-head"><h2>' + (id ? "Modifier la facture par lignes" : "Nouvelle facture par lignes") + '</h2><button class="ghost close-dialog" value="cancel" aria-label="Fermer">×</button></div>' +
+      '<label>Étude<select name="etudeId" required>' + optionsEtudes + '</select></label>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label>Type<select name="type">' + options(["Acompte", "Intermédiaire", "Solde"], f?.type || "Acompte") + '</select></label>' +
+      '<label>État<select name="etat">' + options(["Émise", "Payée"], f?.etat || "Émise") + '</select></label></div>' +
+      '<div class="section-head"><h3>Lignes de facturation</h3><button type="button" class="ghost" data-add-prestation>＋ Prestation</button><button type="button" class="ghost" data-add-frais>＋ Frais</button></div>' +
+      '<div data-lignes></div>' +
+      '<p class="sub">TVA unique : ' + escapeHtml((tva * 100).toLocaleString("fr-FR")) + ' % (réglages de l’application). Les factures antérieures sont déduites en TTC, sans conversion des anciennes factures.</p>' +
+      '<div class="panel" data-totaux><div class="rows">' +
+      '<div class="row"><span>Total HT</span><strong data-ht>—</strong></div>' +
+      '<div class="row"><span>TVA</span><strong data-tva>—</strong></div>' +
+      '<div class="row"><span>Total TTC avant déduction</span><strong data-brut>—</strong></div>' +
+      '<div class="row"><span>Factures précédentes déduites (TTC)</span><strong data-deduction>—</strong></div>' +
+      '<div class="row"><span>Net à facturer</span><strong data-net>—</strong></div></div></div>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+      '<label>Date d’émission<input name="date" type="date" value="' + escapeHtml(f?.date || aujourdHui()) + '"></label>' +
+      '<label>Échéance<input name="echeance" type="date" value="' + escapeHtml(f?.echeance || "") + '"></label>' +
+      '<label>Date de paiement<input name="datePaiement" type="date" value="' + escapeHtml(f?.datePaiement || "") + '"></label></div>' +
+      '<p class="sub" data-erreur style="color:var(--red)"></p><div class="dialog-actions">' +
+      (id ? '<button type="button" class="ghost danger" data-delete>Supprimer</button>' : "") +
+      '<button class="ghost" value="cancel">Annuler</button><button class="action" data-ok value="default">Enregistrer</button></div></form>';
+    document.body.appendChild(dialog);
+    dialog.addEventListener("close", () => dialog.remove());
+    const form = dialog.querySelector("form");
+    const zone = dialog.querySelector("[data-lignes]");
+    const lireLignes = () => [...zone.querySelectorAll("[data-ligne]")].map(el => {
+      const val = name => el.querySelector('[data-field="' + name + '"]').value.trim();
+      const type = val("type");
+      return type === "prestation"
+        ? { type, designation: val("designation"), quantite: val("quantite") === "" ? null : Number(val("quantite")), prixUnitaireHt: val("prixUnitaireHt") === "" ? null : Number(val("prixUnitaireHt")) }
+        : { type, designation: val("designation"), montantHt: val("montantHt") === "" ? null : Number(val("montantHt")) };
+    });
+    const precedentes = etudeId => data.factures.filter(x => x.etudeId === etudeId && x.id !== id);
+    const afficherTotaux = () => {
+      const etudeId = form.elements.etudeId.value;
+      const calc = calculerFactureParLignes({ lignes: lireLignes(), tauxTva: tva, facturesPrecedentes: precedentes(etudeId) });
+      const m = n => money(n).replace(/\s/g, " ");
+      dialog.querySelector("[data-ht]").textContent = m(calc.montantHt);
+      dialog.querySelector("[data-tva]").textContent = m(calc.montantTva);
+      dialog.querySelector("[data-brut]").textContent = m(calc.montantTtcBrut);
+      dialog.querySelector("[data-deduction]").textContent = "− " + m(calc.deductionTtc);
+      dialog.querySelector("[data-net]").textContent = calc.valide ? m(calc.montantTtc) : "À corriger";
+      return calc;
+    };
+    const rendreLignes = () => {
+      zone.innerHTML = lignes.map((l, i) => '<div data-ligne="' + i + '" class="panel" style="margin:8px 0;padding:12px">' +
+        '<div style="display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center"><strong>Ligne ' + (i + 1) + '</strong><button type="button" class="ghost danger" data-remove="' + i + '">Retirer</button></div>' +
+        '<label>Nature<select data-field="type">' + '<option value="prestation"' + (l.type === "prestation" ? " selected" : "") + '>Prestation JEH</option><option value="frais"' + (l.type === "frais" ? " selected" : "") + '>Frais hors JEH</option></select></label>' +
+        '<label>Désignation<input data-field="designation" value="' + escapeHtml(l.designation || "") + '"></label>' +
+        (l.type === "prestation"
+          ? '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><label>Nombre de JEH<input data-field="quantite" type="number" min="0" step="any" value="' + escapeHtml(l.quantite ?? "") + '"></label><label>Prix unitaire HT (€)<input data-field="prixUnitaireHt" type="number" min="0" step="any" value="' + escapeHtml(l.prixUnitaireHt ?? "") + '"></label></div>'
+          : '<label>Montant HT (€)<input data-field="montantHt" type="number" min="0" step="any" value="' + escapeHtml(l.montantHt ?? "") + '"></label>') +
+        '</div>').join("");
+      zone.querySelectorAll("[data-field]").forEach(el => {
+        el.addEventListener("input", afficherTotaux);
+        el.addEventListener("change", () => {
+          const index = Number(el.closest("[data-ligne]").dataset.ligne);
+          const row = lireLignes()[index];
+          if (el.dataset.field === "type") { lignes[index] = { ...row, ...(row.type === "prestation" ? { quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === form.elements.etudeId.value)?.jeh ?? "" } : { montantHt: 0 }) }; rendreLignes(); }
+          else afficherTotaux();
+        });
+      });
+      zone.querySelectorAll("[data-remove]").forEach(btn => btn.addEventListener("click", () => { lignes.splice(Number(btn.dataset.remove), 1); rendreLignes(); }));
+      afficherTotaux();
+    };
+    dialog.querySelector("[data-add-prestation]").addEventListener("click", () => { lignes.push({ type: "prestation", designation: "Prestation JEH", quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === form.elements.etudeId.value)?.jeh ?? "" }); rendreLignes(); });
+    dialog.querySelector("[data-add-frais]").addEventListener("click", () => { lignes.push({ type: "frais", designation: "Frais hors JEH", montantHt: 0 }); rendreLignes(); });
+    form.elements.etudeId.addEventListener("change", afficherTotaux);
+    if (id) dialog.querySelector("[data-delete]").addEventListener("click", async () => {
+      if (!confirm("Supprimer cette facture ?")) return;
+      const erreur = await supprimerEnregistrement("factures", id);
+      if (erreur) { dialog.querySelector("[data-erreur]").textContent = erreur; return; }
+      dialog.close(); render();
+    });
+    form.addEventListener("submit", async ev => {
+      if (!ev.submitter?.hasAttribute("data-ok")) return;
+      ev.preventDefault();
+      const calc = afficherTotaux();
+      if (!calc.valide) { dialog.querySelector("[data-erreur]").textContent = calc.anomalies.join(" · "); return; }
+      const d = Object.fromEntries(["etudeId", "type", "etat", "date", "echeance", "datePaiement"].map(k => [k, form.elements[k].value.trim()]));
+      if (d.etat === "Payée" && !d.datePaiement) d.datePaiement = aujourdHui();
+      Object.assign(d, { modeleFacturation: "lignes", lignes: lireLignes(), tauxTva: tva, montantHt: calc.montantHt, montantTva: calc.montantTva, montantTtcBrut: calc.montantTtcBrut, deductionFacturesPrecedentesTtc: calc.deductionTtc, montantTtc: calc.montantTtc, montant: calc.montant });
+      const erreur = await enregistrer("factures", id, d, "facture");
+      if (erreur) { dialog.querySelector("[data-erreur]").textContent = erreur; return; }
+      dialog.close(); render();
+    });
+    rendreLignes();
+    dialog.showModal();
   }
   function ouvrirMembre(id) {
     const m = id ? data.membres.find(x => x.id === id) : {};
