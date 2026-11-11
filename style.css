@@ -454,3 +454,8 @@ button.b.ghost:disabled{opacity:.4}
 .mbrn small{display:block}
 .sgr{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--line)}.sgr:first-of-type{border-top:0}.sgn{display:flex;align-items:center;gap:12px}.sgn .lm{flex:1}
 .toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:10px 16px;border-radius:12px;font-size:13.5px;z-index:99;box-shadow:0 6px 24px #0003}
+
+/* v20 : petits boutons */
+.bsm{border:0;border-radius:99px;padding:6px 12px;font-family:inherit;font-weight:600;font-size:12.5px;line-height:1.2;background:var(--acc);color:#fff;cursor:pointer}
+.bsm.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.mbra .b{padding:4px 10px;font-size:12px;border-radius:99px}.mbra select{padding:4px 8px;font-size:12px}

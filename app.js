@@ -656,7 +656,7 @@ function listTemps(D){
 function signalementsHtml(){
   const G=Object.entries(S.signalements).filter(([,g])=>g.statut==='nouveau').sort((a,b)=>String(a[1].le).localeCompare(String(b[1].le)));
   if(!G.length||SALARIE)return '';
-  return `<div class="card alc"><h3>${ic('bell')}Signalements à traiter<span class="cnt">${G.length}</span></h3>${G.map(([id,g])=>`<div class="sgr"><div><b>${esc(g.par)}</b> · ${g.etude?'étude '+esc(g.etude):'étude non précisée'} · ${sd(dnum(g.date))}<div class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</div></div><div class="mbra"><button class="b" data-sig="ok:${id}">Créer la ligne</button><button class="b ghost" data-sig="non:${id}">Refuser</button></div></div>`).join('')}</div>`;
+  return `<div class="card alc"><h3>${ic('bell')}Signalements à traiter<span class="cnt">${G.length}</span></h3>${G.map(([id,g])=>`<div class="sgr"><div><b>${esc(g.par)}</b> · ${g.etude?'étude '+esc(g.etude):'étude non précisée'} · ${sd(dnum(g.date))}<div class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</div></div><div class="mbra"><button class="bsm" data-sig="ok:${id}">Créer la ligne</button><button class="bsm ghost" data-sig="non:${id}">Refuser</button></div></div>`).join('')}</div>`;
 }
 function vTemps(D){return `<h2>JEH</h2>${signalementsHtml()}${searchBox('temps')}${chipsRow('temps',[['all','Tout'],['pay','À payer'],['paid','Payé']])}<div id="lst">${listTemps(D)}</div>${fab('temps','Ajouter une ligne de temps')}`}
 function vRemun(D){
@@ -774,7 +774,7 @@ function vMoi(D){
   return `<h2>Bonjour ${esc(moi.split('.')[0]||moi)}</h2>
   <div class="card"><div class="ftg"><div class="ft acc"><small>À recevoir (prochain BV)</small><b>${eur(r.net)}</b></div><div class="ft"><small>Brut</small><b>${eur(r.brut)}</b></div><div class="ft"><small>JEH à payer</small><b>${f3(r.jeh)}</b></div><div class="ft"><small>Déjà reçu (brut)</small><b>${eur(r.dejaPaye)}</b></div></div>
   ${r.jeh>0&&r.jeh<1?`<div class="eal" style="margin-top:8px">${ic('warn',13)} Moins de 1 JEH : cotisations calculées sur 1 JEH</div>`:''}<div class="small" style="margin-top:8px">${f3(jt)} JEH réalisées en tout · ${nbBV} BV payé${nbBV>1?'s':''}</div></div>
-  <button class="mb solid" data-mn="signaler" style="margin-top:12px">Signaler une ligne JEH manquante</button>
+  <div style="margin-top:12px"><button class="bsm" data-mn="signaler">+ Signaler une ligne JEH manquante</button></div>
   ${Object.values(S.signalements).length?`<h3 style="margin:16px 2px 8px">Mes signalements</h3>${Object.values(S.signalements).sort((a,b)=>String(b.le).localeCompare(String(a.le))).map(g=>`<div class="card lcard sgn">${dayBox(dnum(g.date))}<div class="lm"><b>${g.etude?'Étude '+esc(g.etude):'Étude non précisée'}</b><span class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</span></div><span class="jst ${g.statut==='ajoutee'?'ok':g.statut==='refusee'?'warn':'due'}">${{ajoutee:'Ajoutée',refusee:'Refusée'}[g.statut]||'En attente'}</span></div>`).join('')}`:''}
   <h3 style="margin:16px 2px 8px">Mes lignes de JEH</h3>${L.map(ligne).join('')||emptyMsg('Aucune ligne de JEH à votre nom pour le moment.')}
   ${niv.length?`<h3 style="margin:16px 2px 8px">Ma formation</h3><div class="card">${niv.map(([n,v])=>`<div class="stat"><span>Étude ${esc(n)}</span><span>Niveau ${v} · ${['Non formé','Notions','Autonome avec appui','Autonome','Référent'][v]||''}</span></div>`).join('')}</div>`:''}
