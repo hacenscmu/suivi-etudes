@@ -378,7 +378,7 @@
   function espaceSalarie() {
     const m = data.membres[0];
     if (!m) return heading("Mon espace", "Accès personnel") + '<section class="panel"><p>Aucune fiche membre ne correspond à cet accès. Contactez la trésorerie.</p></section>';
-    const paie = calculerPaie({ interventions: data.interventions, membres: [m], config: {} }).lignes[0] || {};
+    const paie = calculerPaie({ interventions: data.interventions, membres: [m], config: synchro?.lireConfig() || {} }).lignes[0] || {};
     const bvs = [...data.bvs].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
     const netDejaRecu = bvs.reduce((s, bv) => s + Number(bv.net || 0), 0);
     const netPartiel = bvs.some(bv => bv.net === undefined);
