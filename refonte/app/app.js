@@ -744,7 +744,15 @@
         ? { type, designation: val("designation"), quantite: val("quantite") === "" ? null : Number(val("quantite")), prixUnitaireHt: val("prixUnitaireHt") === "" ? null : Number(val("prixUnitaireHt")) }
         : { type, designation: val("designation"), montantHt: val("montantHt") === "" ? null : Number(val("montantHt")) };
     });
-    const precedentes = etudeId => data.factures.filter(x => x.etudeId === etudeId && x.id !== id);
+    const precedentes = etudeId => {
+      const candidates = data.factures.filter(x => x.etudeId === etudeId && x.id !== id);
+      if (!id || etudeId !== f?.etudeId) return candidates;
+      if (Array.isArray(f.facturesPrecedentesIds)) {
+        const ids = new Set(f.facturesPrecedentesIds);
+        return candidates.filter(x => ids.has(x.id));
+      }
+      return f?.date ? candidates.filter(x => x.date && x.date <= f.date) : candidates;
+    };
     const afficherTotaux = () => {
       const etudeId = form.elements.etudeId.value;
       const calc = calculerFactureParLignes({ lignes: lireLignes(), tauxTva: tva, facturesPrecedentes: precedentes(etudeId) });
