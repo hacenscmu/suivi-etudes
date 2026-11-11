@@ -535,3 +535,7 @@ button.b.ghost:disabled{opacity:.4}
 .wrs::before{content:"";position:absolute;right:6px;bottom:6px;width:16px;height:16px;border-right:4px solid var(--ink);border-bottom:4px solid var(--ink);border-radius:0 0 8px 0}
 .wrs i{position:absolute;right:30px;bottom:6px;font:700 11px/1 inherit;font-style:normal;background:var(--ink);color:var(--card);padding:4px 6px;border-radius:7px;white-space:nowrap}
 .wrsz{z-index:6;align-self:start;justify-self:start}.wrsz>.card{outline:3px solid var(--acc)!important}
+
+/* v34 : grille libre — ombre de l'emplacement pendant un déplacement */
+.wghost{border:2px dashed var(--acc);border-radius:18px;background:color-mix(in srgb,var(--acc) 10%,transparent);pointer-events:none;z-index:1}
+.wdrg{z-index:6}

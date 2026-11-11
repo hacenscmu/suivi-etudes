@@ -414,7 +414,7 @@ const DASH_BLOCKS=[['banner','Bandeau des alertes'],['kpis','Recette, CA signé,
 // disposition propre à chaque appareil (non synchronisée)
 function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(e){return {}}}
 function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
-function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{}}}
+function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{},grid:c.grid||{}}}
 // Widgets : grille de 9 colonnes, taille minimale [largeur, hauteur] en cases ; chaque ligne est complétée pour prendre toute la largeur.
 let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[2,1],alert:[3,2],enc:[4,3],cli:[4,3]},DDEF={jeh:[3,1]},DFULL=['banner','kpis'];
 let DEDIT=false,WDRAG=null;
@@ -435,6 +435,18 @@ function packDash(L,ks){const N=DCOLS,rows=[];let r=null;
   const out=[];let y=0;rows.forEach(r=>{const W=split(N,r.cols.map(c=>c.cw));let x=0;
     r.cols.forEach((c,ci)=>{const Hs=split(r.H,c.items.map(i=>i.h));let yy=y;c.items.forEach((it,ii)=>{out.push({k:it.k,x,y:yy,W:W[ci],H:Hs[ii]});yy+=Hs[ii]});x+=W[ci]});y+=r.H});
   return out}
+// Grille libre : chaque bloc garde la place {x,y} et la taille {w,h} qu'on lui donne (mémorisées par nombre de colonnes).
+// Si deux blocs se chevauchent, celui qu'on vient de poser reste et les autres descendent ; rien d'autre ne bouge.
+function resolveDash(P,fixed){const ov=(a,b)=>a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h;
+  const ks=Object.keys(P).sort((a,b)=>a===fixed?-1:b===fixed?1:P[a].y-P[b].y||P[a].x-P[b].x),placed=[];
+  ks.forEach(k=>{const it=P[k];let hit;while((hit=placed.filter(p=>ov(p,it))).length)it.y=Math.max(...hit.map(p=>p.y+p.h));placed.push(it)});return P}
+function dashPos(L,ks){const G=L.grid[DCOLS],P={};
+  if(!G){packDash(L,ks).forEach(o=>P[o.k]={x:o.x,y:o.y,w:o.W,h:o.H});return P}
+  ks.forEach(k=>{const q=G[k];if(!q)return;const m=DMIN[k],w=Math.min(DCOLS,Math.max(m[0],q.w|0)),h=Math.min(12,Math.max(m[1],q.h|0));P[k]={x:Math.max(0,Math.min(DCOLS-w,q.x|0)),y:Math.max(0,q.y|0),w,h}});
+  let bas=Math.max(0,...Object.values(P).map(p=>p.y+p.h));ks.filter(k=>!P[k]).forEach(k=>{const [w,h]=dashSize(L,k);P[k]={x:0,y:bas,w,h};bas+=h});
+  return resolveDash(P,null)}
+function dashSavePos(P){const L=dashLayout();L.grid[DCOLS]=JSON.parse(JSON.stringify(P));dashSave(L)}
+let DPOS={};
 function dashSec(){const L=dashLayout(),lab=Object.fromEntries(DASH_BLOCKS);
   return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Pour la taille des blocs : bouton ✎ du tableau de bord. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
 function vDash(D){
@@ -468,12 +480,13 @@ function vDash(D){
    enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Montants HT cumulés, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
    cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Nombre cumulé, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
   const L=dashLayout();
-  DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='',seg=[];
-  const tb=k=>{const [w,h]=dashSize(L,k);return `<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',15)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div><span class="wrs" data-wk="${k}" aria-label="Étirer pour agrandir ou réduire"><i>${w}×${h}</i></span>`};
-  const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${packDash(L,seg).map(x=>`<div class="wgc${x.H===1?' wh1':''}" data-wk="${x.k}" style="grid-column:${x.x+1}/span ${x.W};grid-row:${x.y+1}/span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')}</div>`;seg=[]};
-  ks.forEach(k=>{if(DFULL.includes(k)){flush();out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`}else seg.push(k)});flush();
+  DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='';
+  const gk=ks.filter(k=>!DFULL.includes(k)),P=dashPos(L,gk);DPOS=P;
+  const tb=k=>`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',15)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div><span class="wrs" data-wk="${k}" aria-label="Étirer pour agrandir ou réduire"><i>${P[k].w}×${P[k].h}</i></span>`;
+  ks.filter(k=>DFULL.includes(k)).forEach(k=>{out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`});
+  if(gk.length)out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${gk.map(k=>{const p=P[k];return `<div class="wgc${p.h===1?' wh1':''}" data-wk="${k}" style="grid-column:${p.x+1}/span ${p.w};grid-row:${p.y+1}/span ${p.h}">${B[k]}${DEDIT?tb(k):''}</div>`}).join('')}</div>`;
   const hid=DASH_BLOCKS.filter(([k])=>L.hide[k]);
-  const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, étirez le coin ◢ pour l’agrandir ou le réduire. Chaque ligne s’étire ensuite pour remplir l’écran.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
+  const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, étirez le coin ◢ pour l’agrandir ou le réduire. Chaque bloc garde la place et la taille que vous lui donnez.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
   return `<div class="dwrap${DEDIT?' dedit':''}">${bar}${out}</div>`;
 }
 /* ---------- listes en cartes ---------- */
@@ -822,22 +835,21 @@ function vParams(D){
 let PSEC=null,DRAG=null;
 document.addEventListener('pointerdown',e=>{const h=e.target.closest('.hdl');if(!h)return;e.preventDefault();const row=h.closest('.li'),rows=[...row.parentElement.children],i=rows.indexOf(row);DRAG={k:h.dataset.k,from:i,to:i,row,rows,y0:e.clientY};row.classList.add('drg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
 document.addEventListener('pointermove',e=>{if(!DRAG)return;const dy=e.clientY-DRAG.y0,H=DRAG.row.offsetHeight+6,n=DRAG.rows.length,f=DRAG.from;DRAG.row.style.transform=`translateY(${dy}px)`;const to=Math.max(0,Math.min(n-1,f+Math.round(dy/H)));DRAG.to=to;DRAG.rows.forEach((r,i)=>{if(r===DRAG.row)return;const sh=(f<to&&i>f&&i<=to)?-H:(f>to&&i<f&&i>=to)?H:0;r.style.transform=sh?`translateY(${sh}px)`:''})});
-document.addEventListener('pointerdown',e=>{const h=e.target.closest('.wdh');if(!h||!DEDIT)return;e.preventDefault();const el=h.closest('[data-wk].wgc,[data-wk].wfull');if(!el)return;WDRAG={k:h.dataset.wk,el,x0:e.clientX,y0:e.clientY};el.classList.add('wdrg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
-document.addEventListener('pointermove',e=>{if(!WDRAG)return;WDRAG.el.style.transform=`translate(${e.clientX-WDRAG.x0}px,${e.clientY-WDRAG.y0}px)`;WDRAG.cx=e.clientX;WDRAG.cy=e.clientY;
-  document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));const t=wTarget(e.clientX,e.clientY);if(t)t.el.classList.add('wtgt')});
-function wTarget(x,y){const el=WDRAG&&WDRAG.el;if(!el)return null;el.style.pointerEvents='none';const u=document.elementFromPoint(x,y);el.style.pointerEvents='';const t=u&&u.closest('.dwrap [data-wk].wgc,.dwrap [data-wk].wfull');if(!t||t===el)return null;const r=t.getBoundingClientRect();return {el:t,k:t.dataset.wk,after:t.classList.contains('wfull')?y>r.top+r.height/2:x>r.left+r.width/2}}
-// Étirer un bloc par son coin (doigt ou souris) : la taille est arrondie à la case, sans descendre sous le minimum.
-let WRS=null;
-document.addEventListener('pointerdown',e=>{const h=e.target.closest('.wrs');if(!h||!DEDIT)return;e.preventDefault();e.stopPropagation();const el=h.closest('.wgc'),g=el.parentElement,cs=getComputedStyle(g),gap=parseFloat(cs.columnGap)||8,r=el.getBoundingClientRect();
-  WRS={k:h.dataset.wk,el,lab:h.querySelector('i'),x0:e.clientX,y0:e.clientY,w0:r.width,h0:r.height,gap,colW:(g.clientWidth-gap*(DCOLS-1))/DCOLS,rowH:parseFloat(cs.gridAutoRows)||92};el.classList.add('wrsz');try{h.setPointerCapture(e.pointerId)}catch(x){}},true);
-document.addEventListener('pointermove',e=>{if(!WRS)return;const R=WRS,m=DMIN[R.k],nw=Math.max(40,R.w0+e.clientX-R.x0),nh=Math.max(40,R.h0+e.clientY-R.y0);
-  R.el.style.width=nw+'px';R.el.style.height=nh+'px';
-  R.cw=Math.max(m[0],Math.min(DCOLS,Math.round((nw+R.gap)/(R.colW+R.gap))));R.ch=Math.max(m[1],Math.min(8,Math.round((nh+R.gap)/(R.rowH+R.gap))));R.lab.textContent=R.cw+'×'+R.ch});
-const endWRS=()=>{if(!WRS)return;const R=WRS;WRS=null;if(R.cw){const L=dashLayout();L.size[R.k]=[R.cw,R.ch];dashSave(L)}render()};
-document.addEventListener('pointerup',endWRS);document.addEventListener('pointercancel',endWRS);
-const endWDrag=()=>{if(!WDRAG)return;const W=WDRAG,t=W.cx!=null?wTarget(W.cx,W.cy):null;WDRAG=null;W.el.style.transform='';W.el.classList.remove('wdrg');document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));
-  if(t&&t.k!==W.k){const L=dashLayout(),o=L.order.filter(k=>k!==W.k);o.splice(o.indexOf(t.k)+(t.after?1:0),0,W.k);L.order=o;dashSave(L)}render()};
-document.addEventListener('pointerup',endWDrag);document.addEventListener('pointercancel',endWDrag);
+// Déplacer (poignée) ou étirer (coin ◢) un bloc : il se cale sur la case sous le doigt ; une ombre montre où il sera posé.
+let WOP=null;
+function wGeo(el){const g=el.parentElement,cs=getComputedStyle(g),gap=parseFloat(cs.columnGap)||8;return {g,gap,colW:(g.clientWidth-gap*(DCOLS-1))/DCOLS,rowH:parseFloat(cs.gridAutoRows)||92}}
+document.addEventListener('pointerdown',e=>{if(!DEDIT)return;const h=e.target.closest('.wdh,.wrs');if(!h)return;const el=h.closest('.wgc');if(!el)return;e.preventDefault();e.stopPropagation();
+  const k=el.dataset.wk,p=Object.assign({},DPOS[k]),G=wGeo(el),gh=document.createElement('div');gh.className='wghost';G.g.appendChild(gh);
+  WOP=Object.assign({k,el,p,n:Object.assign({},p),gh,mode:h.classList.contains('wrs')?'rs':'mv',x0:e.clientX,y0:e.clientY+scrollY,r:el.getBoundingClientRect()},G);el.classList.add(WOP.mode==='rs'?'wrsz':'wdrg');wGhost();try{h.setPointerCapture(e.pointerId)}catch(x){}},true);
+function wGhost(){const W=WOP,n=W.n;W.gh.style.gridColumn=(n.x+1)+'/span '+n.w;W.gh.style.gridRow=(n.y+1)+'/span '+n.h;const l=W.el.querySelector('.wrs i');if(l)l.textContent=n.w+'×'+n.h}
+document.addEventListener('pointermove',e=>{if(!WOP)return;const W=WOP,m=DMIN[W.k],dx=e.clientX-W.x0,dy=e.clientY+scrollY-W.y0,cx=W.colW+W.gap,cy=W.rowH+W.gap;
+  if(e.clientY>innerHeight-110)scrollBy(0,12);else if(e.clientY<80)scrollBy(0,-12);
+  if(W.mode==='mv'){W.el.style.transform=`translate(${dx}px,${dy}px)`;W.n.x=Math.max(0,Math.min(DCOLS-W.p.w,Math.round(W.p.x+dx/cx)));W.n.y=Math.max(0,Math.round(W.p.y+dy/cy))}
+  else{const nw=Math.max(40,W.r.width+dx),nh=Math.max(40,W.r.height+dy);W.el.style.width=nw+'px';W.el.style.height=nh+'px';
+    W.n.w=Math.max(m[0],Math.min(DCOLS-W.p.x,Math.round((nw+W.gap)/cx)));W.n.h=Math.max(m[1],Math.min(12,Math.round((nh+W.gap)/cy)))}
+  wGhost()});
+const endWOP=()=>{if(!WOP)return;const W=WOP;WOP=null;const P=JSON.parse(JSON.stringify(DPOS));P[W.k]=W.n;resolveDash(P,W.k);dashSavePos(P);render()};
+document.addEventListener('pointerup',endWOP);document.addEventListener('pointercancel',endWOP);
 const endDrag=()=>{if(!DRAG)return;const {k,from,to}=DRAG;DRAG=null;if(from!==to){const c=ensureCfg();if(k==='dash'){const L=dashLayout();const [x]=L.order.splice(from,1);L.order.splice(to,0,x);dashSave(L);render()}else{const [x]=c[k].splice(from,1);c[k].splice(to,0,x);saveCfg();render()}}if(PSEC)drawParam()};
 document.addEventListener('pointerup',endDrag);document.addEventListener('pointercancel',endDrag);
 function openParam(k){PSEC=k;ED=null;drawParam()}
@@ -919,7 +931,7 @@ document.addEventListener('click',e=>{
   if(b.dataset.wreset){if(confirm('Revenir à la disposition par défaut ?')){dashSave({});render()}return}
   if(b.dataset.wshow){const L=dashLayout();delete L.hide[b.dataset.wshow];dashSave(L);render();return}
   if(b.dataset.whide){const L=dashLayout();L.hide[b.dataset.whide]=true;dashSave(L);render();return}
-  if(b.dataset.wsz){const [k,a,d]=b.dataset.wsz.split(':'),L=dashLayout(),[w,h]=dashSize(L,k);L.size[k]=a==='w'?[w+ +d,h]:[w,h+ +d];L.size[k]=[Math.max(DMIN[k][0],Math.min(DCOLS,L.size[k][0])),Math.max(DMIN[k][1],Math.min(8,L.size[k][1]))];dashSave(L);render();return}
+  if(false&&b.dataset.wsz){const [k,a,d]=b.dataset.wsz.split(':'),L=dashLayout(),[w,h]=dashSize(L,k);L.size[k]=a==='w'?[w+ +d,h]:[w,h+ +d];L.size[k]=[Math.max(DMIN[k][0],Math.min(DCOLS,L.size[k][0])),Math.max(DMIN[k][1],Math.min(8,L.size[k][1]))];dashSave(L);render();return}
   if(b.dataset.goalerts){FLT.etudes.s='alert';tab='etudes';lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.open){openRep(b.dataset.open);return}
   if(b.dataset.openc!==undefined){OPENC=b.dataset.openc;render();window.scrollTo(0,0);return}
@@ -1060,7 +1072,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=33;
+const VERSION=34;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
