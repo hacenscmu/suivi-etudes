@@ -186,6 +186,6 @@ test("le préfixe de cache est isolé par empreinte du jeton et ne révèle pas 
   const a = await prefixeStockageUtilisateur("compte-A", cryptoApi);
   const b = await prefixeStockageUtilisateur("compte-B", cryptoApi);
   assert.notEqual(a, b);
-  assert.match(a, /^hac\\.v3\\.user\\.[0-9a-f]{64}\\.$/);
+  assert.match(a, /^hac\.v3\.user\.[0-9a-f]{64}\.$/);
   assert.ok(!a.includes("compte-A"));
 });
