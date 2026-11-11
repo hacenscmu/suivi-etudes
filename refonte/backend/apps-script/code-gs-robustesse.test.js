@@ -267,3 +267,20 @@ test("un salarié reçoit les seuls paramètres de paie, pas les réglages de ge
   const loaded = await body(s, { action: "loadAll", apiVersion: 3, token: code });
   assert.deepEqual(loaded.data.config.main, { smic: 13, cot: { salariale: 0.1 }, patr: { patronale: 0.2 }, chomage: 0.01 });
 });
+
+
+test("un membre ne peut pas désactiver son propre accès même si un autre administrateur existe", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: {
+    membres: {
+      membre_0001: { id: "membre_0001", nomComplet: "Admin A", _v: 1 },
+      membre_0002: { id: "membre_0002", nomComplet: "Admin B", _v: 1 },
+    },
+  }, membre: "membre_0001" });
+  s.props.TOKENS = JSON.stringify({
+    membre_0001: { h: tokenHash(TOKEN), active: true, role: "Membre" },
+    membre_0002: { h: tokenHash("autre-token-12345678901234567890"), active: true, role: "Membre" },
+  });
+  const result = await body(s, req("adminDesactiver", { membreId: "membre_0001" }));
+  assert.equal(result.error.code, "SELF_DEACTIVATE");
+  assert.equal((await body(s, req("ping"))).data.authentifie, true);
+});
