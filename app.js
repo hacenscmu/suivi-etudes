@@ -531,7 +531,7 @@ function cardEtude(e){
   const ini=p=>esc(iniP(p));
   const jf=num(e.J),jr=num(e.R),jeh=(jf>0||jr>0)?`<span title="JEH réalisées sur JEH facturées">${ic('clock',13)}${nf1.format(Math.round(jr*10)/10)} JEH réalisées sur ${nf1.format(Math.round(jf*10)/10)}</span>`:'';
   return `<button class="card ecard ec2" data-open="${e.id}" data-st="${cls}">
-  <div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>N° ${esc(e.num)||'à saisir'}${e.resume?' · '+esc(e.resume):''}</span></div>${pill(e.statut||'Sans statut',cls)}</div>
+  <div class="eh"><div class="et"><b>${esc(e.code||e.resume||('Étude n° '+(e.num||'à saisir')))}</b><span class="ecl">${esc(e.client)||'Sans client'}${e.code||e.resume?' · N° '+(esc(e.num)||'à saisir'):''}${e.code&&e.resume?' · '+esc(e.resume):''}</span></div>${pill(e.statut||'Sans statut',cls)}</div>
   ${m>0?`<div class="eprog"><div class="eph"><span><b>${eur0(e.K)}</b> encaissés sur ${eur0(m)} TTC</span><b>${pct} %</b></div><div class="svt"><i style="width:${pct}%"></i></div></div>`:'<div class="small" style="margin-top:10px">Montant non renseigné</div>'}
   <div class="etags">${e.facture?`<span class="etag">${esc(e.facture)}</span>`:''}${ech!==null?`<span class="etag${late?' late':''}">${late?'En retard · ':'Échéance '}${fdate(ech)}</span>`:''}${e.N==='À payer'?'<span class="etag bv">BV à payer</span>':''}${e.collab==='Récurrente'?`<span class="etag">Récurrente${e.cadence?' · '+esc(e.cadence.toLowerCase()):''}</span>`:''}</div>
   <div class="emeta"><span class="ef3">${pers.length?`<span class="avs">${pers.slice(0,4).map(p=>`<i title="${esc(p)}">${ini(p)}</i>`).join('')}${pers.length>4?`<i>+${pers.length-4}</i>`:''}</span>`:''}${jeh}<span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span></span></div>
@@ -1098,7 +1098,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=38;
+const VERSION=39;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));

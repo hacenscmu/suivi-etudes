@@ -548,3 +548,6 @@ button.b.ghost:disabled{opacity:.4}
 .wdrg{box-shadow:0 16px 40px rgba(0,0,0,.28)!important;opacity:.92;transform:scale(1.02);z-index:50}
 .wins{display:none}
 .legend .lgi{vertical-align:-3px;margin-right:4px;flex:none}.legend span{display:inline-flex;align-items:center}
+
+/* v39 : cartes études — nom de l'étude en gras, client en discret */
+.ec2 .et b{font-size:16px;font-weight:800}.ec2 .et .ecl{color:var(--mute);font-size:12.5px;font-weight:500}
