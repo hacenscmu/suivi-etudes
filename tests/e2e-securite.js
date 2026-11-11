@@ -7,8 +7,8 @@ const props={SSID:'copie'};const logs=[];
 const SH={getLastRow:()=>rows.length,getRange:(r,c,n,w)=>({getValues:()=>rows.slice(r-1,r-1+n).map(x=>x.slice(c-1,c-1+w)),setValue:v=>{rows[r-1][2]=v}}),appendRow:a=>rows.push(a.slice()),deleteRow:r=>rows.splice(r-1,1)};
 const G={ContentService:{MimeType:{JSON:1},createTextOutput:s=>({setMimeType:()=>s})},Utilities:{DigestAlgorithm:{SHA_256:1},Charset:{UTF_8:1},computeDigest:(a,s)=>[...crypto.createHash('sha256').update(s,'utf8').digest()].map(b=>b>127?b-256:b),getUuid:()=>crypto.randomUUID()},
  PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]??null,setProperty:(k,v)=>{props[k]=v}})},SpreadsheetApp:{openById:()=>({getSheetByName:n=>n==='Données'?SH:null})},LockService:{getScriptLock:()=>({waitLock(){},releaseLock(){}})},console:{log:m=>logs.push(m)}};
-const S=new Function(...Object.keys(G),fs.readFileSync(path.join(__dirname,'..','serveur','Code.gs'),'utf8')+';return {doPost,creerJeton,revoquerJeton};')(...Object.values(G));
-const JETON=S.creerJeton('Pauline.D'),AUTRE=S.creerJeton('Alex.M');
+const S=new Function(...Object.keys(G),fs.readFileSync(path.join(__dirname,'..','serveur','Code.gs'),'utf8')+';return {doPost,creerJeton,revoquerJeton,creerMonCode};')(...Object.values(G));
+const JETON=S.creerMonCode(),AUTRE=S.creerJeton('Alex.M');
 const appel=b=>JSON.parse(S.doPost({postData:{contents:JSON.stringify(b)}}));
 const etude=()=>JSON.parse(rows.find(r=>r[1]==='e1')[2]);
 (async()=>{
@@ -43,6 +43,24 @@ const etude=()=>JSON.parse(rows.find(r=>r[1]==='e1')[2]);
   // ligne abîmée côté serveur
   rows.push(['etudes','casse','{abîmée']);await p.reload();await p.waitForTimeout(1500);
   ok('une ligne abîmée ne bloque pas l’appli',(await p.evaluate(()=>!!JSON.parse(localStorage.getItem('suivi.cache')).etudes.e1)));
+  // gestion des codes depuis l'appli (Pauline est administratrice)
+  await p.reload();await p.waitForTimeout(1200);await p.click('#nav [data-tab="params"]');await p.waitForTimeout(300);
+  ok('Paramètres : ligne « Membres et codes d’accès »',(await p.textContent('#view')).includes('Membres et codes d’accès'));
+  await p.click('.srow[data-mn="membres"]');await p.waitForTimeout(800);
+  ok('liste des membres (administratrice)',(await p.textContent('#sheet')).includes('Alex.M'));
+  await p.click('[data-mn="nouveau"]');await p.fill('#mnom','Léa.K');await p.click('[data-mn="creer"]');await p.waitForTimeout(800);
+  const codeLea=(await p.textContent('#codev')).trim();
+  ok('nouveau membre : code affiché une fois, valide côté serveur',codeLea.length>=40&&appel({token:codeLea,action:'ping'}).membre==='Léa.K'&&appel({token:codeLea,action:'ping'}).admin===false);
+  ok('un membre simple ne peut pas gérer les codes',appel({token:codeLea,action:'membres'}).error==='admin'&&appel({token:codeLea,action:'creerCode',nom:'Pirate.X'}).error==='admin');
+  await p.click('#sheet [data-mn="membres"]');await p.waitForTimeout(800);
+await p.click('[data-mn="desact"][data-nom="Alex.M"]');await p.waitForTimeout(800);
+  ok('désactiver un membre : son code ne marche plus',appel({token:AUTRE,action:'ping'}).error==='auth'&&(await p.textContent('#sheet')).includes('Désactivé'));
+  const ancien=await p.evaluate(()=>localStorage.getItem('suivi.token'));
+  await p.click('[data-mn="moncode"]');await p.waitForTimeout(800);
+  const nouveau=await p.evaluate(()=>localStorage.getItem('suivi.token'));
+  ok('changer mon code : nouveau code enregistré sur le téléphone, ancien refusé',nouveau!==ancien&&appel({token:ancien,action:'ping'}).error==='auth'&&appel({token:nouveau,action:'ping'}).membre==='Pauline.D');
+  await p.click('[data-mn="close"]').catch(()=>{});await p.reload();await p.waitForTimeout(1200);
+  ok('après changement de code : l’appli continue de fonctionner',!(await p.isVisible('#syt2').catch(()=>false)));
   // code révoqué
   S.revoquerJeton('Pauline.D');await p.reload();await p.waitForTimeout(1500);
   ok('code révoqué : l’appli demande le code',await p.isVisible('#syt2'));

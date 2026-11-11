@@ -368,7 +368,7 @@ async function doSync(){
     const pg=await post({action:'ping'});
     if(pg&&pg.error==='auth')return say('Code d’accès refusé : vérifiez-le auprès de la trésorerie.',1);
     if(pg&&pg.error)return say('Ce script n’est pas à jour : installez la version sécurisée du Code.gs (serveur/Code.gs).',1);
-    lsSet('suivi.token',tok);if(pg&&pg.membre)lsSet('suivi.membre',pg.membre);
+    lsSet('suivi.token',tok);if(pg&&pg.membre)lsSet('suivi.membre',pg.membre);lsSet('suivi.admin',pg&&pg.admin?'1':'');
     const srv=await post({action:'loadAll'});
     if(srv&&srv.error)return say('Erreur du script : '+srv.error,1);
     const has=Object.values(srv||{}).some(o=>o&&Object.keys(o).length);
@@ -717,6 +717,7 @@ function ct(label,path,val,ph){return `<div class="pr"><label>${label}</label><d
 function cf(label,path,val,pct,unit){return `<div class="pr"><label>${label}</label><div class="pin"><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}"><span>${pct?'%':(unit||'')}</span></div></div>`}
 function listEd(k,arr,ph){return `<div class="led">${arr.map((v,i)=>`<div class="li"><span class="hdl" data-k="${k}" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><input data-li="${k}" data-i="${i}" value="${esc(v)}"><button class="x" data-lidel="${k}:${i}" aria-label="Supprimer">✕</button></div>`).join('')}</div><button class="b ghost addl" data-liadd="${k}">+ ${ph}</button>`}
 const PIC={
+ users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3c2 .8 3.5 2.6 3.5 5.7"/>',
  code:'<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/>',
  dash:'<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>',
  alert:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
@@ -756,7 +757,7 @@ function paramSecs(D){
 function vParams(D){
   const u=lsGet('suivi.url'),last=fmtLast(),nb=getBk().length;
   const row=(k,t,sub,attr)=>`<button class="srow" ${attr}><span class="sic">${pic(k)}</span><span class="stx"><b>${t}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`;
-  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${u?row('code','Code d’accès personnel',lsGet('suivi.token')?(lsGet('suivi.membre')?'Connecté : '+lsGet('suivi.membre'):'Enregistré sur cet appareil'):'À saisir','data-mn="code"'):''}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
+  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${u?row('code','Code d’accès personnel',lsGet('suivi.token')?(lsGet('suivi.membre')?'Connecté : '+lsGet('suivi.membre'):'Enregistré sur cet appareil'):'À saisir','data-mn="code"'):''}${u&&lsGet('suivi.token')?row('users','Membres et codes d’accès',lsGet('suivi.admin')==='1'?'Créer, réinitialiser ou désactiver les codes':'Changer mon code','data-mn="membres"'):''}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
   return `<h2>Paramètres</h2>${top}<div class="sh" style="margin:16px 2px 6px">Réglages des calculs</div><div class="card slist">${paramSecs(D).map(x=>`<button class="srow" data-param="${x.k}"><span class="sic">${pic(x.k)}</span><span class="stx"><b>${x.t}</b><small>${esc(x.s)}</small></span><span class="chev">›</span></button>`).join('')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
 }
 let PSEC=null,DRAG=null;
@@ -961,7 +962,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=17;
+const VERSION=18;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
@@ -1102,12 +1103,23 @@ function applyRows(R,replace){
   render();setTimeout(()=>snap(true),400);
 }
 function download(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type}));a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500)}
-let sheetView=null,imp=null;
+let sheetView=null,imp=null,MEMB=null,CODE=null;
 function sheetHTML(){
   const u=lsGet('suivi.url'),last=fmtLast(),bk=getBk();
   const back='<button class="mb ghost" data-mn="home">‹ Retour</button>';
   if(sheetView==='addr')return `<h2>Adresse du script Google</h2><div class="small" style="margin-bottom:10px">À saisir une seule fois : adresse de l’application Web de votre script (elle finit par /exec). Vos données actuelles seront envoyées dans votre Drive si celui-ci est vide.</div><input id="syu" type="url" value="${esc(u||'')}" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><input id="syt" type="password" value="${esc(lsGet('suivi.token')||'')}" style="width:100%;margin-bottom:8px" placeholder="Code d’accès personnel" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="mb solid" data-mn="syncon">Enregistrer et synchroniser</button>${u?'<button class="mb" data-mn="syncoff">Désactiver sur cet appareil</button>':''}${back}`;
   if(sheetView==='code')return `<h2>Code d’accès personnel</h2><div class="small" style="margin-bottom:10px">Chaque membre a son propre code, donné par la trésorerie. Il est demandé une seule fois sur cet appareil.${lsGet('suivi.membre')?' Connecté en tant que <b>'+esc(lsGet('suivi.membre'))+'</b>.':''}</div><input id="syt2" type="password" style="width:100%;margin-bottom:8px" placeholder="Code d’accès" autocapitalize="off" autocomplete="off"><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="savecode">Valider</button>${lsGet('suivi.token')?'<button class="mb ghost" data-mn="forget">Oublier le code sur cet appareil</button>':''}${back}`;
+  if(sheetView==='membres'){
+    const adm=lsGet('suivi.admin')==='1',moi=lsGet('suivi.membre')||'';
+    const liste=MEMB===null?'<div class="small">Chargement…</div>':MEMB.map(m=>`<div class="mbr${m.actif?'':' off'}"><div><b>${esc(m.nom)}</b>${m.nom===moi?' <span class="small">(vous)</span>':''}<small>${m.actif?(m.admin?'Administrateur':'Membre'):'Désactivé'}${m.change?' · code du '+fdate(dnum(String(m.change).slice(0,10))):''}</small></div><div class="mbra">${m.actif?`<button class="b ghost" data-mn="reinit" data-nom="${esc(m.nom)}">Nouveau code</button>${m.nom!==moi?`<button class="b ghost" data-mn="desact" data-nom="${esc(m.nom)}">Désactiver</button>`:''}`:`<button class="b ghost" data-mn="react" data-nom="${esc(m.nom)}">Réactiver</button>`}</div></div>`).join('');
+    return `<div class="shead"><h2>Membres et codes d’accès</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
+    ${moi?`<div class="small" style="margin-bottom:10px">Connecté : <b>${esc(moi)}</b>${adm?' · administrateur':''}</div>`:''}
+    <button class="mb" data-mn="moncode"><span class="t">Changer mon code</span><span class="s">Un nouveau code est créé et enregistré sur ce téléphone</span></button>
+    ${adm?`<div class="sh" style="margin:14px 2px 6px">Membres</div>${liste}<button class="mb solid" data-mn="nouveau" style="margin-top:10px">+ Nouveau membre</button>`:'<div class="small" style="margin-top:12px">Seule la trésorerie (administrateur) peut créer ou désactiver les codes des membres.</div>'}
+    <div class="msg" id="mm" hidden></div>${back}`;
+  }
+  if(sheetView==='nouveau')return `<h2>Nouveau membre</h2><div class="small" style="margin-bottom:10px">Son nom tel qu’il est saisi dans l’appli (ex. Alex.M). Un code d’accès lui sera créé.</div><input id="mnom" style="width:100%;margin-bottom:8px" placeholder="Prénom.N" autocomplete="off"><label class="small" style="display:flex;gap:8px;align-items:center;margin-bottom:10px"><input type="checkbox" id="madm"> Peut gérer les codes (administrateur)</label><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="creer">Créer son code</button><button class="mb ghost" data-mn="membres">‹ Retour</button>`;
+  if(sheetView==='codeaffiche')return `<h2>Code d’accès ${CODE.soi?'de votre téléphone':'de '+esc(CODE.nom)}</h2><div class="small" style="margin-bottom:10px">${CODE.soi?'Votre nouveau code est déjà enregistré sur ce téléphone. Notez-le pour vos autres appareils : il ne sera plus affiché.':'À transmettre en privé à '+esc(CODE.nom)+'. Il ne sera plus affiché ; en cas de perte, créez-lui un nouveau code.'}</div><div class="codebox" id="codev">${esc(CODE.code)}</div><button class="mb solid" data-mn="copier">Copier le code</button>${navigator.share?'<button class="mb" data-mn="partager">Partager…</button>':''}<div class="msg" id="mm" hidden></div><button class="mb ghost" data-mn="membres">‹ Membres</button>`;
   if(sheetView==='import')return `<h2>Importer un fichier</h2><div class="small" style="margin-bottom:10px">Fichier modèle Excel (.xlsx), tableau .csv, ou sauvegarde .json exportée depuis l’appli.</div><input type="file" id="imf" accept=".xlsx,.csv,.txt,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="width:100%"><div class="msg" id="imm" hidden></div><div id="imb"></div><button class="mb ghost" data-mn="close">Fermer</button>`;
   if(sheetView==='restore')return `<h2>Restaurer une sauvegarde</h2><div class="small" style="margin-bottom:10px">Les 6 dernières sauvegardes automatiques de cet appareil. Restaurer remplace toutes les données actuelles (une sauvegarde de l’état actuel est faite avant).</div>${bk.length?bk.map((b,i)=>`<button class="mb" data-mn="rest" data-i="${i}"><span class="t">${esc(new Date(b.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+' à '+new Date(b.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))}</span><span class="s">${esc(countData(b.d))}</span></button>`).join(''):'<div class="small">Aucune sauvegarde pour le moment : elles se créent toutes seules.</div>'}<button class="mb ghost" data-mn="close">Fermer</button>`;
   return `<div class="shead"><h2>Synchronisation</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
@@ -1124,12 +1136,30 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-mn]');if(!b)return;
   const a=b.dataset.mn;
   if(a==='close'){sheetView=null;drawSheet();return}
-  if(['home','addr','import','restore','code'].includes(a)){openSheet(a);return}
+  if(['home','addr','import','restore','code','nouveau'].includes(a)){openSheet(a);return}
+  if(a==='membres'){MEMB=null;openSheet('membres');if(lsGet('suivi.admin')==='1'){try{const r=await api({action:'membres'});MEMB=r.membres||[]}catch(x){MEMB=[];mmsg(String(x.message)==='admin'?'Réservé aux administrateurs.':'Liste indisponible (réseau ?).',1)}drawSheet()}return}
+  if(['creer','reinit','desact','react','moncode'].includes(a)){
+    const nom=a==='creer'?(($('#mnom')||{}).value||'').trim():b.dataset.nom;
+    if(a==='creer'&&!nom)return mmsg('Saisissez le nom du membre.',1);
+    if(a==='desact'&&!confirm('Désactiver le code de '+nom+' ? Il ne pourra plus ouvrir les données.'))return;
+    if(a==='reinit'&&!confirm('Créer un nouveau code pour '+nom+' ? L’ancien ne marchera plus.'))return;
+    if(a==='moncode'&&!confirm('Créer un nouveau code pour vous ? L’ancien ne marchera plus sur vos autres appareils.'))return;
+    mmsg('Un instant…');
+    try{const act={creer:'creerCode',reinit:'reinitialiserCode',desact:'desactiver',react:'reactiver',moncode:'changerMonCode'}[a];
+      const r=await api({action:act,nom,admin:a==='creer'?!!($('#madm')||{}).checked:undefined});
+      if(a==='desact'){MEMB=(await api({action:'membres'})).membres;drawSheet();return}
+      const soi=a==='moncode'||(nom&&nom===lsGet('suivi.membre'));
+      if(soi)lsSet('suivi.token',r.code);
+      CODE={nom:r.nom||r.membre||nom,code:r.code,soi};openSheet('codeaffiche');
+    }catch(x){const m=String(x.message);mmsg(m==='existe'?'Ce membre a déjà un code actif : utilisez « Nouveau code ».':m==='admin'?'Réservé aux administrateurs.':m==='soimeme'?'Vous ne pouvez pas vous désactiver vous-même.':'Action impossible pour le moment (réseau ?).',1)}
+    return}
+  if(a==='copier'){try{await navigator.clipboard.writeText(CODE.code);mmsg('Code copié.')}catch(x){const r=document.createRange();r.selectNodeContents($('#codev'));const sl=getSelection();sl.removeAllRanges();sl.addRange(r);mmsg('Sélectionnez puis copiez le code.')}return}
+  if(a==='partager'){try{await navigator.share({title:'Code d’accès HAC',text:'Ton code d’accès à l’appli HAC : '+CODE.code})}catch(x){}return}
   if(a==='savecode'){const tok=(($('#syt2')||{}).value||'').trim();if(!tok)return mmsg('Saisissez votre code.',1);
     if(!lsGet('suivi.url')){lsSet('suivi.token',tok);sheetView=null;drawSheet();render();return}
     mmsg('Vérification…');try{const r=await fetch(lsGet('suivi.url'),{method:'POST',body:JSON.stringify({token:tok,action:'ping'}),redirect:'follow'}).then(r=>r.json());
       if(r&&r.error==='auth')return mmsg('Code refusé : vérifiez-le auprès de la trésorerie.',1);if(r&&r.error)return mmsg('Erreur du script : '+r.error,1);
-      lsSet('suivi.token',tok);if(r.membre)lsSet('suivi.membre',r.membre);location.reload()}catch(x){mmsg('Vérification impossible : vérifiez le réseau.',1)}return}
+      lsSet('suivi.token',tok);if(r.membre)lsSet('suivi.membre',r.membre);lsSet('suivi.admin',r.admin?'1':'');location.reload()}catch(x){mmsg('Vérification impossible : vérifiez le réseau.',1)}return}
   if(a==='forget'){if(!confirm('Oublier le code d’accès sur cet appareil ?'))return;lsSet('suivi.token','');lsSet('suivi.membre','');location.reload();return}
   if(a==='sync'){
     if(!lsGet('suivi.url')){openSheet('addr');return}

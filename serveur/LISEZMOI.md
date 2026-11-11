@@ -7,10 +7,10 @@ Faites ces étapes **sur ordinateur**, le même jour que la fusion de l'appli v1
 2. **Ouvrir le script** : script.google.com → votre projet « Suivi des études ».
 3. **Garder l'ancienne version** : copiez tout le contenu actuel de `Code.gs` dans un fichier texte (retour arrière possible).
 4. **Remplacer** : effacez tout `Code.gs`, collez le contenu de `serveur/Code.gs`, puis Enregistrer (icône disquette).
-5. **Créer votre code d'accès** : en haut, choisissez la fonction `creerMonCode` (changez le nom dans la dernière ligne si besoin), cliquez sur **Exécuter**, autorisez si Google le demande. Le code s'affiche dans le **Journal d'exécution** : copiez-le (il ne sera plus affiché).
-   Pour chaque autre membre : remplacez le nom dans `creerMonCode` (ex. `creerJeton('Alex.M')`) et exécutez à nouveau ; transmettez-lui son code en privé.
+5. **Votre code administrateur (une seule fois)** : si vous avez déjà un code, il devient administrateur automatiquement. Sinon : choisissez la fonction `creerMonCode`, cliquez sur **Exécuter** et copiez le code affiché dans le **Journal d'exécution**.
+   Les codes des autres membres se gèrent ensuite **dans l'appli** : Paramètres → Membres et codes d'accès.
 6. **Déployer** : Déployer → Gérer les déploiements → crayon → Version : **Nouvelle version** → Déployer. L'adresse /exec ne change pas.
 7. **Dans l'appli** (après la fusion de la v17) : Paramètres → Code d'accès personnel → collez votre code → Valider.
 
-Pour retirer l'accès à quelqu'un : exécutez `revoquerJeton('Prénom.N')`. Pour voir la liste : `listerJetons`.
+Dans l'appli (Paramètres → Membres et codes d'accès) : créer le code d'un nouveau membre, lui en donner un nouveau s'il l'a perdu, le désactiver s'il quitte l'association ; chacun peut changer son propre code.
 Retour arrière : recollez l'ancien Code.gs (étape 3) et redéployez une nouvelle version.

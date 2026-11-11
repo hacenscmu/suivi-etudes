@@ -1,10 +1,9 @@
 // Suivi des études HAC — serveur Google Apps Script, version SÉCURISÉE (appli v17 et suivantes).
 // Les données restent dans le même Google Sheet, feuille « Données » [collection | id | json] : aucune migration.
 //
-// Accès : chaque membre a un code d'accès personnel (jeton). Le serveur ne garde que son empreinte.
-//   - creerJeton('Prénom.N')   → à lancer depuis l'éditeur Apps Script : affiche le code UNE seule fois
-//   - revoquerJeton('Prénom.N') → désactive le code de ce membre
-//   - listerJetons()           → liste les membres et l'état de leur code
+// Accès : chaque membre a un code d'accès personnel. Le serveur ne garde que son empreinte.
+// Les codes se gèrent DANS L'APPLI (Paramètres → Membres et codes d'accès) par un membre administrateur.
+// Une seule action dans l'éditeur, la première fois : exécuter creerMonCode() pour obtenir le code administrateur.
 // Versions : chaque fiche porte un numéro _v. Une modification faite sur une version dépassée est refusée
 // (« conflit ») au lieu d'écraser le travail d'un autre membre.
 
@@ -12,7 +11,7 @@ const COLLECTIONS = ['etudes', 'factures', 'temps', 'formation', 'clients', 'con
 const TAILLE_MAX = 100000;
 
 function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
-function doGet() { return out_({ ok: 'Le script fonctionne.', version: 'securise-1' }); }
+function doGet() { return out_({ ok: 'Le script fonctionne.', version: 'securise-2' }); }
 
 function sha_(s) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)
@@ -31,10 +30,16 @@ function doPost(e) {
   var b;
   try { b = JSON.parse(e.postData.contents); } catch (x) { return out_({ error: 'requete' }); }
   if (!b || typeof b !== 'object') return out_({ error: 'requete' });
+  migrerAdmins_();
   var qui = membre_(b.token);
   if (!qui) return out_({ error: 'auth' });
   try {
-    if (b.action === 'ping') return out_({ ok: 1, membre: qui });
+    if (b.action === 'ping') return out_({ ok: 1, membre: qui, admin: estAdmin_(qui) });
+    if (b.action === 'changerMonCode') return out_(verrou_(function () { return { ok: 1, membre: qui, code: nouveauCode_(qui, estAdmin_(qui)) }; }));
+    if (['membres', 'creerCode', 'reinitialiserCode', 'desactiver', 'reactiver'].indexOf(b.action) >= 0) {
+      if (!estAdmin_(qui)) return out_({ error: 'admin' });
+      return out_(verrou_(function () { return gererMembres_(b, qui); }));
+    }
     if (b.action === 'loadAll') return out_(verrou_(loadAll_));
     if (b.action === 'save' || b.action === 'delete') return out_(verrou_(function () { return ecrire_(b, qui); }));
     return out_({ error: 'action' });
@@ -99,11 +104,34 @@ function ecrire_(b, qui) {
   return { ok: 1, version: nouveau._v };
 }
 
-// ---------- Administration (à lancer depuis l'éditeur Apps Script) ----------
+// ---------- Gestion des codes depuis l'appli (membres administrateurs) ----------
+function estAdmin_(m) { var t = jetons_(); return !!(t[m] && t[m].active === true && t[m].admin === true); }
+function enregistrerJetons_(t) { PropertiesService.getScriptProperties().setProperty('TOKENS', JSON.stringify(t)); }
+function nouveauCode_(m, admin) {
+  var code = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
+  var t = jetons_(), avant = t[m] || {};
+  t[m] = { h: sha_(code), active: true, admin: !!admin, cree: avant.cree || new Date().toISOString(), change: new Date().toISOString() };
+  enregistrerJetons_(t);
+  return code;
+}
+function gererMembres_(b, qui) {
+  var t = jetons_(), nom = typeof b.nom === 'string' ? b.nom.trim() : '';
+  if (b.action === 'membres') return { ok: 1, membres: Object.keys(t).sort().map(function (m) { return { nom: m, actif: t[m].active === true, admin: t[m].admin === true, cree: t[m].cree || '', change: t[m].change || '' }; }) };
+  if (!nom || nom.length > 60) return { error: 'nom' };
+  if (b.action === 'creerCode') { if (t[nom] && t[nom].active) return { error: 'existe' }; return { ok: 1, nom: nom, code: nouveauCode_(nom, b.admin === true) }; }
+  if (!t[nom]) return { error: 'inconnu' };
+  if (b.action === 'reinitialiserCode') return { ok: 1, nom: nom, code: nouveauCode_(nom, t[nom].admin === true) };
+  if (nom === qui) return { error: 'soimeme' }; // on ne se désactive pas soi-même
+  if (b.action === 'desactiver') { t[nom].active = false; t[nom].revoque = new Date().toISOString(); enregistrerJetons_(t); return { ok: 1 }; }
+  if (b.action === 'reactiver') return { ok: 1, nom: nom, code: nouveauCode_(nom, t[nom].admin === true) };
+  return { error: 'action' };
+}
+
+// ---------- Administration depuis l'éditeur (secours) ----------
 function creerJeton(membre) {
   if (typeof membre !== 'string' || !membre.trim()) throw new Error('Indiquez le nom du membre, ex. creerJeton("Pauline.D")');
   var jeton = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
-  var t = jetons_(); t[membre.trim()] = { h: sha_(jeton), active: true, cree: new Date().toISOString() };
+  var t = jetons_(); t[membre.trim()] = { h: sha_(jeton), active: true, admin: arguments[1] === true, cree: new Date().toISOString() };
   PropertiesService.getScriptProperties().setProperty('TOKENS', JSON.stringify(t));
   console.log('Code d’accès de ' + membre + ' (à lui transmettre en privé, il ne sera plus affiché) : ' + jeton);
   return jeton;
@@ -118,5 +146,7 @@ function listerJetons() {
   var t = jetons_();
   Object.keys(t).forEach(function (m) { console.log(m + ' : ' + (t[m].active ? 'actif' : 'désactivé') + ' (créé le ' + String(t[m].cree).slice(0, 10) + ')'); });
 }
-// Raccourci pour l'éditeur : créer son propre code (remplacez le nom puis cliquez sur Exécuter)
-function creerMonCode() { return creerJeton('Pauline.D'); }
+// À exécuter UNE fois depuis l'éditeur : donne le code administrateur (remplacez le nom si besoin).
+// Les codes existants créés avant cette version deviennent administrateurs pour ne bloquer personne.
+function creerMonCode() { return creerJeton('Pauline.D', true); }
+function migrerAdmins_() { var t = jetons_(), ch = false; Object.keys(t).forEach(function (m) { if (t[m].admin === undefined) { t[m].admin = true; ch = true; } }); if (ch) enregistrerJetons_(t); }
