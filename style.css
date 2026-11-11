@@ -444,3 +444,4 @@ button.b.ghost:disabled{opacity:.4}
 .jk-c.cur .jk-bar i{background:linear-gradient(180deg,var(--acc),var(--c2))}
 .jk-v{font-size:10px;font-weight:700;color:var(--mute);height:12px}.jk-c.cur .jk-v{color:var(--ink)}
 .jk-c small{font-size:10.5px;color:var(--mute)}.jk-c.cur small{color:var(--ink);font-weight:700}
+.jk-bar{background:transparent}
