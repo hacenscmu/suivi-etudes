@@ -21,6 +21,8 @@ await p.fill('input[name=url]','https://script.google.com/macros/s/TEST/exec');a
 ok('jeton refusé → message',(await p.textContent('#loginMsg')).includes('refusé'));
 await p.fill('input[name=url]','https://script.google.com/macros/s/TEST/exec');await p.fill('input[name=token]',TOKEN);await p.click('#loginForm button');await p.waitForTimeout(600);
 ok('connexion réussie, tableau de bord affiché',await p.isHidden('#login')&&(await p.textContent('#content')).includes('JEH travaillées'));
+ok('première connexion membre : disposition standard chargée',await p.evaluate(()=>!!localStorage.getItem('hac.v3.dashboard.disposition.Membre.membre_0001')));
+ok('tableau de bord membre : graphiques par défaut visibles',(await p.textContent('#content')).includes('Activité des étudiants')&&(await p.textContent('#content')).includes('Encaissement'));
 const remplir=async(o)=>{for(const[k,v]of Object.entries(o)){const el=p.locator('dialog [name="'+k+'"]');if(await el.evaluate(e=>e.tagName)==='SELECT')await el.selectOption(v);else await el.fill(String(v));}await p.click('dialog [data-ok]');await p.waitForTimeout(500);};
 const payerFacture=async()=>{await p.click('#tabs [data-page="Finances"]');await p.click('[data-invoice="facture_0001"]');const etat=await p.locator('dialog [name=etat]').inputValue();await remplir({etat:etat==='Payée'?'Émise':'Payée'});};
 await payerFacture();
