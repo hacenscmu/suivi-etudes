@@ -406,3 +406,26 @@ button.b.ghost:disabled{opacity:.4}
 .jc .rt{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:none}.jc .jj{font-weight:800;font-size:15px;color:var(--ink)}
 .jst{font-size:11px;font-weight:700;padding:2px 9px;border-radius:99px;background:var(--card2);color:var(--mute)}.jst.due{background:var(--accsoft);color:var(--acc)}.jst.ok{background:var(--card2);color:var(--good)}.jst.warn{background:#fff3cd;color:var(--warn)}
 .lcard .lm>span.small{display:block}
+
+/* v14 : moins de rose — tons neutres, le rose reste réservé aux alertes, retards et à l'onglet actif */
+.jehk .jehbig{color:var(--ink)}
+.jmc i{background:var(--line)}.jmc i.cur{background:var(--mute)}
+.jb i{background:var(--mute)}
+.cav,.avs i{background:var(--card2);color:var(--ink)}
+.finnet{background:var(--card2)}.finnet b{color:var(--ink)}
+.pc2 .pnet b{color:var(--ink)}
+.eprog .svt i,.ec2 .svt i{background:var(--mute)}
+.etag.bv{background:var(--card2);color:var(--ink);font-weight:600}
+.jst.due{background:var(--card2);color:var(--ink)}
+.cft .ft.acc b{color:var(--ink)}
+
+/* v14 : détail des factures */
+.lgns{display:flex;flex-direction:column;gap:8px}
+.lgn{background:var(--card2);border-radius:12px;padding:8px;display:flex;flex-direction:column;gap:6px}
+.lgn input{width:100%}.lgn.titre{flex-direction:row;align-items:center;background:transparent;border:1px dashed var(--line);padding:6px}.lgn.titre input{font-weight:700}
+.lnum{display:flex;gap:6px;align-items:flex-end}.lnum label{flex:1;font-size:11px;color:var(--mute);display:flex;flex-direction:column;gap:2px}
+.lm2{flex:none;min-width:84px;text-align:right;font-weight:700;font-size:13px;padding-bottom:8px}
+.lb{flex:none;border:0;background:var(--card);border-radius:9px;width:32px;height:34px;font-size:15px;color:var(--mute);cursor:pointer}
+.ladd{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.ladd .b{flex:1;min-width:90px}
+.ltot{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-top:10px;font-size:13px}.ltot b{font-size:15px}.ltot .small{flex-basis:100%}
+.lj{flex:none;min-width:96px;text-align:right;font-size:13px;padding-bottom:8px;color:var(--mute)}.lj b{color:var(--ink)}.lgn.frais{background:transparent;border:1px solid var(--line)}
