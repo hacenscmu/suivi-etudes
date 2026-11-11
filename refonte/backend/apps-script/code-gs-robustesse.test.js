@@ -461,3 +461,21 @@ test("le serveur refuse de déduire une facture inexistante, d'une autre étude 
   const future = await body(s, req("save", { collection: "factures", id: "facture_0003", record: { ...baseFacture, id: "facture_0003", facturesPrecedentesIds: ["facture_0002"], deductionFacturesPrecedentesTtc: 100, montantTtcBrut: 100, montantTtc: 0, montant: 0 }, expectedVersion: 0, opId: "op_facture_future_0001" }));
   assert.equal(future.error.code, "INVALID_REQUEST");
 });
+
+
+test("une facture déjà déduite par une facture ultérieure ne peut être modifiée ni supprimée", async () => {
+  const donnees = {
+    etudes: { etude_0001: { id: "etude_0001", num: "HAC-001", date: "2026-09-01", statut: "En réalisation", montant: 1000, jeh: 400, _v: 1 } },
+    factures: {
+      facture_0001: { id: "facture_0001", etudeId: "etude_0001", type: "Acompte", etat: "Payée", montant: 100, date: "2026-11-10", _v: 1 },
+      facture_0002: { id: "facture_0002", etudeId: "etude_0001", type: "Solde", etat: "Émise", montant: 380, date: "2026-11-11", modeleFacturation: "lignes", facturesPrecedentesIds: ["facture_0001"], _v: 1 },
+    },
+  };
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees });
+  const modif = await body(s, req("save", { collection: "factures", id: "facture_0001", record: { ...donnees.factures.facture_0001, montant: 120 }, expectedVersion: 1, opId: "op_facture_ref_0001" }));
+  assert.equal(modif.error.code, "INVALID_REQUEST");
+  assert.match(modif.error.message, /déduite/);
+  const suppr = await body(s, req("delete", { collection: "factures", id: "facture_0001", expectedVersion: 1, opId: "op_facture_del_0001" }));
+  assert.equal(suppr.error.code, "INVALID_REQUEST");
+  assert.match(suppr.error.message, /déduit encore/);
+});
