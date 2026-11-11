@@ -109,12 +109,12 @@ test("rejette un statut et une date invalides", () => {
 
 
 test("déduit les frais hors JEH avant de calculer le nombre de JEH facturées", () => {
-  const r = analyserEtude({ ...etude, montant: 1428, frais: 70 });
+  const r = analyserEtude({ ...etude, montant: 1428, frais: 70, jeh: 400 });
   assert.equal(r.montantHt, 1190);
   assert.equal(r.nombreJehFacturees, 2.8);
 });
 
 test("ne calcule pas un nombre négatif de JEH si les frais dépassent le montant HT", () => {
-  const r = analyserEtude({ ...etude, montant: 120, frais: 200 });
+  const r = analyserEtude({ ...etude, montant: 120, frais: 200, jeh: 400 });
   assert.equal(r.nombreJehFacturees, 0);
 });
