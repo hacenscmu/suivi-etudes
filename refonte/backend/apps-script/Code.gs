@@ -481,6 +481,16 @@ function dependance_(I, c, id) {
     });
     if (factureReferencee) return 'Suppression refusée : une facture ultérieure déduit encore cette facture';
   }
+  if (c === 'interventions') {
+    var intervention = fiche_(I, 'interventions', id);
+    var ligneBVLiee = Object.keys(I.idx).some(function(key) {
+      var e = I.idx[key];
+      return key.indexOf('lignesBV\u0001') === 0 && e.o && !e.corrompu && !e.doublon &&
+        e.o._deleted !== true && e.o.interventionId === id;
+    });
+    if (intervention && (intervention.statut === 'Payé' || intervention.bvId || ligneBVLiee))
+      return 'Suppression refusée : cette intervention est payée ou liée à un BV';
+  }
   if (c === 'etudes') {
     var prefixFormation = 'formation\u0001';
     var grilleTrouvee = Object.keys(I.idx).some(function(key) {
