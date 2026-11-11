@@ -284,3 +284,24 @@ test("un membre ne peut pas désactiver son propre accès même si un autre admi
   assert.equal(result.error.code, "SELF_DEACTIVATE");
   assert.equal((await body(s, req("ping"))).data.authentifie, true);
 });
+
+
+test("un salarié ne reçoit pas les montants globaux d'un BV partagé", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: {
+    membres: {
+      membre_0001: { id: "membre_0001", nomComplet: "Alice", _v: 1 },
+      membre_0002: { id: "membre_0002", nomComplet: "Bob", _v: 1 },
+    },
+    bvs: { bv_0000001: { id: "bv_0000001", reference: "BV commun", brut: 900, net: 700, _v: 1 } },
+    lignesBV: {
+      ligne_000001: { id: "ligne_000001", bvId: "bv_0000001", membreId: "membre_0001", jeh: 1, _v: 1 },
+      ligne_000002: { id: "ligne_000002", bvId: "bv_0000001", membreId: "membre_0002", jeh: 2, _v: 1 },
+    },
+  } });
+  const admin = await body(s, req("adminAcces"));
+  const code = admin.data.codesGeneres.find(x => x.id === "membre_0001").code;
+  const loaded = await body(s, { action: "loadAll", apiVersion: 3, token: code });
+  assert.deepEqual(loaded.data.bvs.bv_0000001, { id: "bv_0000001", date: "", reference: "BV commun" });
+  assert.equal(JSON.stringify(loaded.data).includes("700"), false);
+  assert.equal(JSON.stringify(loaded.data).includes("900"), false);
+});
