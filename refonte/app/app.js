@@ -232,6 +232,17 @@
       }).join("") + "</section>";
   }
 
+  function signalementsJEHHtml() {
+    const enAttente = (data.signalementsJEH || []).filter(s => s.statut === "En attente");
+    if (session?.role !== "Membre") return "";
+    return heading("Signalements JEH à traiter", enAttente.length + " en attente") +
+      '<section class="listbox rows">' + (enAttente.map(s => {
+        const membre = data.membres.find(m => m.id === s.membreId);
+        const etude = data.etudes.find(e => e.id === s.etudeId);
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(membre?.nomComplet || membre?.nom || "Salarié") + ' · ' + escapeHtml(etude?.num || "Étude") + '</strong><small>' + escapeHtml(s.date) + ' · ' + Number(s.minutesIndividuelles || 0) + ' min individuelles · ' + Number(s.nbPersonnes || 1) + ' personne(s)' + (s.commentaire ? ' · ' + escapeHtml(s.commentaire) : '') + '</small></div><div class="item-actions"><button class="action" data-signalement="ajouter" data-id="' + s.id + '">Créer la ligne</button><button class="ghost" data-signalement="refuser" data-id="' + s.id + '">Refuser</button></div></div>';
+      }).join("") || '<div class="empty">Aucun signalement à traiter.</div>') + "</section>";
+  }
+
   function finances(v) {
     const d = v.tableauDeBord;
     return [
@@ -252,7 +263,7 @@
         '<div class="amount">' + money(f.montant / 1.2) + ' HT</div></button>'
       ).join(""),
       '</section>'
-    ].join("");
+    ].join("") + signalementsJEHHtml();
   }
 
   function team(v) {
@@ -388,6 +399,11 @@
       '<section class="listbox rows">' + (data.etudes.map(e => '<div class="item"><div class="item-main"><strong>' + escapeHtml(e.num || "Étude") + '</strong><small>' + escapeHtml(e.resume || e.statut || "Résumé non renseigné") + '</small></div></div>').join("") || '<div class="empty">Aucune étude associée.</div>') + "</section>" +
       heading("Ma formation", data.formation.length + " grille(s)") +
       '<section class="listbox rows">' + (data.formation.map(f => '<div class="item"><div class="item-main"><strong>' + escapeHtml(f.nom || "Formation") + '</strong><small>' + Object.entries(f.niveaux || {}).map(([id,n]) => escapeHtml(etude(id)?.num || id) + " : niveau " + n).join(" · ") + '</small></div></div>').join("") || '<div class="empty">Aucune grille de formation.</div>') + "</section>" +
+      heading("Mes signalements", (data.signalementsJEH || []).length + " signalement(s)", '<button class="action" id="signalerJEH">＋ Signaler une ligne manquante</button>') +
+      '<section class="listbox rows">' + ((data.signalementsJEH || []).slice().sort((a,b)=>String(b.cree||"").localeCompare(String(a.cree||""))).map(s => {
+        const e = etude(s.etudeId);
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(e?.num || "Étude") + ' · ' + escapeHtml(s.date || "") + '</strong><small>' + jeh(Number(s.minutesIndividuelles || 0) / 480) + " JEH estimée · " + escapeHtml(s.commentaire || "Sans commentaire") + '</small></div><span class="pill ' + (s.statut === "Ajoutée" ? "green" : s.statut === "Refusée" ? "muted" : "pink") + '">' + escapeHtml(s.statut) + '</span></div>';
+      }).join("") || '<div class="empty">Aucun signalement.</div>') + "</section>" +
       '<section class="panel"><button class="action" id="changerMonCode">Changer mon code d’accès</button></section>';
   }
 
@@ -757,6 +773,32 @@
     brancher("[data-payer]", el => creerBVPour(el.dataset.payer));
     brancher("[data-reglage]", el => ouvrirReglage(el.dataset.reglage));
     brancher("#dashboardLayout", () => ouvrirDispositionDashboard());
+    brancher("#signalerJEH", () => formulaire({
+      titre: "Signaler une ligne JEH manquante",
+      valeurs: { date: aujourdHui(), nb: 1 },
+      champs: [
+        { name: "etudeId", label: "Étude concernée", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
+        { name: "date", label: "Date de l’intervention", type: "date", required: true },
+        { name: "duree", label: "Durée totale (minutes)", type: "number", required: true },
+        { name: "nb", label: "Nombre de personnes", type: "number", required: true },
+        { name: "commentaire", label: "Précisions (facultatif)" },
+      ],
+      onValider: async d => {
+        if (!(d.duree > 0) || !(d.nb >= 1) || d.nb % 1) return "Indique une durée positive et un nombre entier de personnes.";
+        try {
+          await synchro.signalerJEH({ etudeId: d.etudeId, date: d.date, duree: d.duree, nb: d.nb, commentaire: d.commentaire || "" });
+          await synchro.synchroniser(); data = synchro.lireEtat(); render(); return null;
+        } catch (e) { return e.message || e.code; }
+      }
+    }));
+    brancher("[data-signalement]", async el => {
+      const decision = el.dataset.signalement;
+      if (decision === "refuser" && !confirm("Refuser ce signalement ?")) return;
+      try {
+        await synchro.traiterSignalementJEH({ signalementId: el.dataset.id, decision });
+        await synchro.synchroniser(); data = synchro.lireEtat(); render();
+      } catch (e) { alert(e.message || e.code); }
+    });
     brancher("#changerMonCode", async () => {
       try {
         const r = await synchro.changerMonCode();
