@@ -91,7 +91,11 @@ function membreExiste_(id) {
   var I = index_(), e = I.idx['membres\u0001' + id];
   return e && e.o && !e.corrompu && !e.doublon && e.o._deleted !== true ? e.o : null;
 }
-function exigerAdmin_(qui) { return roleAcces_(qui) === 'Membre'; }
+function nbAdminsActifs_() {
+  var t = jetons_(), n = 0;
+  Object.keys(t).forEach(function (id) { if (t[id] && t[id].active === true && t[id].role === 'Membre') n++; });
+  return n;
+}
 function chargerAccesAdmin_() {
   var I = index_(), t = jetons_(), codes = [], liste = [];
   Object.keys(I.idx).forEach(function (k) {
@@ -349,6 +353,7 @@ function gererAcces_(q, qui, role) {
   if (q.action === 'adminDefinirRole') {
     if (q.role !== 'Membre' && q.role !== 'Salarie') return erreur_('INVALID_REQUEST', 'Rôle invalide');
     if (acces.role === q.role) return reponse_(true, {role: q.role, code: null}, null, {revision: revision_()});
+    if (acces.role === 'Membre' && q.role === 'Salarie' && nbAdminsActifs_() <= 1) return erreur_('LAST_ADMIN', 'Le dernier accès Membre ne peut pas être rétrogradé');
     var codeRole = nouveauCode_(cible, q.role, acces);
     return reponse_(true, {role: q.role, code: codeRole}, null, {revision: revision_()});
   }
@@ -357,6 +362,7 @@ function gererAcces_(q, qui, role) {
     return reponse_(true, {role: acces.role, code: codeNouveau}, null, {revision: revision_()});
   }
   if (q.action === 'adminDesactiver' || q.action === 'adminReactiver') {
+    if (q.action === 'adminDesactiver' && acces.role === 'Membre' && acces.active === true && nbAdminsActifs_() <= 1) return erreur_('LAST_ADMIN', 'Le dernier accès Membre ne peut pas être désactivé');
     t = jetons_(); t[cible].active = q.action === 'adminReactiver';
     if (t[cible].active) delete t[cible].revoque; else t[cible].revoque = new Date().toISOString();
     props_().setProperty('TOKENS', JSON.stringify(t));
