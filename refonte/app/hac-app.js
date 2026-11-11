@@ -2038,14 +2038,18 @@
           const fiche = etat[collection].find(x => x.id === id);
           if (!fiche) return { valide: false, anomalies: ["Fiche introuvable"] };
           const attendue = Number.isSafeInteger(fiche._v) ? fiche._v : 0;
-          if (attendue < 1) {
-            return { valide: false, anomalies: ["Cette fiche doit d'abord être migrée/versionnée avant de pouvoir être supprimée."] };
-          }
           const suivant = { ...etat, [collection]: etat[collection].filter(x => x.id !== id) };
           const verif = construireVueApplication(suivant);
           if (!verif.valide) return { valide: false, anomalies: verif.anomalies };
+          // Les fiches historiques ont une version 0 : les versionner avant leur tombstone.
+          if (attendue === 0) {
+            await file.ajouter({
+              type: "save", collection, id, record: sansChampsServeur(fiche),
+              opId: creerOpId(), expectedVersion: 0,
+            });
+          }
           await file.ajouter({
-            type: "delete", collection, id, opId: creerOpId(), expectedVersion: attendue,
+            type: "delete", collection, id, opId: creerOpId(), expectedVersion: attendue === 0 ? 1 : attendue,
           });
           etat = suivant;
           await memoriser();
