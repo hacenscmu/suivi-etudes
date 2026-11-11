@@ -38,7 +38,7 @@ await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="É
 await p.click('#tabs [data-page="Études"]');await p.click('[data-client="client_0002"]');await p.click('[data-modifier-client="client_0002"]');
 await p.click('dialog [data-delete]');await p.waitForTimeout(250);
 ok('suppression client bloquée si des études y sont liées',await p.locator('dialog [data-erreur]').textContent().then(t=>t.includes('Référence clients introuvable')||t.includes('clientId')));
-await p.locator('dialog button[value="cancel"]').click();
+await p.locator('dialog .dialog-actions button[value="cancel"]').click();
 await p.click('#tabs [data-page="Finances"]');await p.click('[data-invoice="facture_0002"]');
 await p.click('dialog [data-delete]');await p.waitForTimeout(350);
 ok('suppression d’une facture isolée',!(await p.textContent('#content')).includes('Solde'));
