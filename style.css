@@ -521,3 +521,10 @@ button.b.ghost:disabled{opacity:.4}
 .wh1 .jehk2 .jk-b{flex:none!important;margin:0!important;display:block}
 .wh1 .jehk2 .jk-n{display:flex;flex-direction:column!important;align-items:flex-end;text-align:right}
 .wh1 .jehk2 .jehbig{font-size:40px!important}.wh1 .jehk2 .jk-s{margin:2px 0 0;font-size:11px;white-space:nowrap}
+/* v31 : barre d'outils du mode édition plus compacte, sans chevauchement sur les blocs pleine largeur */
+.wtb{flex-wrap:nowrap;gap:3px;padding:3px;left:50%;right:auto;transform:translateX(-50%);max-width:calc(100% - 8px)}
+.wdh{width:26px;height:24px;border-radius:8px}
+.wsz b{min-width:22px;font-size:10.5px}.wsz button,.wx{width:20px;height:22px;font-size:14px}
+.wsz b{white-space:nowrap}
+.dedit .wfull{padding-top:32px}
+.wfull .wtb{top:0;right:4px;left:auto;transform:none}
