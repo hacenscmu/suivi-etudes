@@ -556,3 +556,9 @@ button.b.ghost:disabled{opacity:.4}
 /* v45 : alertes sur 1 case de haut */
 .wh1 .alc{padding:8px 12px}.wh1 .alc h3{margin:0}.wh1 .alc .ali{margin-top:5px;padding:6px 10px}.wh1 .alc .alx{font-size:12px}
 .wh1 .alc .alx span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.wh1 .alc .alx span svg{display:inline;vertical-align:-2px;margin-right:4px}.wh1 .alc .alx{gap:1px}
+
+/* v46 : toucher une partie d'anneau */
+.dseg{cursor:pointer;transition:opacity .15s,stroke-width .15s}
+svg.dsel .dseg{opacity:.28}svg.dsel .dseg.on{opacity:1;stroke-width:34}
+.donutbox .ctl{font-size:12px;font-weight:700}
+.dinfo{flex:none;display:flex;align-items:center;justify-content:center;gap:6px;font-size:12.5px;margin:2px 0 4px;padding:4px 10px;border-radius:99px;background:var(--card2);align-self:center}.dinfo i{width:9px;height:9px;border-radius:50%;display:inline-block}
