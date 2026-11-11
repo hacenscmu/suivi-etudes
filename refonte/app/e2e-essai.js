@@ -35,4 +35,13 @@ const dl=p.waitForEvent('download');await p.click('#tabs [data-page="Réglages"]
 await p.click('#tabs [data-page="Équipe"]');await p.selectOption('[data-niveau="membre_0001|etude_0001"]','3');await p.waitForTimeout(400);
 ok('niveau de formation enregistré',(await p.locator('[data-niveau="membre_0001|etude_0001"]').inputValue())==='3');
 await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Équipe"]');ok('niveau conservé après rechargement',(await p.locator('[data-niveau="membre_0001|etude_0001"]').inputValue())==='3');
+await p.click('#tabs [data-page="Études"]');await p.click('[data-client="client_0002"]');await p.click('[data-modifier-client="client_0002"]');
+p.once('dialog',d=>d.accept());await p.click('dialog [data-delete]');await p.waitForTimeout(250);
+ok('suppression client bloquée si des études y sont liées',await p.locator('dialog [data-erreur]').textContent().then(t=>t.includes('Référence clients introuvable')||t.includes('clientId')));
+await p.locator('dialog button[value="cancel"]').click();
+await p.click('#tabs [data-page="Finances"]');await p.click('[data-invoice="facture_0002"]');
+p.once('dialog',d=>d.accept());await p.click('dialog [data-delete]');await p.waitForTimeout(350);
+ok('suppression d’une facture isolée',!(await p.textContent('#content')).includes('Solde'));
+await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Finances"]');
+ok('suppression de facture conservée après rechargement',!(await p.textContent('#content')).includes('Solde'));
 ok('aucun appel réseau externe',net===0);ok('aucune erreur JS',errs.length===0||console.log(errs));await b.close();if(failures)process.exitCode=1})();
