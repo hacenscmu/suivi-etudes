@@ -12,6 +12,13 @@ await p.click('#dashboardLayout');await p.selectOption('dialog [name=visibleEnca
 ok('ordre des graphiques modifié',JSON.stringify(await p.locator('#content .grid .panel h3').allTextContents())===JSON.stringify(['Encaissement','Activité des étudiants']));
 await p.reload();await p.waitForTimeout(600);
 ok('ordre des graphiques conservé après rechargement',JSON.stringify(await p.locator('#content .grid .panel h3').allTextContents())===JSON.stringify(['Encaissement','Activité des étudiants']));
+await p.click('#tabs [data-page="Études"]');await p.click('[data-client="client_0002"]');await p.waitForTimeout(250);
+ok('fiche client accessible depuis la liste', (await p.textContent('#content')).includes('Novalys')&&(await p.textContent('#content')).includes('Études associées'));
+ok('fiche client regroupe les études et factures', (await p.textContent('#content')).includes('HAC-2026-021')&&(await p.textContent('#content')).includes('Factures'));
+await p.click('[data-modifier-client="client_0002"]');await p.fill('dialog [name=contact]','Alexandre Durand');await p.fill('dialog [name=email]','alexandre@example.fr');await p.click('dialog [data-ok]');await p.waitForTimeout(450);
+ok('coordonnées ajoutées depuis la fiche', (await p.textContent('#content')).includes('Alexandre Durand')&&(await p.textContent('#content')).includes('alexandre@example.fr'));
+await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Études"]');await p.click('[data-client="client_0002"]');
+ok('coordonnées client conservées après rechargement', (await p.textContent('#content')).includes('Alexandre Durand'));
 await p.click('#tabs [data-page="Études"]');await p.click('[data-etude="etude_0002"]');await p.click('[data-modifier-etude]');await p.selectOption('dialog [name=statut]','Devis signé');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
 await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Études"]');
 ok('modification conservée après rechargement',(await p.textContent('#content')).includes('Devis signé'));
