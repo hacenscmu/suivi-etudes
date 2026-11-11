@@ -51,7 +51,7 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
  await page.waitForTimeout(150);
  ok('connexion reconnue comme Salarié',await page.locator('#content').innerText().then(t=>t.includes('Bonjour Camille Martin')));
  ok('navigation limitée à Mon espace',await page.locator('#tabs [data-page]').count()===1&&await page.locator('#tabs [data-page]').first().getAttribute('data-page')==='Mon espace');
- ok('actions de création/édition absentes',await page.locator('#content button').count()===1&&await page.locator('#content button').first().getAttribute('id')==='changerMonCode');
+ ok('actions métier absentes hors signalement et code personnel',await page.locator('#content button').count()===2&&await page.locator('#signalerJEH').count()===1&&await page.locator('#changerMonCode').count()===1);
  const body=await page.locator('body').innerText();
  ok('ses JEH, étude et formation sont visibles',body.includes('HAC-001')&&body.includes('1 JEH')&&body.includes('Formation personnelle'));
  ok('aucun client, facture ou autre salarié affiché',!body.includes('CLIENT CONFIDENTIEL')&&!body.includes('HAC-SECRET')&&!body.includes('AUTRE SALARIE SECRET')&&!body.includes('900'));
