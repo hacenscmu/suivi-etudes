@@ -50,7 +50,7 @@ jobs:
       - name: Installer Playwright et Chromium
         run: |
           npm install --no-save --no-package-lock playwright
-          npx playwright install --with-deps chromium
+          npx playwright install chromium --only-shell
       - name: Tester l’application dans Chromium
         run: |
           python3 -m http.server 8766 --bind 0.0.0.0 > /tmp/hac-http.log 2>&1 &
