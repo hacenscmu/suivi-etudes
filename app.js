@@ -552,7 +552,7 @@ function cardEtude(e){
   const ini=p=>esc(iniP(p));
   const jf=num(e.J),jr=num(e.R),jeh=(jf>0||jr>0)?`<span title="JEH réalisées sur JEH facturées">${ic('clock',13)}${nf1.format(Math.round(jr*10)/10)} JEH réalisées sur ${nf1.format(Math.round(jf*10)/10)}</span>`:'';
   return `<button class="card ecard ec2" data-open="${e.id}" data-st="${cls}">
-  <div class="eh"><div class="et"><b>${esc(e.code||e.resume||('Étude n° '+(e.num||'à saisir')))}</b><span class="ecl">${esc(e.client)||'Sans client'}${e.code||e.resume?' · N° '+(esc(e.num)||'à saisir'):''}${e.code&&e.resume?' · '+esc(e.resume):''}</span></div>${pill(e.statut||'Sans statut',cls)}</div>
+  <div class="eh"><div class="enb"><span>N°</span><b>${esc(e.num)||'?'}</b></div><div class="et"><b>${esc(e.code||e.resume||e.client||'Sans nom')}</b>${(e.code||e.resume)&&e.client?`<span class="ecl">${esc(e.client)}</span>`:''}${e.code&&e.resume?`<span class="ecl">${esc(e.resume)}</span>`:''}</div>${pill(e.statut||'Sans statut',cls)}</div>
   ${m>0?`<div class="eprog"><div class="eph"><span><b>${eur0(e.K)}</b> encaissés sur ${eur0(m)} TTC</span><b>${pct} %</b></div><div class="svt"><i style="width:${pct}%"></i></div></div>`:'<div class="small" style="margin-top:10px">Montant non renseigné</div>'}
   <div class="etags">${e.facture?`<span class="etag">${esc(e.facture)}</span>`:''}${ech!==null?`<span class="etag${late?' late':''}">${late?'En retard · ':'Échéance '}${fdate(ech)}</span>`:''}${e.N==='À payer'?'<span class="etag bv">BV à payer</span>':''}${e.collab==='Récurrente'?`<span class="etag">Récurrente${e.cadence?' · '+esc(e.cadence.toLowerCase()):''}</span>`:''}</div>
   <div class="emeta"><span class="ef3">${pers.length?`<span class="avs">${pers.slice(0,4).map(p=>`<i title="${esc(p)}">${ini(p)}</i>`).join('')}${pers.length>4?`<i>+${pers.length-4}</i>`:''}</span>`:''}${jeh}<span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span></span></div>
@@ -577,7 +577,7 @@ function vReport(e,D){
   const key=nm=>'f_'+nm.toLowerCase().replace(/[^a-z0-9]+/g,'_');
   const lv=Object.keys(per).map(p=>{const d=S.formation[key(p)];const v=d&&d.niveaux&&isNum(d.niveaux[e.num])?num(d.niveaux[e.num]):null;return [p,v]}).filter(x=>x[1]!==null);
   return `<button class="back" data-closerep="1">‹ Études</button>
-  <div class="card hero"><div class="eh"><div class="et"><b>${esc(e.client)||'Sans client'}</b><span>${esc(e.num)||'N° à saisir'}${e.mandat?' · '+esc(e.mandat):''}</span></div><button class="pen" data-edit="etudes:${e.id}" aria-label="Modifier l’étude"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button></div>
+  <div class="card hero"><div class="eh ehn"><div class="enb"><span>N°</span><b>${esc(e.num)||'?'}</b></div><div class="et"><b>${esc(e.code||e.resume||e.client||'Sans nom')}</b><span>${(e.code||e.resume)?esc(e.client||'Sans client'):''}${e.mandat?((e.code||e.resume)?' · ':'')+esc(e.mandat):''}</span></div><button class="pen" data-edit="etudes:${e.id}" aria-label="Modifier l’étude"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button></div>
    ${e.resume?`<div class="er">${esc(e.resume)}</div>`:''}
    <div class="pills">${pill(e.statut||'Sans statut',stCls(e.statut))}${e.facture?pill(e.facture,'fin'):''}${e.collab==='Récurrente'?pill('Récurrente'+(e.cadence?' · '+e.cadence.toLowerCase():''),'fin'):''}</div>
    <div class="small" style="margin-top:6px">Créée le ${sd(e.d)}</div></div>
@@ -1122,7 +1122,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=47;
+const VERSION=48;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
