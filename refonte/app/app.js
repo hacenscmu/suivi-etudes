@@ -750,7 +750,7 @@
     const afficherTotaux = () => {
       const etudeId = form.elements.etudeId.value;
       const calc = calculerFactureParLignes({ lignes: lireLignes(), tauxTva: tva, facturesPrecedentes: precedentes(etudeId) });
-      const m = n => money(n).replace(/\s/g, " ");
+      const m = n => new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
       dialog.querySelector("[data-ht]").textContent = m(calc.montantHt);
       dialog.querySelector("[data-tva]").textContent = m(calc.montantTva);
       dialog.querySelector("[data-brut]").textContent = m(calc.montantTtcBrut);
