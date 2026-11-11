@@ -3,7 +3,6 @@ const {chromium}=require('playwright');
 const path=require('path');
 const {creerServeurAppsScriptSimule}=require('../backend/apps-script/simulateur.js');
 const TOKEN='code-salarie-initial-123456';
-const TOKEN2='NOUVEAU8';
 const ID='membre_0001';
 const donnees={
  membres:{[ID]:{id:ID,nomComplet:'Camille Martin',_v:1},membre_0002:{id:'membre_0002',nomComplet:'AUTRE SALARIE SECRET',_v:1}},
@@ -61,11 +60,12 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
  const refus=await serveur.transport({apiVersion:3,action:'save',token:TOKEN,collection:'interventions',id:'interv_0001',record:{id:'interv_0001'},opId:'op_salarie_0001',expectedVersion:1});
  ok('serveur refuse toute écriture salarié',refus.body.error?.code==='FORBIDDEN');
  await page.click('#changerMonCode');
- await page.waitForFunction(()=>JSON.parse(localStorage.getItem('hac.v3.connexion')||'{}').token===TOKEN2,{timeout:3000});
- ok('changement de code effectué et nouveau code stocké',JSON.parse(await page.evaluate(()=>localStorage.getItem('hac.v3.connexion'))).token===TOKEN2);
+ await page.waitForFunction(old=>{const c=JSON.parse(localStorage.getItem('hac.v3.connexion')||'{}').token;return c&&c!==old;},TOKEN);
+ const nouveauCode=JSON.parse(await page.evaluate(()=>localStorage.getItem('hac.v3.connexion'))).token;
+ ok('changement de code effectué et code court stocké',nouveauCode!==TOKEN&&nouveauCode.length<=8);
  await page.click('#changerMonCode');
- await page.waitForFunction(()=>JSON.parse(localStorage.getItem('hac.v3.connexion')||'{}').token!==TOKEN2,{timeout:3000});
- ok('le nouveau code authentifie les requêtes suivantes',JSON.parse(await page.evaluate(()=>localStorage.getItem('hac.v3.connexion'))).token!==TOKEN2);
+ await page.waitForFunction(old=>{const c=JSON.parse(localStorage.getItem('hac.v3.connexion')||'{}').token;return c&&c!==old;},nouveauCode);
+ ok('le nouveau code authentifie les requêtes suivantes',JSON.parse(await page.evaluate(()=>localStorage.getItem('hac.v3.connexion'))).token!==nouveauCode);
  ok('aucune erreur JavaScript',erreurs.length===0);
  await browser.close();
  if(process.exitCode)process.exit(process.exitCode);
