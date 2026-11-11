@@ -288,7 +288,24 @@ function chargerTout_() {
 
 function relation_(I, c, r) {
   if (c === 'etudes' && r.clientId && !fiche_(I, 'clients', r.clientId)) return 'Client lié introuvable';
-  if (c === 'factures' && (!r.etudeId || !vivante_(I, 'etudes', r.etudeId))) return 'Étude liée introuvable';
+  if (c === 'factures') {
+    if (!r.etudeId || !vivante_(I, 'etudes', r.etudeId)) return 'Étude liée introuvable';
+    if (r.modeleFacturation === 'lignes') {
+      var deduction = 0;
+      for (var fi = 0; fi < r.facturesPrecedentesIds.length; fi++) {
+        var precedente = fiche_(I, 'factures', r.facturesPrecedentesIds[fi]);
+        if (!precedente || precedente._deleted === true || precedente.etudeId !== r.etudeId)
+          return 'Facture précédente introuvable ou rattachée à une autre étude';
+        if (r.date && precedente.date && precedente.date > r.date)
+          return 'Une facture postérieure ne peut pas être déduite';
+        if (!nombreNonNegatif_(precedente.montant)) return 'Montant TTC d’une facture précédente invalide';
+        deduction += precedente.montant;
+      }
+      deduction = Math.round((deduction + Number.EPSILON) * 100) / 100;
+      if (Math.abs(deduction - r.deductionFacturesPrecedentesTtc) > 0.005)
+        return 'La déduction ne correspond pas aux factures précédentes référencées';
+    }
+  }
   if (c === 'interventions') {
     if (!vivante_(I, 'etudes', r.etudeId)) return 'Étude liée introuvable';
     if (!vivante_(I, 'membres', r.membreId)) return 'Membre lié introuvable';
@@ -335,8 +352,45 @@ function validerMetier_(c,r) {
     var signe=['Devis signé','Convention signée','Convention étudiant avant réalisation','En réalisation','Archivée'];
     if(signe.indexOf(r.statut)>=0&&!nombrePositif_(r.jeh)) return 'Étude signée : prix unitaire JEH client HT positif requis';
   }
-  if(c==='factures'&&(typeof r.etudeId!=='string'||!ID_VALIDE.test(r.etudeId)||!texte_(r.type)||!texte_(r.etat)||!nombreNonNegatif_(r.montant)))
-    return 'Facture : étude, type, état ou montant invalide';
+  if(c==='factures'){
+    if(typeof r.etudeId!=='string'||!ID_VALIDE.test(r.etudeId)||!texte_(r.type)||!texte_(r.etat)||!nombreNonNegatif_(r.montant))
+      return 'Facture : étude, type, état ou montant invalide';
+    if(r.modeleFacturation!==undefined&&r.modeleFacturation!=='lignes') return 'Facture : modèle de facturation inconnu';
+    if(r.modeleFacturation==='lignes'){
+      if(!Array.isArray(r.lignes)||r.lignes.length===0||r.lignes.length>100) return 'Facture : au moins une ligne valide est requise';
+      if(!nombreNonNegatif_(r.tauxTva)||r.tauxTva>1) return 'Facture : taux de TVA invalide';
+      var prestationsHt=0, fraisHt=0;
+      for(var li=0;li<r.lignes.length;li++){
+        var ligne=r.lignes[li];
+        if(!simple_(ligne)) return 'Facture : ligne '+(li+1)+' invalide';
+        if(ligne.type==='prestation'){
+          if(!nombrePositif_(ligne.quantite)||!nombreNonNegatif_(ligne.prixUnitaireHt)) return 'Facture : quantité ou prix unitaire invalide à la ligne '+(li+1);
+          prestationsHt+=ligne.quantite*ligne.prixUnitaireHt;
+        } else if(ligne.type==='frais'){
+          if(!nombreNonNegatif_(ligne.montantHt)) return 'Facture : montant des frais invalide à la ligne '+(li+1);
+          fraisHt+=ligne.montantHt;
+        } else return 'Facture : type de ligne inconnu à la ligne '+(li+1);
+      }
+      var centimes=function(v){return Math.round((v+Number.EPSILON)*100)/100;};
+      var ht=centimes(prestationsHt+fraisHt), tva=centimes(ht*r.tauxTva), brut=centimes(ht+tva);
+      if(!nombreNonNegatif_(r.montantHt)||!nombreNonNegatif_(r.montantTva)||!nombreNonNegatif_(r.montantTtcBrut)||
+         !nombreNonNegatif_(r.deductionFacturesPrecedentesTtc)||!nombreNonNegatif_(r.montantTtc))
+        return 'Facture : totaux HT, TVA, TTC ou déduction invalides';
+      var net=centimes(brut-r.deductionFacturesPrecedentesTtc);
+      if(net<0||Math.abs(ht-r.montantHt)>0.005||Math.abs(tva-r.montantTva)>0.005||
+         Math.abs(brut-r.montantTtcBrut)>0.005||Math.abs(net-r.montantTtc)>0.005||
+         Math.abs(net-r.montant)>0.005)
+        return 'Facture : les totaux ne correspondent pas aux lignes et à la déduction';
+      if(!Array.isArray(r.facturesPrecedentesIds)||r.facturesPrecedentesIds.length>100)
+        return 'Facture : références des factures précédentes invalides';
+      var idsVus={};
+      for(var fi=0;fi<r.facturesPrecedentesIds.length;fi++){
+        var fid=r.facturesPrecedentesIds[fi];
+        if(typeof fid!=='string'||!ID_VALIDE.test(fid)||fid===r.id||idsVus[fid]) return 'Facture : référence antérieure invalide ou dupliquée';
+        idsVus[fid]=true;
+      }
+    }
+  }
   if(c==='interventions'){
     if(typeof r.etudeId!=='string'||!ID_VALIDE.test(r.etudeId)||typeof r.membreId!=='string'||!ID_VALIDE.test(r.membreId)||
        !dateValide_(r.date)||['Payé','Pas payé','A venir','Non effectué'].indexOf(r.statut)<0||
