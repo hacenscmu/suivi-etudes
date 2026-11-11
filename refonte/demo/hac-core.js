@@ -324,7 +324,9 @@
       }
     
       const montantHt = montantTtc !== null && tauxTva !== null ? montantTtc / (1 + tauxTva) : null;
-      const nombreJehFacturees = montantHt !== null && prixJehHt !== null ? montantHt / prixJehHt : null;
+      const fraisHt = nombreValide(etude.frais) ?? 0;
+      const baseJehHt = montantHt !== null ? Math.max(0, montantHt - fraisHt) : null;
+      const nombreJehFacturees = baseJehHt !== null && prixJehHt !== null ? baseJehHt / prixJehHt : null;
       if (prixJehHt !== null && ((prixJehMinHt !== null && prixJehHt < prixJehMinHt) || (prixJehMaxHt !== null && prixJehHt > prixJehMaxHt))) {
         alertes.push("Prix de la JEH client (" + prixJehHt + " € HT) hors de la fourchette CNJE " + prixJehMinHt + "–" + prixJehMaxHt + " € HT");
       }
