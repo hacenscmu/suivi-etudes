@@ -528,3 +528,10 @@ button.b.ghost:disabled{opacity:.4}
 .wsz b{white-space:nowrap}
 .dedit .wfull{padding-top:32px}
 .wfull .wtb{top:0;right:4px;left:auto;transform:none}
+
+/* v32 : étirer les blocs par le coin */
+.wgc .wtb{left:auto;right:6px;top:6px;bottom:auto;transform:none}
+.wrs{position:absolute;right:2px;bottom:2px;width:34px;height:34px;z-index:3;touch-action:none;cursor:nwse-resize;display:flex;align-items:flex-end;justify-content:flex-end}
+.wrs::before{content:"";position:absolute;right:6px;bottom:6px;width:16px;height:16px;border-right:4px solid var(--ink);border-bottom:4px solid var(--ink);border-radius:0 0 8px 0}
+.wrs i{position:absolute;right:30px;bottom:6px;font:700 11px/1 inherit;font-style:normal;background:var(--ink);color:var(--card);padding:4px 6px;border-radius:7px;white-space:nowrap}
+.wrsz{z-index:6;align-self:start;justify-self:start}.wrsz>.card{outline:3px solid var(--acc)!important}

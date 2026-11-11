@@ -469,11 +469,11 @@ function vDash(D){
    cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Nombre cumulé, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
   const L=dashLayout();
   DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='',seg=[];
-  const tb=k=>{const [w,h]=dashSize(L,k),m=DMIN[k];return `<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><span class="wsz"><button type="button" data-wsz="${k}:w:-1" ${w<=m[0]?'disabled':''} aria-label="Moins large">−</button><b>↔ ${w}</b><button type="button" data-wsz="${k}:w:1" ${w>=DCOLS?'disabled':''} aria-label="Plus large">+</button></span><span class="wsz"><button type="button" data-wsz="${k}:h:-1" ${h<=m[1]?'disabled':''} aria-label="Moins haut">−</button><b>↕ ${h}</b><button type="button" data-wsz="${k}:h:1" ${h>=8?'disabled':''} aria-label="Plus haut">+</button></span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`};
+  const tb=k=>{const [w,h]=dashSize(L,k);return `<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',15)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div><span class="wrs" data-wk="${k}" aria-label="Étirer pour agrandir ou réduire"><i>${w}×${h}</i></span>`};
   const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${packDash(L,seg).map(x=>`<div class="wgc${x.H===1?' wh1':''}" data-wk="${x.k}" style="grid-column:${x.x+1}/span ${x.W};grid-row:${x.y+1}/span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')}</div>`;seg=[]};
   ks.forEach(k=>{if(DFULL.includes(k)){flush();out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`}else seg.push(k)});flush();
   const hid=DASH_BLOCKS.filter(([k])=>L.hide[k]);
-  const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, − / + pour sa largeur (↔) et sa hauteur (↕). Chaque ligne s’étire pour remplir l’écran.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
+  const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, étirez le coin ◢ pour l’agrandir ou le réduire. Chaque ligne s’étire ensuite pour remplir l’écran.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
   return `<div class="dwrap${DEDIT?' dedit':''}">${bar}${out}</div>`;
 }
 /* ---------- listes en cartes ---------- */
@@ -826,6 +826,15 @@ document.addEventListener('pointerdown',e=>{const h=e.target.closest('.wdh');if(
 document.addEventListener('pointermove',e=>{if(!WDRAG)return;WDRAG.el.style.transform=`translate(${e.clientX-WDRAG.x0}px,${e.clientY-WDRAG.y0}px)`;WDRAG.cx=e.clientX;WDRAG.cy=e.clientY;
   document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));const t=wTarget(e.clientX,e.clientY);if(t)t.el.classList.add('wtgt')});
 function wTarget(x,y){const el=WDRAG&&WDRAG.el;if(!el)return null;el.style.pointerEvents='none';const u=document.elementFromPoint(x,y);el.style.pointerEvents='';const t=u&&u.closest('.dwrap [data-wk].wgc,.dwrap [data-wk].wfull');if(!t||t===el)return null;const r=t.getBoundingClientRect();return {el:t,k:t.dataset.wk,after:t.classList.contains('wfull')?y>r.top+r.height/2:x>r.left+r.width/2}}
+// Étirer un bloc par son coin (doigt ou souris) : la taille est arrondie à la case, sans descendre sous le minimum.
+let WRS=null;
+document.addEventListener('pointerdown',e=>{const h=e.target.closest('.wrs');if(!h||!DEDIT)return;e.preventDefault();e.stopPropagation();const el=h.closest('.wgc'),g=el.parentElement,cs=getComputedStyle(g),gap=parseFloat(cs.columnGap)||8,r=el.getBoundingClientRect();
+  WRS={k:h.dataset.wk,el,lab:h.querySelector('i'),x0:e.clientX,y0:e.clientY,w0:r.width,h0:r.height,gap,colW:(g.clientWidth-gap*(DCOLS-1))/DCOLS,rowH:parseFloat(cs.gridAutoRows)||92};el.classList.add('wrsz');try{h.setPointerCapture(e.pointerId)}catch(x){}},true);
+document.addEventListener('pointermove',e=>{if(!WRS)return;const R=WRS,m=DMIN[R.k],nw=Math.max(40,R.w0+e.clientX-R.x0),nh=Math.max(40,R.h0+e.clientY-R.y0);
+  R.el.style.width=nw+'px';R.el.style.height=nh+'px';
+  R.cw=Math.max(m[0],Math.min(DCOLS,Math.round((nw+R.gap)/(R.colW+R.gap))));R.ch=Math.max(m[1],Math.min(8,Math.round((nh+R.gap)/(R.rowH+R.gap))));R.lab.textContent=R.cw+'×'+R.ch});
+const endWRS=()=>{if(!WRS)return;const R=WRS;WRS=null;if(R.cw){const L=dashLayout();L.size[R.k]=[R.cw,R.ch];dashSave(L)}render()};
+document.addEventListener('pointerup',endWRS);document.addEventListener('pointercancel',endWRS);
 const endWDrag=()=>{if(!WDRAG)return;const W=WDRAG,t=W.cx!=null?wTarget(W.cx,W.cy):null;WDRAG=null;W.el.style.transform='';W.el.classList.remove('wdrg');document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));
   if(t&&t.k!==W.k){const L=dashLayout(),o=L.order.filter(k=>k!==W.k);o.splice(o.indexOf(t.k)+(t.after?1:0),0,W.k);L.order=o;dashSave(L)}render()};
 document.addEventListener('pointerup',endWDrag);document.addEventListener('pointercancel',endWDrag);
@@ -949,7 +958,7 @@ async function api(body){
   let r,j;
   try{r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'})}catch(e){throw new Error(navigator.onLine===false?'reseau':'google')}
   const t=await r.text();try{j=JSON.parse(t)}catch(e){throw new Error(navigator.onLine===false?'reseau':'html')}
-  if(j&&j.error)throw new Error(j.error);
+  if(j&&j.error){const er=new Error(j.error);er.data=j;throw er}
   return j;
 }
 // Message clair selon la vraie cause (avant : tout était affiché comme « Hors connexion »)
@@ -994,6 +1003,9 @@ function makeDb(){
         catch(e){const m=String(e.message);
           // Conflit : quelqu'un a modifié la fiche entre-temps. On n'écrase rien : la modification est retirée et la version à jour rechargée.
           if(m==='lecture'){outbox.shift();saveOut();continue} // salarié : lecture seule, rien n'est envoyé
+          // Modification enregistrée par une ancienne version de l'appli (sans n° d'opération ni version attendue) : on la met au nouveau format au lieu de bloquer.
+          if((m==='op'||m==='expected')&&!outbox[0]._fix){const it=outbox[0];it._fix=1;if(typeof it.op!=='string'||it.op.length<4)it.op=newId('o');if(typeof it.expected!=='number')it.expected=0;it._anc=1;saveOut();continue}
+          if(m==='conflit'&&outbox[0]._anc&&e.data&&typeof e.data.version==='number'){outbox[0].expected=e.data.version;delete outbox[0]._anc;saveOut();continue}
           if(m==='conflit'||m==='json'||m==='collection'||m==='id'||m==='taille'){conflit++;outbox.shift();saveOut();continue}
           throw e}
         outbox.shift();saveOut()}
@@ -1048,7 +1060,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=31;
+const VERSION=33;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
