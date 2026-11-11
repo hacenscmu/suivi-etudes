@@ -984,11 +984,11 @@
     location.reload();
   }
   async function demarrer() {
-    prefixeStockageActif = await prefixeStockageUtilisateur(connexion.token);
-    cleSession = prefixeStockageActif + "session";
-    const client = creerClientApiV3({ transport: connexion.essai ? transportEssai() : transportFetch(connexion.url), obtenirToken: () => connexion.token });
-    synchro = creerSynchro({ client, stockage: stockageNavigateur(prefixeStockageActif), creerOpId: () => nouvelId("op") });
     try {
+      prefixeStockageActif = await prefixeStockageUtilisateur(connexion.token);
+      cleSession = prefixeStockageActif + "session";
+      const client = creerClientApiV3({ transport: connexion.essai ? transportEssai() : transportFetch(connexion.url), obtenirToken: () => connexion.token });
+      synchro = creerSynchro({ client, stockage: stockageNavigateur(prefixeStockageActif), creerOpId: () => nouvelId("op") });
       etatSynchro = await synchro.demarrer();
       if (connexion.essai) session = { role: "Membre", membreId: "demo" };
       else {
