@@ -305,3 +305,88 @@ test("un salarié ne reçoit pas les montants globaux d'un BV partagé", async (
   assert.equal(JSON.stringify(loaded.data).includes("700"), false);
   assert.equal(JSON.stringify(loaded.data).includes("900"), false);
 });
+
+
+const CRYPTO = require("node:crypto");
+const TOKEN_SALARIE = "code-salarie-8-caracteres";
+const donneesSignalement = {
+  membres: {
+    membre_test: { id: "membre_test", nomComplet: "Membre admin", _v: 1 },
+    membre_0001: { id: "membre_0001", nomComplet: "Camille Martin", _v: 1 },
+  },
+  etudes: {
+    etude_0001: { id: "etude_0001", num: "HAC-001", resume: "Audit qualité", statut: "En réalisation", date: "2026-10-01", montant: 0, client: "Client A", _v: 1 },
+    etude_0002: { id: "etude_0002", num: "HAC-002", resume: "Autre étude", statut: "En réalisation", date: "2026-10-01", montant: 0, client: "Client B", _v: 1 },
+  },
+  interventions: {
+    interv_0001: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-10-01", statut: "Pas payé", minutesIndividuelles: 120, _v: 1 },
+  },
+};
+function serveurSignalement() {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: donneesSignalement });
+  s.api.enregistrerJeton("membre_0001", CRYPTO.createHash("sha256").update(TOKEN_SALARIE).digest("hex"), "Salarie");
+  return s;
+}
+const reqSalarie = (action, extra = {}) => ({ action, apiVersion: 3, token: TOKEN_SALARIE, ...extra });
+
+test("un salarié signale uniquement une étude associée ; son identité est imposée et son signalement reste privé", async () => {
+  const s = serveurSignalement();
+  const r = await body(s, reqSalarie("signalerJEH", {
+    etudeId: "etude_0001", date: "2026-10-03", duree: 240, nb: 2,
+    commentaire: "Intervention oubliée", membreId: "membre_test",
+  }));
+  assert.equal(r.ok, true);
+  assert.equal(r.data.membreId, "membre_0001");
+  assert.equal(r.data.minutesIndividuelles, 120);
+  assert.equal(r.data.statut, "En attente");
+  const charge = await body(s, reqSalarie("loadAll"));
+  assert.equal(Object.keys(charge.data.signalementsJEH).length, 1);
+  assert.equal((await body(s, reqSalarie("signalerJEH", {
+    etudeId: "etude_0002", date: "2026-10-03", duree: 240, nb: 2,
+  }))).error.code, "FORBIDDEN");
+  assert.equal((await body(s, reqSalarie("loadAll"))).data.signalementsJEH[r.data.id].membreId, "membre_0001");
+});
+
+test("un salarié ne peut ni traiter un signalement ni écrire une intervention", async () => {
+  const s = serveurSignalement();
+  const r = await body(s, reqSalarie("signalerJEH", { etudeId: "etude_0001", date: "2026-10-03", duree: 240, nb: 2 }));
+  assert.equal((await body(s, reqSalarie("traiterSignalementJEH", { signalementId: r.data.id, decision: "ajouter" }))).error.code, "FORBIDDEN");
+  assert.equal((await body(s, reqSalarie("save", { collection: "interventions", id: "interv_0002", record: { id: "interv_0002" }, expectedVersion: 0, opId: "op_salarie_jeh_0001" }))).error.code, "FORBIDDEN");
+});
+
+test("un membre transforme le signalement en une seule ligne JEH préremplie", async () => {
+  const s = serveurSignalement();
+  const r = await body(s, reqSalarie("signalerJEH", { etudeId: "etude_0001", date: "2026-10-03", duree: 240, nb: 2, commentaire: "Oubli" }));
+  const traitee = await body(s, req("traiterSignalementJEH", { signalementId: r.data.id, decision: "ajouter" }));
+  assert.equal(traitee.ok, true);
+  assert.equal(traitee.data.signalement.statut, "Ajoutée");
+  assert.equal(traitee.data.intervention.membreId, "membre_0001");
+  assert.equal(traitee.data.intervention.etudeId, "etude_0001");
+  assert.equal(traitee.data.intervention.date, "2026-10-03");
+  assert.equal(traitee.data.intervention.minutesIndividuelles, 120);
+  assert.equal(traitee.data.intervention.statut, "Pas payé");
+  assert.equal(Object.values(s.lireDonnees().interventions).filter(x => x.signalementId === r.data.id).length, 1);
+  assert.equal((await body(s, req("traiterSignalementJEH", { signalementId: r.data.id, decision: "ajouter" }))).error.code, "ALREADY_PROCESSED");
+});
+
+test("un membre peut refuser un signalement sans créer d'intervention", async () => {
+  const s = serveurSignalement();
+  const r = await body(s, reqSalarie("signalerJEH", { etudeId: "etude_0001", date: "2026-10-03", duree: 240, nb: 2 }));
+  const traitee = await body(s, req("traiterSignalementJEH", { signalementId: r.data.id, decision: "refuser" }));
+  assert.equal(traitee.data.signalement.statut, "Refusée");
+  assert.equal(traitee.data.intervention, null);
+  assert.equal(Object.values(s.lireDonnees().interventions).filter(x => x.signalementId === r.data.id).length, 0);
+});
+
+test("un signalement rejette les dates, durées et nombres de personnes invalides", async () => {
+  const s = serveurSignalement();
+  for (const extra of [
+    { date: "2026-02-30", duree: 240, nb: 2 },
+    { date: "2026-10-03", duree: 0, nb: 2 },
+    { date: "2026-10-03", duree: 240, nb: 0 },
+    { date: "2026-10-03", duree: 240, nb: 1.5 },
+  ]) {
+    const r = await body(s, reqSalarie("signalerJEH", { etudeId: "etude_0001", ...extra }));
+    assert.equal(r.error.code, "INVALID_REQUEST");
+  }
+});
