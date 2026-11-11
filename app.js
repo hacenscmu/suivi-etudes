@@ -947,7 +947,7 @@ document.addEventListener('click',e=>{
 async function api(body){
   const c=CONN();
   let r,j;
-  try{r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'})}catch(e){throw new Error('reseau')}
+  try{r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'})}catch(e){throw new Error(navigator.onLine===false?'reseau':'google')}
   const t=await r.text();try{j=JSON.parse(t)}catch(e){throw new Error(navigator.onLine===false?'reseau':'html')}
   if(j&&j.error)throw new Error(j.error);
   return j;
@@ -955,6 +955,7 @@ async function api(body){
 // Message clair selon la vraie cause (avant : tout était affiché comme « Hors connexion »)
 function errMsg(m,ecriture){const g=ecriture?' Vos modifications restent gardées sur cet appareil et repartiront automatiquement.':'';
   if(m==='reseau')return ecriture?'Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.':'Hors connexion : dernière version enregistrée affichée.';
+  if(m==='google')return 'Google Apps Script ne répond pas alors que le réseau fonctionne. Le plus souvent : le lien enregistré n’est pas celui de l’Application Web (il doit finir par /exec), ou le déploiement n’est pas en accès « Tout le monde ». Ouvrez le lien dans le navigateur : il doit afficher « Le script fonctionne ».'+g;
   if(m==='html')return 'Le lien Drive ne répond pas comme prévu. Vérifiez dans Paramètres → Synchronisation que le lien finit par /exec (Déployer → Gérer les déploiements → Application Web, accès « Tout le monde »).'+g;
   if(m==='action'||m==='op'||m==='expected')return 'Le Code.gs installé dans Google Apps Script n’est pas à jour : recopiez-le puis Déployer → Gérer les déploiements → Nouvelle version.'+g;
   if(m==='serveur')return 'Google a renvoyé une erreur temporaire, nouvel essai automatique.'+g;
@@ -1047,7 +1048,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=29;
+const VERSION=30;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
