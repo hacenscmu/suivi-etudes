@@ -292,7 +292,7 @@ function relation_(I, c, r) {
     if (!r.etudeId || !vivante_(I, 'etudes', r.etudeId)) return 'Étude liée introuvable';
     var factureDejaDeduite = Object.keys(I.idx).some(function(key) {
       var e = I.idx[key];
-      return key.indexOf('factures\\u0001') === 0 && key !== 'factures\\u0001' + r.id &&
+      return key.indexOf('factures\u0001') === 0 && key !== 'factures\u0001' + r.id &&
         e.o && !e.corrompu && !e.doublon && e.o._deleted !== true &&
         Array.isArray(e.o.facturesPrecedentesIds) && e.o.facturesPrecedentesIds.indexOf(r.id) >= 0;
     });
@@ -475,7 +475,7 @@ function dependance_(I, c, id) {
   if (c === 'factures') {
     var factureReferencee = Object.keys(I.idx).some(function(key) {
       var e = I.idx[key];
-      return key.indexOf('factures\\u0001') === 0 && key !== 'factures\\u0001' + id &&
+      return key.indexOf('factures\u0001') === 0 && key !== 'factures\u0001' + id &&
         e.o && !e.corrompu && !e.doublon && e.o._deleted !== true &&
         Array.isArray(e.o.facturesPrecedentesIds) && e.o.facturesPrecedentesIds.indexOf(id) >= 0;
     });
