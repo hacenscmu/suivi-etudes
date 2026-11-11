@@ -25,11 +25,12 @@ test("ping est public et vérifie la version du contrat", async () => {
 
 test("loadAll exige un token et retourne les collections et métadonnées", async () => {
   let request;
-  const c = client(async r => { request = r; return succes({ etudes: {}, clients: {}, membres: {}, factures: {}, interventions: {}, bvs: {}, lignesBV: {}, formation: {}, appareils: {}, config: { main: {} }, temps: {} }); });
+  const c = client(async r => { request = r; return succes({ etudes: {}, clients: {}, membres: {}, factures: {}, interventions: {}, bvs: {}, lignesBV: {}, formation: {}, appareils: {}, config: { main: {} }, temps: {}, signalementsJEH: {} }); });
   const r = await c.loadAll();
   assert.equal(request.token, "token-test");
   assert.deepEqual(r.collections.etudes, []);
   assert.deepEqual(r.collections.interventions, []);
+  assert.deepEqual(r.collections.signalementsJEH, []);
   assert.deepEqual(r.legacyTemps, {});
   assert.deepEqual(r.tombstones.etudes, {});
   assert.equal(r.meta.revision, "r1");
@@ -138,7 +139,7 @@ test("normalise les collections indexées en tableaux et sépare les tombstones"
       etude_0002: { id: "etude_0002", _deleted: true, _v: 3 },
     },
     clients: {}, membres: {}, factures: {}, interventions: {}, bvs: {}, lignesBV: {},
-    formation: {}, appareils: {}, config: { main: { id: "main", tva: 0.2 } },
+    formation: {}, appareils: {}, signalementsJEH: {}, config: { main: { id: "main", tva: 0.2 } },
     temps: { temps_0001: { prenom: "Alex", min: 60 } },
   }));
   const r = await c.loadAll();
