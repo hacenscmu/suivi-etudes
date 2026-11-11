@@ -1,19 +1,18 @@
 // Suivi des études HAC — serveur Google Apps Script, version SÉCURISÉE avec rôles (appli v19 et suivantes).
 // Les données restent dans le même Google Sheet, feuille « Données » [collection | id | json] : aucune migration.
 //
-// Rôles (gérés DANS L'APPLI : Paramètres → Membres et codes d'accès) :
-//   - Membre  : toutes les données, tous les droits, gestion des codes. Code long, jamais réaffiché.
-//   - Salarié : voit uniquement ce qui le concerne (ses lignes de JEH, sa paie, sa formation), en lecture.
-//               Code simple de 8 caractères, visible par les membres pour le lui transmettre.
-// Tout nom présent dans les données (JEH, formation) sans rôle Membre devient automatiquement Salarié.
-// Une seule action dans l'éditeur, la première fois : exécuter creerMonCode() pour obtenir le premier code Membre.
+// Codes d'accès (gérés DANS L'APPLI : Paramètres → Membres et codes d'accès) :
+//   - Code des membres : UN code de 8 caractères, stable, commun à tous les membres (tous les droits).
+//   - Code salarié     : un code de 8 caractères par nom, créé automatiquement dès que le nom apparaît dans
+//                        les JEH ou la formation ; le salarié voit uniquement ce qui le concerne, en lecture.
+// Première fois seulement, depuis l'éditeur : exécuter codeMembres() pour afficher le code des membres.
 
-const COLLECTIONS = ['etudes', 'factures', 'temps', 'formation', 'clients', 'config', 'appareils'];
+const COLLECTIONS = ['etudes', 'factures', 'temps', 'formation', 'clients', 'config', 'appareils', 'signalements'];
 const TAILLE_MAX = 100000;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sans 0/O, 1/I/L
 
 function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
-function doGet() { return out_({ ok: 'Le script fonctionne.', version: 'securise-3' }); }
+function doGet() { return out_({ ok: 'Le script fonctionne.', version: 'securise-4' }); }
 
 function sha_(s) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)
@@ -26,9 +25,14 @@ function enregistrerJetons_(t) { props_().setProperty('TOKENS', JSON.stringify(t
 function role_(e) { return e && (e.role || (e.admin === false ? 'salarie' : 'membre')); } // anciens codes = Membre
 function ncl_(s) { return String(s || '').trim().replace(/\s+/g, ' ').toLowerCase(); }
 
+const NOM_MEMBRES = 'Membres';
+function codeMembres_() { try { return JSON.parse(props_().getProperty('CODE_MEMBRES') || 'null'); } catch (x) { return null; } }
+function creerCodeMembres_() { var c = aleatoire_(8); props_().setProperty('CODE_MEMBRES', JSON.stringify({ h: sha_(c), code: c, cree: new Date().toISOString() })); return c; }
 function membre_(token) {
   if (typeof token !== 'string' || token.length < 8 || token.length > 200) return null;
-  var h1 = sha_(token), h2 = sha_(token.trim().toUpperCase()), t = jetons_(), trouve = null;
+  var h1 = sha_(token), h2 = sha_(token.trim().toUpperCase()), cm = codeMembres_();
+  if (cm && (egal_(h2, String(cm.h)) || egal_(h1, String(cm.h)))) return NOM_MEMBRES;    // code commun des membres
+  var t = jetons_(), trouve = null;
   Object.keys(t).forEach(function (m) { var e = t[m]; if (e && e.active === true && (egal_(h1, String(e.h)) || egal_(h2, String(e.h)))) trouve = m; });
   return trouve;
 }
@@ -39,14 +43,14 @@ function doPost(e) {
   if (!b || typeof b !== 'object') return out_({ error: 'requete' });
   var qui = membre_(b.token);
   if (!qui) return out_({ error: 'auth' });
-  var role = role_(jetons_()[qui]);
+  var role = qui === NOM_MEMBRES ? 'membre' : role_(jetons_()[qui]);
   try {
     if (b.action === 'ping') return out_({ ok: 1, membre: qui, role: role, admin: role === 'membre' });
     if (b.action === 'loadAll') return out_(verrou_(function () { return role === 'membre' ? loadAll_() : vueSalarie_(qui); }));
-    if (b.action === 'changerMonCode') return out_(verrou_(function () { return { ok: 1, membre: qui, code: nouveauCode_(qui, role) }; }));
-    if (role !== 'membre') return out_({ error: 'lecture' });                      // un salarié ne modifie rien
+    if (b.action === 'signaler') return out_(verrou_(function () { return signaler_(b, qui); })); // seule écriture permise à un salarié
+    if (role !== 'membre') return out_({ error: 'lecture' });                      // un salarié ne modifie rien d'autre
     if (b.action === 'save' || b.action === 'delete') return out_(verrou_(function () { return ecrire_(b, qui); }));
-    if (['membres', 'creerCode', 'reinitialiserCode', 'desactiver', 'reactiver', 'changerRole'].indexOf(b.action) >= 0) return out_(verrou_(function () { return gererMembres_(b, qui); }));
+    if (['membres', 'creerCode', 'reinitialiserCode', 'desactiver', 'reactiver'].indexOf(b.action) >= 0) return out_(verrou_(function () { return gererMembres_(b, qui); }));
     return out_({ error: 'action' });
   } catch (x) {
     console.log('Erreur serveur : ' + (x && x.message));
@@ -81,7 +85,8 @@ function loadAll_() {
 // Vue Salarié : uniquement ses lignes de JEH, ses niveaux de formation, le n° et le résumé de ses études,
 // et les réglages nécessaires au calcul de sa paie. Aucune facture, aucun client, aucun autre intervenant.
 function vueSalarie_(qui) {
-  var tout = loadAll_(), moi = ncl_(qui), out = { etudes: {}, temps: {}, formation: {}, config: {} };
+  var tout = loadAll_(), moi = ncl_(qui), out = { etudes: {}, temps: {}, formation: {}, config: {}, signalements: {} };
+  Object.keys(tout.signalements || {}).forEach(function (id) { var g = tout.signalements[id]; if (ncl_(g.par) === moi) out.signalements[id] = g; });
   var nums = {};
   Object.keys(tout.temps || {}).forEach(function (id) { var t = tout.temps[id]; if (ncl_(t.prenom) === moi) { out.temps[id] = t; if (t.etude) nums[t.etude] = 1; } });
   Object.keys(tout.formation || {}).forEach(function (id) { var f = tout.formation[id]; if (ncl_(f.nom) === moi) {
@@ -121,6 +126,18 @@ function ecrire_(b, qui) {
   return { ok: 1, version: nouveau._v };
 }
 
+// Signalement d'une ligne de JEH manquante : le nom est imposé par le serveur (celui du code utilisé).
+function signaler_(b, qui) {
+  var d = b.signalement;
+  if (!d || typeof d !== 'object') return { error: 'json' };
+  var txt = function (v, n) { return typeof v === 'string' ? v.slice(0, n) : ''; }, nb = function (v) { return typeof v === 'number' && isFinite(v) && v >= 0 ? v : null; };
+  var o = { par: qui, date: txt(d.date, 10), etude: txt(d.etude, 40), min: nb(d.min), nb: nb(d.nb) || 1, note: txt(d.note, 500), statut: 'nouveau', le: new Date().toISOString(), _v: 1 };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(o.date) || !o.min) return { error: 'incomplet' };
+  var id = 'g' + Utilities.getUuid().replace(/-/g, '').slice(0, 12);
+  sheet_().appendRow(['signalements', id, JSON.stringify(o)]);
+  return { ok: 1, id: id };
+}
+
 // ---------- Codes et rôles ----------
 function aleatoire_(n) {
   var octets = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, Utilities.getUuid() + Utilities.getUuid(), Utilities.Charset.UTF_8), s = '';
@@ -147,25 +164,24 @@ function synchroniserNoms_() {
 }
 function gererMembres_(b, qui) {
   if (b.action === 'membres') {
+    var cm = codeMembres_(); if (!cm || !cm.code) { creerCodeMembres_(); cm = codeMembres_(); }
     synchroniserNoms_();
-    var t = jetons_();
-    return { ok: 1, membres: Object.keys(t).sort(function (a, c) { return a.localeCompare(c); }).map(function (m) { var e = t[m], r = role_(e);
-      return { nom: m, actif: e.active === true, role: r, code: r === 'salarie' && e.active === true ? e.code || '' : '', change: e.change || e.cree || '' }; }) };
+    var t = jetons_(), noms = Object.keys(t).sort(function (a, c) { return a.localeCompare(c); });
+    var liste = function (r) { return noms.filter(function (m) { return role_(t[m]) === r; }).map(function (m) { var e = t[m];
+      return { nom: m, actif: e.active === true, code: r === 'salarie' && e.active === true ? e.code || '' : '' }; }); };
+    return { ok: 1, codeMembres: cm.code, salaries: liste('salarie'), anciens: liste('membre') };
   }
   var t = jetons_(), nom = typeof b.nom === 'string' ? b.nom.trim() : '';
-  if (!nom || nom.length > 60) return { error: 'nom' };
-  var role = b.role === 'salarie' ? 'salarie' : 'membre';
-  if (b.action === 'creerCode') { if (t[nom] && t[nom].active) return { error: 'existe' }; return { ok: 1, nom: nom, role: role, code: nouveauCode_(nom, role) }; }
+  if (!nom || nom.length > 60 || nom === NOM_MEMBRES) return { error: 'nom' };
+  if (b.action === 'creerCode') { if (t[nom] && t[nom].active) return { error: 'existe' }; return { ok: 1, nom: nom, code: nouveauCode_(nom, 'salarie') }; }
   if (!t[nom]) return { error: 'inconnu' };
-  if (b.action === 'reinitialiserCode') { var r = role_(t[nom]); return { ok: 1, nom: nom, role: r, code: nouveauCode_(nom, r) }; }
   if (nom === qui) return { error: 'soimeme' };
-  if (b.action === 'changerRole') return { ok: 1, nom: nom, role: role, code: nouveauCode_(nom, role) }; // nouveau code adapté au rôle
+  if (b.action === 'reinitialiserCode' || b.action === 'reactiver') { if (role_(t[nom]) !== 'salarie') return { error: 'ancien' }; return { ok: 1, nom: nom, code: nouveauCode_(nom, 'salarie') }; }
   if (b.action === 'desactiver') { t[nom].active = false; delete t[nom].code; t[nom].revoque = new Date().toISOString(); enregistrerJetons_(t); return { ok: 1 }; }
-  if (b.action === 'reactiver') { var r2 = role_(t[nom]); return { ok: 1, nom: nom, role: r2, code: nouveauCode_(nom, r2) }; }
   return { error: 'action' };
 }
 
 // ---------- Depuis l'éditeur (première fois, ou secours) ----------
-// Remplacez le nom si besoin, choisissez creerMonCode puis Exécuter : le code s'affiche dans le journal.
-function creerMonCode() { var c = nouveauCode_('Pauline.D', 'membre'); console.log('Votre code Membre (ne sera plus affiché) : ' + c); return c; }
+// Choisissez codeMembres puis Exécuter : le code commun des membres s'affiche dans le journal (créé s'il n'existe pas).
+function codeMembres() { var cm = codeMembres_(); var c = cm && cm.code ? cm.code : creerCodeMembres_(); console.log('Code des membres : ' + c); return c; }
 function listerCodes() { var t = jetons_(); Object.keys(t).forEach(function (m) { console.log(m + ' : ' + role_(t[m]) + (t[m].active ? '' : ' (désactivé)')); }); }

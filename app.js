@@ -43,8 +43,8 @@ const INVOICED=['Acompte facturé','Facture intermédiaire','Solde facturé'];
 const BV_STAT=['Pas payé','Payé','A venir','Non effectué'];
 
 /* ---------- état ---------- */
-const S={etudes:{},factures:{},temps:{},formation:{},clients:{},cfg:null};
-let loaded={etudes:false,factures:false,temps:false,formation:false,clients:false,cfg:false};
+const S={etudes:{},factures:{},temps:{},formation:{},clients:{},signalements:{},cfg:null};
+let loaded={etudes:false,factures:false,temps:false,formation:false,clients:false,signalements:false,cfg:false};
 let db=null,userCap=null,canWrite=true,tab=(lsGet('suivi.tab')==='temps'&&(lsSet('suivi.fseg','jeh'),lsSet('suivi.tab','finances')),['factures','remun'].includes(lsGet('suivi.tab'))&&lsSet('suivi.tab','finances'),['dash','etudes','finances','temps','formation','params'].includes(lsGet('suivi.tab'))?lsGet('suivi.tab'):'dash'),mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
 let dirty=false,pendingRender=false,timeoutNote=false,dbErr='';
 // un mandat finit la veille du début du suivant ; le dernier n'a pas de fin
@@ -291,14 +291,19 @@ function donut(parts,center,sub){
 function legendHtml(parts){return '<div class="legend">'+parts.map(p=>`<span><i style="background:${p.c}"></i>${esc(p.l)} · ${p.v}</span>`).join('')+'</div>'}
 function smooth(a){const f=(x,i)=>x[i]===null?null:((x[i-1]==null?x[i]:x[i-1])+2*x[i]+(x[i+1]==null?x[i]:x[i+1]))/4;const o=a.map((_,i)=>f(a,i));return o}
 let GRAD=0;
-function lineChart(pts,series,fmt,int){
-  const W=560,H=230,pl=44,pr=10,pt=12,pb=26;
+// Dans un widget, la courbe est redessinée aux dimensions exactes de sa case (pas de bandes vides, texte net).
+let LCS={},LCN=0;
+function fitCharts(){document.querySelectorAll('.wgc .chartbox[data-lc]').forEach(b=>{const a=LCS[b.dataset.lc];if(!a)return;const w=Math.round(b.clientWidth),h=Math.round(b.clientHeight);if(w<40||h<30)return;const t=document.createElement('div');t.innerHTML=lineChart(a[0],a[1],a[2],a[3],w,h);const nb=t.querySelector('.chartbox');nb.removeAttribute('data-lc');b.replaceWith(nb)})}
+window.addEventListener('resize',()=>{clearTimeout(window.__fc);window.__fc=setTimeout(()=>{if(tab==='dash')render()},200)});
+function lineChart(pts,series,fmt,int,W0,H0){
+  let lc='';if(!W0){if(LCN%40===0&&LCN)LCS={};LCS[++LCN]=[pts,series,fmt,int];lc=' data-lc="'+LCN+'"'}
+  const W=W0||560,H=H0||230,nar=W<220,pl=nar?6:44,pr=nar?6:10,pt=nar?6:12,pb=nar?6:26;
   const sm=series.map(s=>({c:s.c,l:s.l,a:smooth(smooth(s.v)),area:s.area}));
   let mx=0;sm.forEach(s=>s.a.forEach(v=>{if(v!==null&&v>mx)mx=v}));if(mx<=0)mx=1;
   const nice=int?Math.max(4,Math.ceil(mx/4)*4):(()=>{const p=Math.pow(10,Math.floor(Math.log10(mx)));const m=mx/p;return (m<=1?1:m<=2?2:m<=5?5:10)*p})();
   const X=i=>pl+(W-pl-pr)*i/(pts.length-1),Y=v=>pt+(H-pt-pb)*(1-v/nice);
-  let g='';for(let k=0;k<=4;k++){const v=nice*k/4,y=Y(v);g+=`<line x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}" stroke="var(--line)"/><text x="${pl-6}" y="${y+3}" text-anchor="end">${fmt(v)}</text>`}
-  let lastLab=-99;pts.forEach((T,i)=>{const d=new Date(T*864e5),prev=i?new Date(pts[i-1]*864e5):null;if((!prev||prev.getUTCMonth()!==d.getUTCMonth())&&i-lastLab>=7&&i<=pts.length-4){lastLab=i;g+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${MOIS[d.getUTCMonth()]}${d.getUTCMonth()===0||i===0?' '+String(d.getUTCFullYear()).slice(2):''}</text>`}});
+  let g='';for(let k=0;k<=4;k++){const v=nice*k/4,y=Y(v);g+=`<line x1="${pl}" x2="${W-pr}" y1="${y}" y2="${y}" stroke="var(--line)"/>`+(nar?'':`<text x="${pl-6}" y="${y+3}" text-anchor="end">${fmt(v)}</text>`)}
+  let lastLab=-99;if(!nar)pts.forEach((T,i)=>{const d=new Date(T*864e5),prev=i?new Date(pts[i-1]*864e5):null;if((!prev||prev.getUTCMonth()!==d.getUTCMonth())&&i-lastLab>=7&&i<=pts.length-4){lastLab=i;g+=`<text x="${X(i)}" y="${H-8}" text-anchor="middle">${MOIS[d.getUTCMonth()]}${d.getUTCMonth()===0||i===0?' '+String(d.getUTCFullYear()).slice(2):''}</text>`}});
   let defs='',fills='',lines='';
   sm.forEach((s,k)=>{let d='',started=false,lastI=0;s.a.forEach((v,i)=>{if(v===null)return;d+=(started?'L':'M')+X(i).toFixed(1)+' '+Y(v).toFixed(1);started=true;lastI=i});
     if(!d)return;
@@ -307,7 +312,7 @@ function lineChart(pts,series,fmt,int){
     fills+=`<path d="${d}L${X(lastI)} ${Y(0)}L${X(s.a.findIndex(v=>v!==null))} ${Y(0)}Z" fill="url(#${id})"/>`;
     lines+=`<path d="${d}" fill="none" stroke="${s.c}" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round"/>`});
   g+=fills+lines;
-  return `<div class="chartbox"><svg viewBox="0 0 ${W} ${H}" role="img"><defs>${defs}</defs>${g}</svg></div><div class="legend">${sm.map(s=>`<span><i style="background:${s.c}"></i>${esc(s.l)}</span>`).join('')}</div>`;
+  return `<div class="chartbox"${lc}><svg viewBox="0 0 ${W} ${H}" role="img"><defs>${defs}</defs>${g}</svg></div><div class="legend">${sm.map(s=>`<span><i style="background:${s.c}"></i>${esc(s.l)}</span>`).join('')}</div>`;
 }
 
 /* ---------- champs de saisie ---------- */
@@ -327,6 +332,7 @@ const ICO={
  trend:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
  sign:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>',
  hour:'<path d="M6 3h12M6 21h12"/><path d="M7 3v3a5 5 0 0 0 2 4l3 2-3 2a5 5 0 0 0-2 4v3M17 3v3a5 5 0 0 1-2 4l-3 2 3 2a5 5 0 0 1 2 4v3"/>',
+ move:'<path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/>',
  pie:'<path d="M12 3v9h9"/><path d="M20.5 15A9 9 0 1 1 9 3.5"/>',
  list:'<path d="M9 6h12M9 12h12M9 18h12"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
  alert:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
@@ -383,6 +389,7 @@ async function doSync(){
     lsSet('suivi.url',u);location.reload();
   }catch(e){say('Connexion impossible : vérifiez l’adresse et le réseau.',1)}
 }
+function toastMsg(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
 let codeDemande=false;function demanderCode(){if(codeDemande)return;codeDemande=true;try{openSheet('code')}catch(e){}}
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
 let HSEL='';
@@ -396,20 +403,40 @@ function render(){
   const D=compute();
   const views={moi:vMoi,dash:vDash,etudes:vEtudes,finances:vFinances,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams};
   const scrolls=[...document.querySelectorAll('.tw')].map(e=>e.scrollLeft);
-  v.innerHTML=views[tab](D);
+  v.innerHTML=views[tab](D);fitCharts();
   const hs=$('#hsel');if(hs)hs.innerHTML=tab==='finances'?HSEL:tab==='dash'?HSEL+'<button class="pen" type="button" data-dashed="1" aria-label="Modifier le tableau de bord"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>':'';
   
   document.querySelectorAll('.tw').forEach((e,i)=>{if(scrolls[i])e.scrollLeft=scrolls[i]});
   if(fk){const [c,id,f]=fk.split('|');const el=v.querySelector(`[data-c="${c}"][data-id="${id}"][data-f="${f}"]`);if(el){el.focus({preventScroll:true});try{if(el.setSelectionRange&&el.type!=='number'&&el.type!=='date')el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}
   window.scrollTo(0,scrollY);
 }
-const DASH_BLOCKS=[['banner','Bandeau des alertes'],['kpis','Recette, CA signé, à encaisser'],['jeh','JEH réalisées par les étudiants'],['alert','Alertes à traiter'],['vue','Où en sont les études ?'],['det','Détail des études en cours'],['enc','Encaissé et dépenses'],['cli','Clients totaux et fidèles']];
+const DASH_BLOCKS=[['banner','Bandeau des alertes'],['kpis','Recette, CA signé, à encaisser'],['vue','Où en sont les études ?'],['det','Détail des études en cours'],['jeh','JEH réalisées par les étudiants'],['alert','Alertes à traiter'],['enc','Encaissé et dépenses'],['cli','Clients totaux et fidèles']];
 // disposition propre à chaque appareil (non synchronisée)
 function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(e){return {}}}
 function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
-function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{}}}
+function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{}}}
+// Widgets : grille de 9 colonnes, taille minimale [largeur, hauteur] en cases ; chaque ligne est complétée pour prendre toute la largeur.
+let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[2,1],alert:[3,2],enc:[4,3],cli:[4,3]},DDEF={jeh:[3,1]},DFULL=['banner','kpis'];
+let DEDIT=false,WDRAG=null;
+// nombre de cases selon la largeur de l'écran : 3 sur téléphone (blocs l'un sous l'autre, pleine largeur), puis ≈ 80 px par case jusqu'à 18
+function dashCols(){const v=document.getElementById('view'),w=(v&&v.clientWidth)||window.innerWidth;return w<600?3:Math.max(9,Math.min(18,Math.round(w/80)))}
+let DRSZ=null;window.addEventListener('resize',()=>{clearTimeout(DRSZ);DRSZ=setTimeout(()=>{if(tab==='dash'&&dashCols()!==DCOLS)render()},150)});
+function dashSize(L,k){const m=DMIN[k],s=L.size[k]||DDEF[k]||[];return [Math.min(DCOLS,Math.max(m[0],s[0]|0)),Math.min(8,Math.max(m[1],s[1]|0))]}
+// Rangement : les blocs se suivent en lignes ; un bloc qui tient sous le précédent (hauteur cumulée ≤ hauteur de la ligne) s'empile dessous.
+// Ensuite chaque ligne s'étire pour remplir toute la largeur, et chaque pile pour remplir toute la hauteur.
+function packDash(L,ks){const N=DCOLS,rows=[];let r=null;
+  ks.forEach(k=>{const [w,h]=dashSize(L,k),it={k,w,h};
+    if(r){const used=r.cols.reduce((a,c)=>a+c.cw,0),last=r.cols[r.cols.length-1];
+      if(last.sum+h<=r.H&&used-last.cw+Math.max(last.cw,w)<=N){last.items.push(it);last.sum+=h;last.cw=Math.max(last.cw,w);return}
+      if(used+w<=N){r.cols.push({items:[it],sum:h,cw:w});r.H=Math.max(r.H,h);return}}
+    r={cols:[{items:[it],sum:h,cw:w}],H:h};rows.push(r)});
+  const split=(tot,ws)=>{const s=ws.reduce((a,b)=>a+b,0),ex=tot-s,add=ws.map(x=>ex*x/s),fl=add.map(Math.floor);let rest=ex-fl.reduce((a,b)=>a+b,0);
+    add.map((a,i)=>[a-fl[i],i]).sort((a,b)=>b[0]-a[0]||a[1]-b[1]).forEach(([,i])=>{if(rest>0){fl[i]++;rest--}});return ws.map((x,i)=>x+fl[i])};
+  const out=[];let y=0;rows.forEach(r=>{const W=split(N,r.cols.map(c=>c.cw));let x=0;
+    r.cols.forEach((c,ci)=>{const Hs=split(r.H,c.items.map(i=>i.h));let yy=y;c.items.forEach((it,ii)=>{out.push({k:it.k,x,y:yy,W:W[ci],H:Hs[ii]});yy+=Hs[ii]});x+=W[ci]});y+=r.H});
+  return out}
 function dashSec(){const L=dashLayout(),lab=Object.fromEntries(DASH_BLOCKS);
-  return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
+  return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Pour la taille des blocs : bouton ✎ du tableau de bord. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
 function vDash(D){
   const c=D.c;const M=['Tous les mandats'].concat(c.mandats.map(m=>m.nom));if(!M.includes(mandatSel))mandatSel='Tous les mandats';
   const d=dash(D,mandatSel);
@@ -431,17 +458,23 @@ function vDash(D){
     ${kpi('À ENCAISSER HT',eur0(d.reste),d.all?'dont retard '+nf0.format(Math.round(d.retard))+' €':'','hour')}
     <div class="sve"><div class="svh"><span><b>${eur0(d.enc)}</b> encaissés sur <b>${eur0(d.ca)}</b> signés</span><b class="pct">${d.ca>0?Math.round(d.enc/d.ca*100):0} %</b></div><div class="svt"><i style="width:${pe}%"></i></div></div>
   </div>`,
-   vue:`<div class="card"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>`,
-   det:`<div class="card"><h3>${ic('list')}Détail des études en cours</h3><div class="hint">Nombre d’études par statut</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>`,
+   vue:`<div class="card trio"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Toutes les études, par statut</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>`,
+   det:`<div class="card trio"><h3>${ic('list')}Détail des études en cours</h3><div class="hint">Études en cours, par étape</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>`,
    alert:n?`<div class="card alc"><h3>${ic('bell')}Alertes à traiter<span class="cnt">${d.nbAlerts}</span></h3>${al.map(e=>`<button class="ali" data-open="${e.id}"><span class="aln"><b>${esc(e.num||'(sans n°)')}</b><small>${esc(e.client||'')}</small></span><span class="alx">${e.alerts.map(a=>`<span>${ic('warn',13)}${esc(a)}</span>`).join('')}</span><span class="chev">›</span></button>`).join('')}${n>6?`<button class="b ghost addl" data-goalerts="1">Voir les ${n} études</button>`:''}</div>`:`<div class="card alc ok"><h3>${ic('ok')}Alertes à traiter</h3><div class="small">Rien à signaler.</div></div>`,
    jeh:(()=>{const mx=Math.max(...d.jehMois.map(m=>m.v),0.0001),cur=d.jehMois[5].v;
-     return `<div class="card jehk2"><div class="jk-h"><span class="jk-ic">${ic('users',16)}</span><div><b>JEH réalisées</b><small>${d.all?'Tout l’historique':esc(mandatSel)} · par les étudiants</small></div></div>
+     return `<div class="card jehk2 trio"><div class="jk-h"><span class="jk-ic">${ic('users',16)}</span><div><b>JEH réalisées</b><small>${d.all?'Tout l’historique':esc(mandatSel)} · par les étudiants</small></div></div>
       <div class="jk-b"><div class="jk-n"><div class="jehbig">${nf1.format(Math.round(d.jehEtud*10)/10)}</div><div class="jk-s">JEH · ${d.nbEtud} étudiant${d.nbEtud>1?'s':''}</div>${cur>0?`<div class="jk-m">+${nf1.format(Math.round(cur*10)/10)} ce mois-ci</div>`:''}</div>
       <div class="jk-g">${d.jehMois.map((m,i)=>`<div class="jk-c${i===5?' cur':''}"><span class="jk-v">${m.v?nf1.format(Math.round(m.v*10)/10):''}</span><span class="jk-bar"><i style="height:${Math.max(4,Math.round(m.v/mx*100))}%"></i></span><small>${esc(m.l)}</small></div>`).join('')}</div></div></div>`})(),
-   enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
-   cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
+   enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Montants HT cumulés, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
+   cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Nombre cumulé, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
   const L=dashLayout();
-  return `<div class="dgrid">${L.order.filter(k=>!L.hide[k]).map(k=>k==='banner'||k==='kpis'?`<div class="full">${B[k]}</div>`:B[k]).join('')}</div>`;
+  DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='',seg=[];
+  const tb=k=>{const [w,h]=dashSize(L,k),m=DMIN[k];return `<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><span class="wsz"><button type="button" data-wsz="${k}:w:-1" ${w<=m[0]?'disabled':''} aria-label="Moins large">−</button><b>↔ ${w}</b><button type="button" data-wsz="${k}:w:1" ${w>=DCOLS?'disabled':''} aria-label="Plus large">+</button></span><span class="wsz"><button type="button" data-wsz="${k}:h:-1" ${h<=m[1]?'disabled':''} aria-label="Moins haut">−</button><b>↕ ${h}</b><button type="button" data-wsz="${k}:h:1" ${h>=8?'disabled':''} aria-label="Plus haut">+</button></span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`};
+  const flush=()=>{if(!seg.length)return;out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${packDash(L,seg).map(x=>`<div class="wgc${x.H===1?' wh1':''}" data-wk="${x.k}" style="grid-column:${x.x+1}/span ${x.W};grid-row:${x.y+1}/span ${x.H}">${B[x.k]}${DEDIT?tb(x.k):''}</div>`).join('')}</div>`;seg=[]};
+  ks.forEach(k=>{if(DFULL.includes(k)){flush();out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',16)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`}else seg.push(k)});flush();
+  const hid=DASH_BLOCKS.filter(([k])=>L.hide[k]);
+  const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, − / + pour sa largeur (↔) et sa hauteur (↕). Chaque ligne s’étire pour remplir l’écran.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
+  return `<div class="dwrap${DEDIT?' dedit':''}">${bar}${out}</div>`;
 }
 /* ---------- listes en cartes ---------- */
 const FLT={etudes:{q:'',s:'all'},factures:{q:'',s:'all'},temps:{q:'',s:'all'}};
@@ -652,7 +685,12 @@ function listTemps(D){
   const jeh=L.reduce((a,t)=>a+num(t.I),0),brut=L.filter(topay).reduce((a,t)=>a+num(t.J),0);
   return `<div class="sum"><b>${L.length}</b> ligne${L.length>1?'s':''} · <b>${nf3.format(Math.round(jeh*1000)/1000)}</b> JEH${brut?' · '+eur0(brut)+' brut à payer':''}</div>`+(L.map(t=>jehCard(t,D)).join('')||emptyMsg('Aucune ligne de temps.'));
 }
-function vTemps(D){return `<h2>JEH</h2>${searchBox('temps')}${chipsRow('temps',[['all','Tout'],['pay','À payer'],['paid','Payé']])}<div id="lst">${listTemps(D)}</div>${fab('temps','Ajouter une ligne de temps')}`}
+function signalementsHtml(){
+  const G=Object.entries(S.signalements).filter(([,g])=>g.statut==='nouveau').sort((a,b)=>String(a[1].le).localeCompare(String(b[1].le)));
+  if(!G.length||SALARIE)return '';
+  return `<div class="card alc"><h3>${ic('bell')}Signalements à traiter<span class="cnt">${G.length}</span></h3>${G.map(([id,g])=>`<div class="sgr"><div><b>${esc(g.par)}</b> · ${g.etude?'étude '+esc(g.etude):'étude non précisée'} · ${sd(dnum(g.date))}<div class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</div></div><div class="mbra"><button class="bsm" data-sig="ok:${id}">Créer la ligne</button><button class="bsm ghost" data-sig="non:${id}">Refuser</button></div></div>`).join('')}</div>`;
+}
+function vTemps(D){return `<h2>JEH</h2>${signalementsHtml()}${searchBox('temps')}${chipsRow('temps',[['all','Tout'],['pay','À payer'],['paid','Payé']])}<div id="lst">${listTemps(D)}</div>${fab('temps','Ajouter une ligne de temps')}`}
 function vRemun(D){
   const R=remun(D),T=R.T;
   const cards=R.rows.filter(r=>r.jeh>0||r.dejaPaye>0).map(r=>{
@@ -768,6 +806,8 @@ function vMoi(D){
   return `<h2>Bonjour ${esc(moi.split('.')[0]||moi)}</h2>
   <div class="card"><div class="ftg"><div class="ft acc"><small>À recevoir (prochain BV)</small><b>${eur(r.net)}</b></div><div class="ft"><small>Brut</small><b>${eur(r.brut)}</b></div><div class="ft"><small>JEH à payer</small><b>${f3(r.jeh)}</b></div><div class="ft"><small>Déjà reçu (brut)</small><b>${eur(r.dejaPaye)}</b></div></div>
   ${r.jeh>0&&r.jeh<1?`<div class="eal" style="margin-top:8px">${ic('warn',13)} Moins de 1 JEH : cotisations calculées sur 1 JEH</div>`:''}<div class="small" style="margin-top:8px">${f3(jt)} JEH réalisées en tout · ${nbBV} BV payé${nbBV>1?'s':''}</div></div>
+  <div style="margin-top:12px"><button class="bsm" data-mn="signaler">+ Signaler une ligne JEH manquante</button></div>
+  ${Object.values(S.signalements).length?`<h3 style="margin:16px 2px 8px">Mes signalements</h3>${Object.values(S.signalements).sort((a,b)=>String(b.le).localeCompare(String(a.le))).map(g=>`<div class="card lcard sgn">${dayBox(dnum(g.date))}<div class="lm"><b>${g.etude?'Étude '+esc(g.etude):'Étude non précisée'}</b><span class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</span>${g.statut==='refusee'&&g.motif?`<span class="sgm">Motif du refus : ${esc(g.motif)}</span>`:''}</div><div class="sgst"><span class="jst ${g.statut==='ajoutee'?'ok':g.statut==='refusee'?'warn':'due'}">${{ajoutee:'Validé',refusee:'Refusé'}[g.statut]||'En attente'}</span>${g.traite?`<span class="small">le ${sd(dnum(String(g.traite).slice(0,10)))}</span>`:'<span class="small">envoyé le '+sd(dnum(String(g.le||'').slice(0,10)))+'</span>'}</div></div>`).join('')}`:''}
   <h3 style="margin:16px 2px 8px">Mes lignes de JEH</h3>${L.map(ligne).join('')||emptyMsg('Aucune ligne de JEH à votre nom pour le moment.')}
   ${niv.length?`<h3 style="margin:16px 2px 8px">Ma formation</h3><div class="card">${niv.map(([n,v])=>`<div class="stat"><span>Étude ${esc(n)}</span><span>Niveau ${v} · ${['Non formé','Notions','Autonome avec appui','Autonome','Référent'][v]||''}</span></div>`).join('')}</div>`:''}
   <div class="small" style="margin-top:12px">Vous voyez uniquement les données liées à votre nom. Pour une correction, contactez la trésorerie.</div>`;
@@ -775,13 +815,20 @@ function vMoi(D){
 function vParams(D){
   const u=lsGet('suivi.url'),last=fmtLast(),nb=getBk().length;
   const row=(k,t,sub,attr)=>`<button class="srow" ${attr}><span class="sic">${pic(k)}</span><span class="stx"><b>${t}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`;
-  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${u?row('code','Code d’accès personnel',lsGet('suivi.token')?(lsGet('suivi.membre')?'Connecté : '+lsGet('suivi.membre'):'Enregistré sur cet appareil'):'À saisir','data-mn="code"'):''}${u&&lsGet('suivi.token')?row('users','Membres et codes d’accès',lsGet('suivi.admin')==='1'?'Créer, réinitialiser ou désactiver les codes':'Changer mon code','data-mn="membres"'):''}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
-  if(SALARIE)return `<h2>Paramètres</h2><div class="card slist">${row('code','Code d’accès personnel','Connecté : '+(lsGet('suivi.membre')||''),'data-mn="code"')}${row('users','Changer mon code','Un nouveau code est créé et enregistré sur ce téléphone','data-mn="moncode"')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
+  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${u?row('code','Code d’accès de cet appareil',lsGet('suivi.token')?(lsGet('suivi.membre')?'Connecté : '+lsGet('suivi.membre'):'Enregistré sur cet appareil'):'À saisir','data-mn="code"'):''}${u&&lsGet('suivi.token')&&lsGet('suivi.admin')==='1'?row('users','Membres et codes d’accès','Code des membres et codes des salariés','data-mn="membres"'):''}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
+  if(SALARIE)return `<h2>Paramètres</h2><div class="card slist">${row('code','Code d’accès de cet appareil','Connecté : '+(lsGet('suivi.membre')||''),'data-mn="code"')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
   return `<h2>Paramètres</h2>${top}<div class="sh" style="margin:16px 2px 6px">Réglages des calculs</div><div class="card slist">${paramSecs(D).map(x=>`<button class="srow" data-param="${x.k}"><span class="sic">${pic(x.k)}</span><span class="stx"><b>${x.t}</b><small>${esc(x.s)}</small></span><span class="chev">›</span></button>`).join('')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
 }
 let PSEC=null,DRAG=null;
 document.addEventListener('pointerdown',e=>{const h=e.target.closest('.hdl');if(!h)return;e.preventDefault();const row=h.closest('.li'),rows=[...row.parentElement.children],i=rows.indexOf(row);DRAG={k:h.dataset.k,from:i,to:i,row,rows,y0:e.clientY};row.classList.add('drg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
 document.addEventListener('pointermove',e=>{if(!DRAG)return;const dy=e.clientY-DRAG.y0,H=DRAG.row.offsetHeight+6,n=DRAG.rows.length,f=DRAG.from;DRAG.row.style.transform=`translateY(${dy}px)`;const to=Math.max(0,Math.min(n-1,f+Math.round(dy/H)));DRAG.to=to;DRAG.rows.forEach((r,i)=>{if(r===DRAG.row)return;const sh=(f<to&&i>f&&i<=to)?-H:(f>to&&i<f&&i>=to)?H:0;r.style.transform=sh?`translateY(${sh}px)`:''})});
+document.addEventListener('pointerdown',e=>{const h=e.target.closest('.wdh');if(!h||!DEDIT)return;e.preventDefault();const el=h.closest('[data-wk].wgc,[data-wk].wfull');if(!el)return;WDRAG={k:h.dataset.wk,el,x0:e.clientX,y0:e.clientY};el.classList.add('wdrg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
+document.addEventListener('pointermove',e=>{if(!WDRAG)return;WDRAG.el.style.transform=`translate(${e.clientX-WDRAG.x0}px,${e.clientY-WDRAG.y0}px)`;WDRAG.cx=e.clientX;WDRAG.cy=e.clientY;
+  document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));const t=wTarget(e.clientX,e.clientY);if(t)t.el.classList.add('wtgt')});
+function wTarget(x,y){const el=WDRAG&&WDRAG.el;if(!el)return null;el.style.pointerEvents='none';const u=document.elementFromPoint(x,y);el.style.pointerEvents='';const t=u&&u.closest('.dwrap [data-wk].wgc,.dwrap [data-wk].wfull');if(!t||t===el)return null;const r=t.getBoundingClientRect();return {el:t,k:t.dataset.wk,after:t.classList.contains('wfull')?y>r.top+r.height/2:x>r.left+r.width/2}}
+const endWDrag=()=>{if(!WDRAG)return;const W=WDRAG,t=W.cx!=null?wTarget(W.cx,W.cy):null;WDRAG=null;W.el.style.transform='';W.el.classList.remove('wdrg');document.querySelectorAll('.wtgt').forEach(x=>x.classList.remove('wtgt'));
+  if(t&&t.k!==W.k){const L=dashLayout(),o=L.order.filter(k=>k!==W.k);o.splice(o.indexOf(t.k)+(t.after?1:0),0,W.k);L.order=o;dashSave(L)}render()};
+document.addEventListener('pointerup',endWDrag);document.addEventListener('pointercancel',endWDrag);
 const endDrag=()=>{if(!DRAG)return;const {k,from,to}=DRAG;DRAG=null;if(from!==to){const c=ensureCfg();if(k==='dash'){const L=dashLayout();const [x]=L.order.splice(from,1);L.order.splice(to,0,x);dashSave(L);render()}else{const [x]=c[k].splice(from,1);c[k].splice(to,0,x);saveCfg();render()}}if(PSEC)drawParam()};
 document.addEventListener('pointerup',endDrag);document.addEventListener('pointercancel',endDrag);
 function openParam(k){PSEC=k;ED=null;drawParam()}
@@ -843,6 +890,11 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-lact]');if
   saveRow('factures',ED.id);majMontantFacture(ED.id);openEdit(ED.col,ED.id,ED.isNew);render();
   if(a==='add'){const ins=document.querySelectorAll('#edit [data-lf="lib"]');const z=ins[ins.length-1];if(z)z.focus()}});
 document.addEventListener('input',e=>{const t=e.target;if(t.id==='q'){FLT[t.dataset.q].q=t.value;const l=$('#lst');if(l)l.innerHTML=({etudes:listEtudes,factures:listFact,temps:listTemps})[t.dataset.q](compute())}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-sig]');if(!b)return;const [a,id]=b.dataset.sig.split(':'),g=S.signalements[id];if(!g)return;
+  if(a==='non'){const m=prompt('Refuser ce signalement. Motif (facultatif, visible par '+g.par+') :','');if(m===null)return;g.statut='refusee';g.motif=m.trim();g.traite=new Date().toISOString();saveRow('signalements',id);render();return}
+  const et=Object.values(S.etudes).find(x=>ncl(x.num)===ncl(g.etude)||ncl(x.code)===ncl(g.etude));
+  const nid=addRow('temps',{date:g.date,prenom:g.par,etude:et?et.num:(g.etude||''),note:g.note||'',min:g.min,nb:g.nb||1,jeh:null,statut:'Pas payé'});
+  g.statut='ajoutee';g.ligne=nid;g.traite=new Date().toISOString();saveRow('signalements',id);openEdit('temps',nid,true)});
 document.addEventListener('click',e=>{const g=e.target.closest('[data-pdf]');if(g){e.preventDefault();genererFacture(g.dataset.pdf)}});
 document.addEventListener('click',e=>{const h=e.target.closest('[data-fsort]');if(h){FSORT=FSORT===h.dataset.fsort?null:h.dataset.fsort;render()}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(ED||PSEC))closeEdit()});
@@ -853,7 +905,12 @@ document.addEventListener('click',e=>{
   if(b.dataset.syncon){doSync();return}
   if(b.dataset.syncoff){lsSet('suivi.url','');location.reload();return}
   if(b.dataset.param){openParam(b.dataset.param);return}
-  if(b.dataset.dashed){openParam('dash');return}
+  if(b.dataset.dashed){DEDIT=!DEDIT;render();return}
+  if(b.dataset.wdone){DEDIT=false;render();return}
+  if(b.dataset.wreset){if(confirm('Revenir à la disposition par défaut ?')){dashSave({});render()}return}
+  if(b.dataset.wshow){const L=dashLayout();delete L.hide[b.dataset.wshow];dashSave(L);render();return}
+  if(b.dataset.whide){const L=dashLayout();L.hide[b.dataset.whide]=true;dashSave(L);render();return}
+  if(b.dataset.wsz){const [k,a,d]=b.dataset.wsz.split(':'),L=dashLayout(),[w,h]=dashSize(L,k);L.size[k]=a==='w'?[w+ +d,h]:[w,h+ +d];L.size[k]=[Math.max(DMIN[k][0],Math.min(DCOLS,L.size[k][0])),Math.max(DMIN[k][1],Math.min(8,L.size[k][1]))];dashSave(L);render();return}
   if(b.dataset.goalerts){FLT.etudes.s='alert';tab='etudes';lsSet('suivi.tab',tab);render();window.scrollTo(0,0);return}
   if(b.dataset.open){openRep(b.dataset.open);return}
   if(b.dataset.openc!==undefined){OPENC=b.dataset.openc;render();window.scrollTo(0,0);return}
@@ -889,11 +946,20 @@ document.addEventListener('click',e=>{
 /* ---------- démarrage ---------- */
 async function api(body){
   const c=CONN();
-  const r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'});
-  const j=await r.json();
+  let r,j;
+  try{r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'})}catch(e){throw new Error(navigator.onLine===false?'reseau':'google')}
+  const t=await r.text();try{j=JSON.parse(t)}catch(e){throw new Error(navigator.onLine===false?'reseau':'html')}
   if(j&&j.error)throw new Error(j.error);
   return j;
 }
+// Message clair selon la vraie cause (avant : tout était affiché comme « Hors connexion »)
+function errMsg(m,ecriture){const g=ecriture?' Vos modifications restent gardées sur cet appareil et repartiront automatiquement.':'';
+  if(m==='reseau')return ecriture?'Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.':'Hors connexion : dernière version enregistrée affichée.';
+  if(m==='google')return 'Google Apps Script ne répond pas alors que le réseau fonctionne. Le plus souvent : le lien enregistré n’est pas celui de l’Application Web (il doit finir par /exec), ou le déploiement n’est pas en accès « Tout le monde ». Ouvrez le lien dans le navigateur : il doit afficher « Le script fonctionne ».'+g;
+  if(m==='html')return 'Le lien Drive ne répond pas comme prévu. Vérifiez dans Paramètres → Synchronisation que le lien finit par /exec (Déployer → Gérer les déploiements → Application Web, accès « Tout le monde »).'+g;
+  if(m==='action'||m==='op'||m==='expected')return 'Le Code.gs installé dans Google Apps Script n’est pas à jour : recopiez-le puis Déployer → Gérer les déploiements → Nouvelle version.'+g;
+  if(m==='serveur')return 'Google a renvoyé une erreur temporaire, nouvel essai automatique.'+g;
+  return 'Drive a refusé l’enregistrement (motif : '+m+').'+g}
 function makeDb(){
   const c=CONN();const local=!c.url;
   const subs=[];let cache=null,pending=0,loading=false;
@@ -908,7 +974,7 @@ function makeDb(){
     try{cache=await api({action:'loadAll'});keep();stamp();if(dbErr){dbErr='';renderStatus()}emit()}
     catch(e){
       if(String(e.message)==='auth'){dbErr='Code d’accès manquant ou refusé : saisissez votre code personnel (Paramètres → Code d’accès).';renderStatus();demanderCode();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
-      else if(cache){dbErr='Hors connexion : dernière version enregistrée affichée, les modifications ne sont pas possibles pour le moment.';renderStatus()}
+      else if(cache){dbErr=errMsg(String(e.message),false);renderStatus()}
       else if(first)subs.forEach(s=>s.err&&s.err({code:'unavailable'}));
     }
     loading=false;
@@ -931,9 +997,9 @@ function makeDb(){
           if(m==='conflit'||m==='json'||m==='collection'||m==='id'||m==='taille'){conflit++;outbox.shift();saveOut();continue}
           throw e}
         outbox.shift();saveOut()}
-      stamp();if(dbErr&&/Enregistrement|Hors connexion|Code d’accès/.test(dbErr)){dbErr='';renderStatus()}}
+      stamp();if(dbErr){dbErr='';renderStatus()}}
     catch(e){if(String(e.message)==='auth'){dbErr='Code d’accès manquant ou refusé : saisissez votre code personnel (Paramètres → Code d’accès). Vos modifications restent gardées sur cet appareil.';renderStatus();demanderCode()}
-      else{dbErr='Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.';renderStatus()}}
+      else{dbErr=errMsg(String(e.message),true);renderStatus()}}
     pending--;flushing=false;
     if(conflit){conflitMsg=conflit+' modification'+(conflit>1?'s n’ont':' n’a')+' pas été enregistrée'+(conflit>1?'s':'')+' : quelqu’un a modifié la même fiche entre-temps. La version à jour est affichée.';renderStatus();clearTimeout(window.__cft);window.__cft=setTimeout(()=>{conflitMsg='';renderStatus()},30000);if(!outbox.length)load(false)}
   }
@@ -982,7 +1048,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=19;
+const VERSION=30;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
@@ -1131,15 +1197,25 @@ function sheetHTML(){
   if(sheetView==='code')return `<h2>Code d’accès personnel</h2><div class="small" style="margin-bottom:10px">Chaque membre a son propre code, donné par la trésorerie. Il est demandé une seule fois sur cet appareil.${lsGet('suivi.membre')?' Connecté en tant que <b>'+esc(lsGet('suivi.membre'))+'</b>.':''}</div><input id="syt2" type="password" style="width:100%;margin-bottom:8px" placeholder="Code d’accès" autocapitalize="off" autocomplete="off"><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="savecode">Valider</button>${lsGet('suivi.token')?'<button class="mb ghost" data-mn="forget">Oublier le code sur cet appareil</button>':''}${back}`;
   if(sheetView==='membres'){
     const adm=lsGet('suivi.admin')==='1',moi=lsGet('suivi.membre')||'';
-    const liste=MEMB===null?'<div class="small">Chargement…</div>':MEMB.map(m=>`<div class="mbr${m.actif?'':' off'}"><div class="mbrn"><b>${esc(m.nom)}</b>${m.nom===moi?' <span class="small">(vous)</span>':''}<small>${m.actif?'':'Désactivé · '}${m.role==='salarie'?'Salarié : voit seulement ses données':'Membre : tous les droits'}</small>${m.actif&&m.role==='salarie'&&m.code?`<span class="mcode">${esc(m.code)}</span>`:''}</div>
-      <div class="mbra">${m.actif?`${m.nom!==moi?`<select data-role="${esc(m.nom)}" aria-label="Rôle"><option value="membre"${m.role!=='salarie'?' selected':''}>Membre</option><option value="salarie"${m.role==='salarie'?' selected':''}>Salarié</option></select>`:''}${m.role==='salarie'&&m.code?`<button class="b ghost" data-mn="copiermcode" data-code="${esc(m.code)}">Copier</button>`:''}<button class="b ghost" data-mn="reinit" data-nom="${esc(m.nom)}">Nouveau code</button>${m.nom!==moi?`<button class="b ghost" data-mn="desact" data-nom="${esc(m.nom)}">Désactiver</button>`:''}`:`<button class="b ghost" data-mn="react" data-nom="${esc(m.nom)}">Réactiver</button>`}</div></div>`).join('');
+    if(!adm)return `<div class="shead"><h2>Codes d’accès</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div><div class="small">Seuls les membres gèrent les codes.</div>${back}`;
+    const M=MEMB,ligne=(m,ancien)=>`<div class="mbr${m.actif?'':' off'}"><div class="mbrn"><b>${esc(m.nom)}</b>${m.nom===moi?' <span class="small">(cet appareil)</span>':''}<small>${m.actif?(ancien?'Ancien code personnel (membre)':'Salarié : voit seulement ses données'):'Désactivé'}</small>${m.actif&&m.code?`<span class="mcode">${esc(m.code)}</span>`:''}</div>
+      <div class="mbra">${m.actif?`${m.code?`<button class="b ghost" data-mn="copiermcode" data-code="${esc(m.code)}">Copier</button>`:''}${ancien?'':`<button class="b ghost" data-mn="reinit" data-nom="${esc(m.nom)}">Nouveau code</button>`}${m.nom!==moi?`<button class="b ghost" data-mn="desact" data-nom="${esc(m.nom)}">Désactiver</button>`:''}`:(ancien?'':`<button class="b ghost" data-mn="react" data-nom="${esc(m.nom)}">Réactiver</button>`)}</div></div>`;
     return `<div class="shead"><h2>Membres et codes d’accès</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
-    ${moi?`<div class="small" style="margin-bottom:10px">Connecté : <b>${esc(moi)}</b>${adm?' · administrateur':''}</div>`:''}
-    <button class="mb" data-mn="moncode"><span class="t">Changer mon code</span><span class="s">Un nouveau code est créé et enregistré sur ce téléphone</span></button>
-    ${adm?`<div class="sh" style="margin:14px 2px 6px">Membres et salariés</div><div class="small" style="margin-bottom:6px">Toute personne présente dans les JEH ou la formation apparaît ici automatiquement comme Salarié, avec un code simple à lui transmettre. Passez-la en Membre pour lui donner tous les droits.</div>${liste}<button class="mb solid" data-mn="nouveau" style="margin-top:10px">+ Nouveau membre</button>`:'<div class="small" style="margin-top:12px">Seule la trésorerie (administrateur) peut créer ou désactiver les codes des membres.</div>'}
+    ${M===null?'<div class="small">Chargement…</div>':`
+    <div class="cmb"><small>Code des membres · tous les droits</small><div class="cmbr"><span class="codebig">${esc(M.codeMembres||'—')}</span><button class="bsm" data-mn="copiermcode" data-code="${esc(M.codeMembres||'')}">Copier</button>${navigator.share?`<button class="bsm ghost" data-mn="partagermcode" data-code="${esc(M.codeMembres||'')}">Partager</button>`:''}</div><small>Le même pour tous les membres. Il ne change pas.</small></div>
+    <div class="sh" style="margin:14px 2px 6px">Salariés</div><div class="small" style="margin-bottom:6px">Chaque nom présent dans les JEH ou la formation reçoit automatiquement son propre code : il ne voit que ses données.</div>
+    ${M.salaries.map(m=>ligne(m,false)).join('')||'<div class="small">Aucun salarié pour le moment.</div>'}
+    <div style="margin-top:10px"><button class="bsm" data-mn="nouveau">+ Ajouter un salarié</button></div>
+    ${M.anciens.length?`<div class="sh" style="margin:16px 2px 6px">Anciens codes personnels</div><div class="small" style="margin-bottom:6px">Codes créés avant le code commun. Désactivez-les une fois tous les appareils passés au code des membres.</div>${M.anciens.map(m=>ligne(m,true)).join('')}`:''}`}
     <div class="msg" id="mm" hidden></div>${back}`;
   }
-  if(sheetView==='nouveau')return `<h2>Nouveau membre</h2><div class="small" style="margin-bottom:10px">Son nom tel qu’il est saisi dans l’appli (ex. Alex.M). Un code d’accès lui sera créé.</div><input id="mnom" style="width:100%;margin-bottom:8px" placeholder="Prénom.N" autocomplete="off"><select id="mrole" style="width:100%;margin-bottom:10px"><option value="salarie">Salarié : voit seulement ses données</option><option value="membre">Membre : tous les droits</option></select><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="creer">Créer son code</button><button class="mb ghost" data-mn="membres">‹ Retour</button>`;
+  if(sheetView==='nouveau')return `<h2>Ajouter un salarié</h2><div class="small" style="margin-bottom:10px">Son nom tel qu’il est saisi dans les JEH (ex. Alex.M). Un code de 8 caractères lui sera créé. (Les noms saisis dans les JEH sont ajoutés automatiquement.)</div><input id="mnom" style="width:100%;margin-bottom:8px" placeholder="Prénom.N" autocomplete="off"><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="creer">Créer son code</button><button class="mb ghost" data-mn="membres">‹ Retour</button>`;
+  if(sheetView==='signaler')return `<h2>Signaler une ligne JEH manquante</h2><div class="small" style="margin-bottom:10px">La trésorerie la vérifiera puis l’ajoutera. Votre nom est joint automatiquement.</div>
+    <div class="fld"><label>Date du travail</label><input id="sg_date" type="date" value="${dstr(TODAY)}"></div>
+    <div class="fld"><label>Étude (n° ou nom)</label><input id="sg_et" list="sg_etl" autocomplete="off"><datalist id="sg_etl">${Object.values(S.etudes).map(e=>`<option value="${esc(e.num)}">${esc(e.resume||'')}</option>`).join('')}</datalist></div>
+    <div class="f2"><div class="fld"><label>Durée (minutes)</label><input id="sg_min" type="number" inputmode="numeric" min="1" placeholder="ex. 120"></div><div class="fld"><label>Nombre de personnes</label><input id="sg_nb" type="number" inputmode="numeric" min="1" value="1"></div></div>
+    <div class="fld"><label>Commentaire</label><input id="sg_note" placeholder="ex. analyse échantillon 3"></div>
+    <div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="envoyersig">Envoyer</button><button class="mb ghost" data-mn="close">Annuler</button>`;
   if(sheetView==='codeaffiche')return `<h2>Code d’accès ${CODE.soi?'de votre téléphone':'de '+esc(CODE.nom)}</h2><div class="small" style="margin-bottom:10px">${CODE.soi?'Votre nouveau code est déjà enregistré sur ce téléphone. Notez-le pour vos autres appareils'+(CODE.role==='salarie'?'.':' : il ne sera plus affiché.'):'À transmettre en privé à '+esc(CODE.nom)+'. '+(CODE.role==='salarie'?'Il reste visible dans la liste des membres.':'Il ne sera plus affiché ; en cas de perte, créez-lui un nouveau code.')}</div><div class="codebox" id="codev">${esc(CODE.code)}</div><button class="mb solid" data-mn="copier">Copier le code</button>${navigator.share?'<button class="mb" data-mn="partager">Partager…</button>':''}<div class="msg" id="mm" hidden></div><button class="mb ghost" data-mn="membres">‹ Membres</button>`;
   if(sheetView==='import')return `<h2>Importer un fichier</h2><div class="small" style="margin-bottom:10px">Fichier modèle Excel (.xlsx), tableau .csv, ou sauvegarde .json exportée depuis l’appli.</div><input type="file" id="imf" accept=".xlsx,.csv,.txt,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="width:100%"><div class="msg" id="imm" hidden></div><div id="imb"></div><button class="mb ghost" data-mn="close">Fermer</button>`;
   if(sheetView==='restore')return `<h2>Restaurer une sauvegarde</h2><div class="small" style="margin-bottom:10px">Les 6 dernières sauvegardes automatiques de cet appareil. Restaurer remplace toutes les données actuelles (une sauvegarde de l’état actuel est faite avant).</div>${bk.length?bk.map((b,i)=>`<button class="mb" data-mn="rest" data-i="${i}"><span class="t">${esc(new Date(b.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+' à '+new Date(b.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))}</span><span class="s">${esc(countData(b.d))}</span></button>`).join(''):'<div class="small">Aucune sauvegarde pour le moment : elles se créent toutes seules.</div>'}<button class="mb ghost" data-mn="close">Fermer</button>`;
@@ -1153,30 +1229,31 @@ window.sheetRefresh=()=>{if(sheetView==='home')drawSheet()};
 function openSheet(v){sheetView=v;imp=null;drawSheet()}
 const mmsg=(t,bad)=>{const m=$('#mm');if(m){m.textContent=t;m.className='msg'+(bad?' err':'');m.hidden=false}};
 document.addEventListener('click',e=>{const b=e.target.closest('[data-deldev]');if(!b)return;if(!b.dataset.arm){b.dataset.arm='1';b.textContent='Sûr ?';b.className='b warn';setTimeout(()=>{if(b.isConnected){delete b.dataset.arm;b.textContent='✕';b.className='x'}},3000);return}const id=b.dataset.deldev;if(S.devs)delete S.devs[id];if(db)db.doc('appareils/'+id).delete().catch(()=>{});render()});
-document.addEventListener('change',async e=>{const t=e.target;if(!t.dataset||!t.dataset.role)return;const nom=t.dataset.role,role=t.value;
-  if(!confirm((role==='membre'?'Donner tous les droits à ':'Limiter à ses propres données : ')+nom+' ? Un nouveau code lui sera créé.')){t.value=role==='membre'?'salarie':'membre';return}
-  try{const r=await api({action:'changerRole',nom,role});CODE={nom,code:r.code,soi:false,role};openSheet('codeaffiche')}catch(x){mmsg('Changement impossible pour le moment.',1)}});
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-mn]');if(!b)return;
   const a=b.dataset.mn;
   if(a==='close'){sheetView=null;drawSheet();return}
-  if(['home','addr','import','restore','code','nouveau'].includes(a)){openSheet(a);return}
-  if(a==='membres'){MEMB=null;openSheet('membres');if(lsGet('suivi.admin')==='1'){try{const r=await api({action:'membres'});MEMB=r.membres||[]}catch(x){MEMB=[];mmsg(String(x.message)==='admin'?'Réservé aux administrateurs.':'Liste indisponible (réseau ?).',1)}drawSheet()}return}
-  if(['creer','reinit','desact','react','moncode'].includes(a)){
+  if(['home','addr','import','restore','code','nouveau','signaler'].includes(a)){openSheet(a);return}
+  if(a==='envoyersig'){const v=id=>(($('#'+id)||{}).value||'').trim(),min=Number(v('sg_min')),nb=Number(v('sg_nb'))||1;
+    if(!v('sg_date')||!(min>0))return mmsg('Indiquez au moins la date et la durée.',1);
+    mmsg('Envoi…');try{await api({action:'signaler',signalement:{date:v('sg_date'),etude:v('sg_et'),min,nb,note:v('sg_note')}});sheetView=null;drawSheet();if(db)await db.sync();render();toastMsg('Signalement envoyé à la trésorerie.')}
+    catch(x){mmsg(String(x.message)==='incomplet'?'Indiquez la date et la durée.':'Envoi impossible : vérifiez la connexion.',1)}return}
+  if(a==='membres'){MEMB=null;openSheet('membres');if(lsGet('suivi.admin')==='1'){try{const r=await api({action:'membres'});MEMB={codeMembres:r.codeMembres,salaries:r.salaries||[],anciens:r.anciens||[]}}catch(x){MEMB={codeMembres:'',salaries:[],anciens:[]};mmsg(String(x.message)==='admin'?'Réservé aux administrateurs.':'Liste indisponible (réseau ?).',1)}drawSheet()}return}
+  if(['creer','reinit','desact','react'].includes(a)){
     const nom=a==='creer'?(($('#mnom')||{}).value||'').trim():b.dataset.nom;
     if(a==='creer'&&!nom)return mmsg('Saisissez le nom du membre.',1);
     if(a==='desact'&&!confirm('Désactiver le code de '+nom+' ? Il ne pourra plus ouvrir les données.'))return;
     if(a==='reinit'&&!confirm('Créer un nouveau code pour '+nom+' ? L’ancien ne marchera plus.'))return;
-    if(a==='moncode'&&!confirm('Créer un nouveau code pour vous ? L’ancien ne marchera plus sur vos autres appareils.'))return;
     mmsg('Un instant…');
-    try{const act={creer:'creerCode',reinit:'reinitialiserCode',desact:'desactiver',react:'reactiver',moncode:'changerMonCode'}[a];
-      const r=await api({action:act,nom,role:a==='creer'?(($('#mrole')||{}).value||'salarie'):undefined});
-      if(a==='desact'){MEMB=(await api({action:'membres'})).membres;drawSheet();return}
-      const soi=a==='moncode'||(nom&&nom===lsGet('suivi.membre'));
+    try{const act={creer:'creerCode',reinit:'reinitialiserCode',desact:'desactiver',react:'reactiver'}[a];
+      const r=await api({action:act,nom});
+      if(a==='desact'){const l=await api({action:'membres'});MEMB={codeMembres:l.codeMembres,salaries:l.salaries||[],anciens:l.anciens||[]};drawSheet();return}
+      const soi=false;
       if(soi)lsSet('suivi.token',r.code);
       CODE={nom:r.nom||r.membre||nom,code:r.code,soi,role:r.role};openSheet('codeaffiche');
     }catch(x){const m=String(x.message);mmsg(m==='existe'?'Ce membre a déjà un code actif : utilisez « Nouveau code ».':m==='admin'?'Réservé aux administrateurs.':m==='soimeme'?'Vous ne pouvez pas vous désactiver vous-même.':'Action impossible pour le moment (réseau ?).',1)}
     return}
+  if(a==='partagermcode'){try{await navigator.share({title:'Code d’accès HAC',text:'Code d’accès à l’appli HAC : '+b.dataset.code})}catch(x){}return}
   if(a==='copiermcode'){try{await navigator.clipboard.writeText(b.dataset.code);mmsg('Code copié.')}catch(x){mmsg('Code : '+b.dataset.code)}return}
   if(a==='copier'){try{await navigator.clipboard.writeText(CODE.code);mmsg('Code copié.')}catch(x){const r=document.createRange();r.selectNodeContents($('#codev'));const sl=getSelection();sl.removeAllRanges();sl.addRange(r);mmsg('Sélectionnez puis copiez le code.')}return}
   if(a==='partager'){try{await navigator.share({title:'Code d’accès HAC',text:'Ton code d’accès à l’appli HAC : '+CODE.code})}catch(x){}return}
@@ -1238,7 +1315,7 @@ render();
   const timer=setTimeout(()=>{timeoutNote=true;renderStatus()},10000);
   const clear=()=>{if(Object.values(loaded).every(Boolean)){clearTimeout(timer);timeoutNote=false;renderStatus()}};
   const fail=e=>{dbErr=(e&&e.code==='revoked')?'L’accès aux données a été retiré.':'Lecture des données impossible pour le moment.';renderStatus()};
-  ['etudes','factures','temps','formation','clients'].forEach(col=>{
+  ['etudes','factures','temps','formation','clients','signalements'].forEach(col=>{
     db.collection(col).onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{o[d.id]=Object.assign({},d.data())});S[col]=o;loaded[col]=true;clear();afterSnap()},fail);
   });
   db.collection('appareils').onSnapshot(snap=>{const o={};snap.docs.forEach(d=>{o[d.id]=Object.assign({},d.data())});S.devs=o;if(tab==='params')afterSnap()},()=>{});
