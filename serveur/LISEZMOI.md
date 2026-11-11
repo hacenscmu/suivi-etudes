@@ -12,5 +12,8 @@ Faites ces étapes **sur ordinateur**, le même jour que la fusion de l'appli v1
 6. **Déployer** : Déployer → Gérer les déploiements → crayon → Version : **Nouvelle version** → Déployer. L'adresse /exec ne change pas.
 7. **Dans l'appli** (après la fusion de la v17) : Paramètres → Code d'accès personnel → collez votre code → Valider.
 
-Dans l'appli (Paramètres → Membres et codes d'accès) : créer le code d'un nouveau membre, lui en donner un nouveau s'il l'a perdu, le désactiver s'il quitte l'association ; chacun peut changer son propre code.
+Dans l'appli (Paramètres → Membres et codes d'accès) :
+- **Membre** = tous les droits ; **Salarié** = voit uniquement ses lignes de JEH, sa paie et sa formation, en lecture.
+- Toute personne présente dans les JEH ou la formation apparaît automatiquement comme Salarié, avec un code simple de 8 caractères à lui transmettre (bouton Copier).
+- Changer le rôle d'une personne, lui donner un nouveau code, la désactiver ; chacun peut changer son propre code.
 Retour arrière : recollez l'ancien Code.gs (étape 3) et redéployez une nouvelle version.
