@@ -461,3 +461,18 @@ button.b.ghost:disabled{opacity:.4}
 .mbra .b{padding:4px 10px;font-size:12px;border-radius:99px}.mbra select{padding:4px 8px;font-size:12px}
 .sgst{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none}.sgm{display:block;font-size:12.5px;color:var(--warn);margin-top:3px}
 .cmb{background:var(--card2);border-radius:14px;padding:12px 14px;margin-bottom:6px}.cmb small{display:block;font-size:12px;color:var(--mute)}.cmbr{display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap}.codebig{font:800 24px/1 ui-monospace,Menlo,monospace;letter-spacing:3px;margin-right:auto}
+
+/* Tableau de bord : les deux anneaux + JEH sur une même ligne */
+.trow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;align-items:stretch}
+.trow>.card{margin:0;min-width:0}
+@media (max-width:760px){
+  .trow{gap:6px}
+  .trow>.card{padding:10px 6px}
+  .trio h3{font-size:11px;line-height:1.2;margin:0 0 4px;justify-content:center;text-align:center}.trio h3 .ico,.trio h3 svg{display:none}.trio .hint{display:none}
+  .trio .donutbox{zoom:.55;margin:0 auto}
+  .trio .legend{font-size:9.5px;gap:2px 6px;justify-content:center}.trio .legend i{width:7px;height:7px}
+  .trio.jehk2 .jk-h small,.trio.jehk2 .jk-ic,.trio.jehk2 .jk-m,.trio.jehk2 .jk-g{display:none}
+  .trio.jehk2 .jk-h{justify-content:center;text-align:center}.trio.jehk2 .jk-h b{font-size:11px}
+  .trio.jehk2 .jk-b{display:block;margin-top:10px}.trio.jehk2 .jk-n{text-align:center}
+  .trio.jehk2 .jehbig{font-size:38px;letter-spacing:-1.5px}.trio.jehk2 .jk-s{font-size:10.5px}
+}
