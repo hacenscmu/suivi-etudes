@@ -47,6 +47,10 @@ jobs:
         run: git diff --exit-code -- refonte/demo/hac-core.js refonte/app/hac-app.js
       - name: Vérifier la syntaxe de l’application v3
         run: node --check refonte/app/app.js && node --check refonte/app/e2e-navigateur.js && node --check refonte/app/e2e-essai.js && node --check refonte/app/e2e-salarie.js && node --check refonte/app/e2e-signalements-membre.js
+      - name: Vérifier la syntaxe du candidat Apps Script v3
+        run: node --check < refonte/backend/apps-script/Code.gs
+      - name: Exécuter tous les tests métier
+        run: node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js refonte/migration/*.test.js refonte/app/*.test.js
       - name: Installer Playwright et Chromium
         run: |
           npm install --no-save --no-package-lock playwright
@@ -66,7 +70,3 @@ jobs:
           node refonte/app/e2e-signalements-membre.js
       - name: Vérifier l’interface isolée
         run: node refonte/demo/validate-demo.mjs
-      - name: Vérifier la syntaxe du candidat Apps Script v3
-        run: node --check < refonte/backend/apps-script/Code.gs
-      - name: Exécuter tous les tests métier
-        run: node --test refonte/domain/*.test.js refonte/application/*.test.js refonte/backend/*.test.js refonte/backend/apps-script/*.test.js refonte/migration/*.test.js refonte/app/*.test.js
