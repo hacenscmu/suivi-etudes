@@ -80,4 +80,4 @@ process.stdout.write("Bundle HAC généré : " + path.relative(process.cwd(), so
 }
 
 await construire(MODULES_DEMO, ["application/lecture.js", "application/commandes.js"], "demo/hac-core.js");
-await construire(MODULES_APP, ["application/lecture.js", "application/commandes.js", "domain/clients.js", "domain/alertes.js", "domain/paie.js", "backend/client-api-v3.js", "backend/mock-serveur-v3.js", "app/synchro.js"], "app/hac-app.js");
+await construire(MODULES_APP, ["application/lecture.js", "application/commandes.js", "domain/factures.js", "domain/clients.js", "domain/alertes.js", "domain/paie.js", "backend/client-api-v3.js", "backend/mock-serveur-v3.js", "app/synchro.js"], "app/hac-app.js");
