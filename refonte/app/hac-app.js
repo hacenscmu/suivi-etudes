@@ -1731,7 +1731,7 @@
       "etudes", "clients", "membres", "factures", "interventions",
       "bvs", "lignesBV", "formation", "config", "appareils",
     ]);
-    const COLLECTIONS_LECTURE = [...COLLECTIONS_ECRITURE, "temps"];
+    const COLLECTIONS_LECTURE = [...COLLECTIONS_ECRITURE, "temps", "signalementsJEH"];
     const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;
     const OP_ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{7,127}$/;
     function idValidePour(collection, id) { return collection === "config" ? id === "main" : typeof id === "string" && ID_VALIDE.test(id); }
