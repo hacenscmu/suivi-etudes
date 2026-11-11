@@ -25,3 +25,9 @@ test("total et signalement d'un prix manquant", () => {
   const p = calculerPaie({ interventions: [I(), I({ prixJehHt: null })], membres: M, config: cfg });
   close(p.total.brut, 300); assert.equal(p.lignes[0].sansPrix, true);
 });
+
+
+test("SMIC par défaut applicable depuis le 1er juin 2026 : 12,31 € et base JEH de 49,24 €", () => {
+  const r = calculerPaie({ interventions: [I()], membres: M });
+  assert.equal(r.parametres.baseJeh, 49.24);
+});
