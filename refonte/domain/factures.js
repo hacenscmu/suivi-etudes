@@ -114,11 +114,11 @@ function calculerFactureParLignes({ lignes = [], tauxTva = 0.2, facturesPreceden
     if (ligne.type === "prestation") {
       const quantite = Number(ligne.quantite), prix = Number(ligne.prixUnitaireHt);
       if (!Number.isFinite(quantite) || quantite <= 0) anomalies.push("Quantité invalide à la ligne " + (index + 1));
-      if (!Number.isFinite(prix) || prix < 0) anomalies.push("Prix unitaire HT invalide à la ligne " + (index + 1));
+      if (ligne.prixUnitaireHt === "" || ligne.prixUnitaireHt == null || !Number.isFinite(prix) || prix < 0) anomalies.push("Prix unitaire HT invalide à la ligne " + (index + 1));
       if (Number.isFinite(quantite) && quantite > 0 && Number.isFinite(prix) && prix >= 0) prestationsHt += quantite * prix;
     } else if (ligne.type === "frais") {
       const montant = Number(ligne.montantHt);
-      if (!Number.isFinite(montant) || montant < 0) anomalies.push("Montant des frais invalide à la ligne " + (index + 1));
+      if (ligne.montantHt === "" || ligne.montantHt == null || !Number.isFinite(montant) || montant < 0) anomalies.push("Montant des frais invalide à la ligne " + (index + 1));
       else fraisHt += montant;
     } else anomalies.push("Type de ligne inconnu à la ligne " + (index + 1));
   });
