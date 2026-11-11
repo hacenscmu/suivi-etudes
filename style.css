@@ -460,3 +460,4 @@ button.b.ghost:disabled{opacity:.4}
 .bsm.ghost{background:transparent;color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
 .mbra .b{padding:4px 10px;font-size:12px;border-radius:99px}.mbra select{padding:4px 8px;font-size:12px}
 .sgst{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex:none}.sgm{display:block;font-size:12.5px;color:var(--warn);margin-top:3px}
+.cmb{background:var(--card2);border-radius:14px;padding:12px 14px;margin-bottom:6px}.cmb small{display:block;font-size:12px;color:var(--mute)}.cmbr{display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap}.codebig{font:800 24px/1 ui-monospace,Menlo,monospace;letter-spacing:3px;margin-right:auto}

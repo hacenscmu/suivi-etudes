@@ -7,13 +7,11 @@ Faites ces étapes **sur ordinateur**, le même jour que la fusion de l'appli v1
 2. **Ouvrir le script** : script.google.com → votre projet « Suivi des études ».
 3. **Garder l'ancienne version** : copiez tout le contenu actuel de `Code.gs` dans un fichier texte (retour arrière possible).
 4. **Remplacer** : effacez tout `Code.gs`, collez le contenu de `serveur/Code.gs`, puis Enregistrer (icône disquette).
-5. **Votre code administrateur (une seule fois)** : si vous avez déjà un code, il devient administrateur automatiquement. Sinon : choisissez la fonction `creerMonCode`, cliquez sur **Exécuter** et copiez le code affiché dans le **Journal d'exécution**.
-   Les codes des autres membres se gèrent ensuite **dans l'appli** : Paramètres → Membres et codes d'accès.
+5. **Le code des membres (première fois seulement)** : si un appareil est déjà connecté, ouvrez dans l'appli Paramètres → Membres et codes d'accès : le code des membres y est affiché. Sinon, dans l'éditeur, choisissez la fonction `codeMembres`, cliquez sur **Exécuter** et lisez le code dans le **Journal d'exécution**.
 6. **Déployer** : Déployer → Gérer les déploiements → crayon → Version : **Nouvelle version** → Déployer. L'adresse /exec ne change pas.
-7. **Dans l'appli** (après la fusion de la v17) : Paramètres → Code d'accès personnel → collez votre code → Valider.
+7. **Dans l'appli** : Paramètres → Code d'accès de cet appareil → saisissez le code (membres : le code commun ; salariés : leur code) → Valider.
 
-Dans l'appli (Paramètres → Membres et codes d'accès) :
-- **Membre** = tous les droits ; **Salarié** = voit uniquement ses lignes de JEH, sa paie et sa formation, en lecture.
-- Toute personne présente dans les JEH ou la formation apparaît automatiquement comme Salarié, avec un code simple de 8 caractères à lui transmettre (bouton Copier).
-- Changer le rôle d'une personne, lui donner un nouveau code, la désactiver ; chacun peut changer son propre code.
+Dans l'appli (Paramètres → Membres et codes d'accès, visible par les membres) :
+- **Code des membres** : un seul code de 8 caractères pour tous les membres (tous les droits). Il ne change pas.
+- **Codes salariés** : chaque nom présent dans les JEH ou la formation reçoit automatiquement son code de 8 caractères ; le salarié ne voit que ses données (ses JEH, sa paie, sa formation, ses signalements). Boutons Copier, Nouveau code, Désactiver.
 Retour arrière : recollez l'ancien Code.gs (étape 3) et redéployez une nouvelle version.
