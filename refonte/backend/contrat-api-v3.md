@@ -10,7 +10,7 @@
 - Les collections métier canoniques sont : `etudes`, `clients`, `membres`, `factures`, `interventions`, `bvs`, `lignesBV`, `formation`, `config`, `appareils`.
 - `temps` est une collection historique v11 conservée uniquement pour l'export/la transition. Elle est lisible pendant la migration mais **non modifiable via le contrat v3**. Les nouvelles écritures de travail utilisent `interventions`.
 - Une collection inconnue est refusée explicitement, pas ignorée.
-- Les droits restent identiques pour tous les membres dans la première version : pas de permission cachée par rôle.
+- Les droits d'accès sont gérés côté serveur : `Membre` dispose de tous les droits ; `Salarie` est en lecture seule et ne reçoit que ses propres données personnelles utiles.
 - Une authentification absente ou vide doit faire échouer toute opération protégée. Aucun secret ne doit être renvoyé dans `loadAll`, les erreurs ou les journaux.
 
 ## 2. Enveloppe commune
@@ -71,7 +71,7 @@ Une intervention représente le temps attribué à **une personne** sur une étu
 
 ### `ping`
 
-Vérifie la disponibilité et renvoie uniquement la version de l'API, l'état d'authentification non sensible et la révision du schéma. Ne renvoie aucune donnée métier.
+Vérifie la disponibilité et renvoie la version de l'API, l'état d'authentification, l'identifiant membre et le rôle d'accès (`Membre` ou `Salarie`), sans donnée métier ni jeton.
 
 ### `loadAll`
 
@@ -98,9 +98,9 @@ Renvoie les collections autorisées sous une forme stable :
 }
 ```
 
-Les clés sont illustratives. Le serveur conserve les données existantes et ne remplace pas une collection absente par une collection vide lors d'une écriture partielle. Le client v3 peut charger `temps` pour audit/migration, mais ne l'utilise pas comme collection active d'interventions.
+Les clés sont illustratives. Pour un accès `Membre`, `loadAll` renvoie les collections complètes. Pour un accès `Salarie`, le serveur ne renvoie que sa fiche membre, ses interventions, ses lignes de BV, ses BV associés, sa formation et les études auxquelles il a participé sous forme réduite (numéro, résumé, date, statut). Les clients, factures, configuration, autres membres et autres études ne sont pas transmis. Le serveur conserve les données existantes et ne remplace pas une collection absente par une collection vide lors d'une écriture partielle. Le client v3 peut charger `temps` pour audit/migration, mais ne l'utilise pas comme collection active d'interventions.
 
-### `save`
+### Gestion des accès\n\n- `adminAcces` est réservé aux accès `Membre`. Il liste les personnes de la collection `membres` et crée automatiquement un accès `Salarie` pour chaque fiche sans rôle d'accès, avec un code aléatoire de 8 caractères maximum transmis une seule fois dans la réponse.\n- `adminDefinirRole`, `adminRegenererCode`, `adminDesactiver` et `adminReactiver` sont réservés aux accès `Membre`. Un changement de rôle régénère le code et invalide l'ancien.\n- `changerMonCode` permet à chacun de renouveler son propre code. Les empreintes SHA-256 seulement sont conservées. Le dernier accès `Membre` actif ne peut pas être rétrogradé ou désactivé.\n- Les rôles d'accès ne remplacent pas le champ métier `role` de la fiche membre (président, trésorier, etc.).\n\n### `save`
 
 Requête cible :
 
@@ -121,7 +121,7 @@ Requête cible :
 - `id` doit être identique à `record.id`.
 - `opId` est obligatoire et unique par opération logique.
 - `expectedVersion` est obligatoire pour modifier une fiche existante ; création = version attendue explicitement égale à 0.
-- Le serveur vérifie la version et effectue contrôle + écriture sous verrou. Une écriture obsolète renvoie `VERSION_CONFLICT` avec la version actuelle, sans écraser les données.
+- Les accès `Salarie` ne peuvent jamais appeler `save` ou `delete` : le serveur renvoie `FORBIDDEN`.\n- Le serveur vérifie la version et effectue contrôle + écriture sous verrou. Une écriture obsolète renvoie `VERSION_CONFLICT` avec la version actuelle, sans écraser les données.
 - Le serveur incrémente `_v` et conserve des métadonnées de provenance telles que `_par` et `_le` sans les accepter aveuglément depuis le client.
 
 ### `delete`
