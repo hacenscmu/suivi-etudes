@@ -445,3 +445,10 @@ button.b.ghost:disabled{opacity:.4}
 .jk-v{font-size:10px;font-weight:700;color:var(--mute);height:12px}.jk-c.cur .jk-v{color:var(--ink)}
 .jk-c small{font-size:10.5px;color:var(--mute)}.jk-c.cur small{color:var(--ink);font-weight:700}
 .jk-bar{background:transparent}
+
+/* v18 : membres et codes */
+.mbr{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 4px;border-bottom:1px solid var(--line)}.mbr b{display:block}.mbr small{font-size:12px;color:var(--mute)}.mbr.off b{color:var(--mute)}
+.mbra{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.mbra .b{padding:6px 10px;font-size:12.5px}
+.codebox{font:600 17px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.5px;word-break:break-all;background:var(--card2);border-radius:12px;padding:14px;margin-bottom:10px;user-select:all;-webkit-user-select:all}
+.mbrn{min-width:0}.mcode{display:inline-block;margin-top:4px;font:700 13px/1 ui-monospace,Menlo,monospace;letter-spacing:1.5px;padding:5px 8px;border-radius:8px;background:var(--card2)}.mbra select{padding:6px 8px;border-radius:9px;font-size:12.5px}.mbr{flex-wrap:wrap}
+.mbrn small{display:block}
