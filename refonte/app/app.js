@@ -306,7 +306,6 @@
     const A = alertesParEtude().get(id) || calculerAlertes({ etudes: [e], factures: data.factures, interventions: data.interventions, config: synchro?.lireConfig() || {}, aujourdhui: aujourdHui() }).get(id);
     const tva = synchro?.lireConfig()?.tva ?? 0.2, inv = data.factures.filter(f => f.etudeId === id), ls = data.interventions.filter(i => i.etudeId === id);
     const f3 = n => (Math.round(Number(n || 0) * 1000) / 1000).toLocaleString("fr-FR");
-    const per = {}; ls.forEach(i => { const p = per[i.membreId] || (per[i.membreId] = { jeh: 0, brut: 0, aPayer: false }); if (i.statut === "Payé" || i.statut === "Pas payé") { const j = Number(i.minutesIndividuelles || 0) / 480; p.jeh += j; p.brut += j * Number(i.prixJehHt || 0); } if (i.statut === "Pas payé") p.aPayer = true; });
     const nomM = mid => data.membres.find(m => m.id === mid)?.nomComplet || "?";
     const niveaux = data.membres.map(m => [m, (data.formation || []).find(f => f.membreId === m.id)?.niveaux?.[id]]).filter(x => Number.isInteger(x[1]));
     const tuile = (l, v) => '<div class="stat"><div class="label">' + l + "</div><strong>" + v + "</strong></div>";
@@ -319,9 +318,8 @@
       '<p class="sub">' + money(Number(e.montant || 0) / (1 + tva)) + " HT · JEH client " + (e.jeh ? money(e.jeh) : "—") + (e.frais ? " · frais " + money(e.frais) + " HT" : "") + "</p>" +
       heading("Factures", inv.length + " facture(s)", '<button class="action" data-facture-pour="' + id + '">＋ Facture</button>') +
       '<section class="listbox rows">' + (inv.map(f => '<button type="button" class="item invoice-button" data-invoice="' + f.id + '"><div class="item-main"><strong>' + escapeHtml(f.type || "Facture") + "</strong><small>" + escapeHtml(f.date || "") + (f.echeance ? " · échéance " + escapeHtml(f.echeance) : "") + '</small></div><span class="pill ' + (f.etat === "Payée" ? "green" : "pink") + '">' + escapeHtml(f.etat) + '</span><div class="amount">' + money(f.montant) + " TTC</div></button>").join("") || '<div class="empty">Aucune facture.</div>') + "</section>" +
-      heading("JEH", "Facturées " + f3(A.jehFacturees) + " · rémunérées " + f3(A.jehRemunerees), '<button class="action" data-interv-pour="' + id + '">＋ Intervention</button>') +
-      '<section class="listbox rows">' + (Object.entries(per).map(([mid, p]) => '<div class="item"><div class="item-main"><strong>' + escapeHtml(nomM(mid)) + " · " + f3(p.jeh) + " JEH</strong><small>" + money(p.brut) + ' brut</small></div><span class="pill ' + (p.aPayer ? "pink" : "green") + '">' + (p.aPayer ? "À payer" : "Payé") + "</span></div>").join("") || '<div class="empty">Aucune intervention.</div>') + "</section>" +
-      (ls.length ? '<details class="sub" style="margin-top:8px"><summary>Voir les ' + ls.length + " lignes</summary>" + ls.map(i => '<button type="button" class="item invoice-button" data-interv="' + i.id + '"><div class="item-main"><strong>' + escapeHtml(nomM(i.membreId)) + "</strong><small>" + escapeHtml(i.date || "") + " · " + escapeHtml(i.statut || "") + '</small></div><div class="amount">' + f3(Number(i.minutesIndividuelles || 0) / 480) + " JEH</div></button>").join("") + "</details>" : "") +
+      heading("JEH associées", ls.length + " ligne(s)", '<button class="action" data-interv-pour="' + id + '">＋ Intervention</button>') +
+      '<section class="listbox rows">' + (ls.map(i => '<button type="button" class="item invoice-button" data-interv="' + i.id + '"><div class="item-main"><strong>' + escapeHtml(nomM(i.membreId)) + '</strong><small>' + escapeHtml(i.date || "") + " · " + escapeHtml(i.statut || "") + '</small></div><div class="amount">' + f3(Number(i.minutesIndividuelles || 0) / 480) + " JEH</div></button>").join("") || '<div class="empty">Aucune ligne JEH associée.</div>') + "</section>" +
       (niveaux.length ? heading("Formation sur cette étude", "") + '<p class="sub">' + niveaux.map(([m, n]) => escapeHtml(m.nomComplet) + " · niveau " + n).join(" · ") + "</p>" : "");
   }
 
