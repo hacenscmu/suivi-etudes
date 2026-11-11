@@ -255,3 +255,15 @@ test("le dernier compte Membre ne peut pas se rétrograder ni se désactiver", a
   assert.equal(off.error.code, "LAST_ADMIN");
   assert.equal((await body(s, req("ping"))).data.role, "Membre");
 });
+
+
+test("un salarié reçoit les seuls paramètres de paie, pas les réglages de gestion", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: {
+    membres: { membre_0001: { id: "membre_0001", nomComplet: "Alice", _v: 1 } },
+    config: { main: { id: "main", smic: 13, cot: { salariale: 0.1 }, patr: { patronale: 0.2 }, chomage: 0.01, tva: 0.2, relance1: 3, mandats: [{ nom: "secret" }], _v: 1 } },
+  } });
+  const created = await body(s, req("adminAcces"));
+  const code = created.data.codesGeneres[0].code;
+  const loaded = await body(s, { action: "loadAll", apiVersion: 3, token: code });
+  assert.deepEqual(loaded.data.config.main, { smic: 13, cot: { salariale: 0.1 }, patr: { patronale: 0.2 }, chomage: 0.01 });
+});
