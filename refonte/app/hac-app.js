@@ -2028,7 +2028,38 @@
         },
     
         /**
-         * Applique plusieurs commandes comme un tout (ex. un BV et sa ligne) : l'état final est validé une seule fois,
+         * Suppression logique optimiste. La vue métier est validée avant mise en file :
+         * une fiche encore référencée (client, étude, membre, BV) ne peut donc pas disparaître.
+         */
+        async supprimer(collection, id) {
+          if (collection === "config" || !Array.isArray(etat[collection])) {
+            return { valide: false, anomalies: ["Collection non supprimable ou inconnue"] };
+          }
+          const fiche = etat[collection].find(x => x.id === id);
+          if (!fiche) return { valide: false, anomalies: ["Fiche introuvable"] };
+          const attendue = Number.isSafeInteger(fiche._v) ? fiche._v : 0;
+          if (attendue < 1) {
+            return { valide: false, anomalies: ["Cette fiche doit d'abord être migrée/versionnée avant de pouvoir être supprimée."] };
+          }
+          const suivant = { ...etat, [collection]: etat[collection].filter(x => x.id !== id) };
+          const verif = construireVueApplication(suivant);
+          if (!verif.valide) return { valide: false, anomalies: verif.anomalies };
+          await file.ajouter({
+            type: "delete", collection, id, opId: creerOpId(), expectedVersion: attendue,
+          });
+          etat = suivant;
+          await memoriser();
+          let envoi;
+          try { envoi = await synchroniser(); }
+          catch (e) {
+            if (e?.code !== "NETWORK_ERROR") throw e;
+            envoi = { restantes: (await file.inspecter()).length };
+          }
+          return { valide: true, envoi };
+        },
+    
+        /**
+         * Applique plusieurs commandes como um todo (ex. un BV et sa ligne) : l'état final est validé une seule fois,
          * puis les écritures partent dans l'ordre (le parent avant l'enfant, comme l'exige le serveur).
          */
         async executerPlusieurs(commandes) {
