@@ -22,6 +22,7 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
  if(!cree.body.ok)throw new Error(cree.body.error.message);
  const browser=await chromium.launch(),page=await browser.newPage(),erreurs=[];
  page.on('pageerror',e=>erreurs.push(e.message));
+ page.on('dialog',async d=>{console.log('DIALOG '+d.message());await d.accept();});
  await page.route('https://script.google.com/**',async route=>{
   const req=JSON.parse(route.request().postData());
   const res=await serveur.transport(req);
@@ -36,7 +37,9 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
  await page.waitForSelector('[data-signalement="ajouter"]');
  ok('le Membre voit le signalement en attente',await page.locator('#content').innerText().then(t=>t.includes('Camille Martin')&&t.includes('HAC-001')));
  await page.click('[data-signalement="ajouter"]');
- await page.waitForFunction(()=>document.querySelector('#content')?.innerText.includes('Ajoutée'));
+ await page.waitForTimeout(600);
+ console.log('ETAT SIGNALLEMENT '+JSON.stringify(serveur.lireDonnees().signalementsJEH));
+ console.log('LOGS SERVEUR '+JSON.stringify(serveur.journaux));
  const records=serveur.lireDonnees();
  const signalement=Object.values(records.signalementsJEH||{})[0];
  const ligne=Object.values(records.interventions||{}).find(x=>x.signalementId===signalement.id);
