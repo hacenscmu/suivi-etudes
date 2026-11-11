@@ -132,12 +132,28 @@ function chargerSalarie_(qui) {
     var p = k.split('\u0001'), c = p[0], id = p[1], o = e.o;
     if (c === 'interventions' && o.membreId === qui) { data.interventions[id] = cloner_(o); etudes[o.etudeId] = true; }
     if (c === 'lignesBV' && o.membreId === qui) data.lignesBV[id] = cloner_(o);
-    if (c === 'formation' && o.membreId === qui) data.formation[id] = cloner_(o);
+    if (c === 'formation' && o.membreId === qui) {
+      data.formation[id] = cloner_(o);
+      Object.keys(o.niveaux || {}).forEach(function (etudeId) { etudes[etudeId] = true; });
+    }
   });
   Object.keys(I.idx).forEach(function (k) {
     var e = I.idx[k]; if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
     var p = k.split('\u0001'), c = p[0], id = p[1], o = e.o;
-    if (c === 'bvs' && Object.keys(data.lignesBV).some(function (lid) { return data.lignesBV[lid].bvId === id; })) data.bvs[id] = cloner_(o);
+    if (c === 'bvs' && Object.keys(data.lignesBV).some(function (lid) { return data.lignesBV[lid].bvId === id; })) {
+      var lignesDuBV = Object.keys(I.idx).filter(function (key) {
+        var ligne = I.idx[key];
+        return key.indexOf('lignesBV\u0001') === 0 && ligne.o && !ligne.corrompu && !ligne.doublon &&
+          ligne.o._deleted !== true && ligne.o.bvId === id;
+      });
+      var bvPerso = lignesDuBV.length === 1 && data.lignesBV[lignesDuBV[0].split('\u0001')[1]] !== undefined;
+      var projectionBV = {id: id, date: o.date || '', reference: o.reference || ''};
+      if (bvPerso) {
+        if (o.net !== undefined) projectionBV.net = o.net;
+        if (o.brut !== undefined) projectionBV.brut = o.brut;
+      }
+      data.bvs[id] = projectionBV;
+    }
     if (c === 'etudes' && etudes[id]) data.etudes[id] = {id: id, num: o.num || '', resume: o.resume || '', date: o.date || '', statut: o.statut || ''};
   });
   return data;
