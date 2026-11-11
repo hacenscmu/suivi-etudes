@@ -32,6 +32,7 @@
   const lireConnexion = () => { try { return JSON.parse(localStorage.getItem(CONN) || "null"); } catch { return null; } };
   let connexion = lireConnexion();
   let synchro = null;
+  let session = null;
   let data = creerEtatVide();
   let etatSynchro = { source: "vide", enAttente: 0, blocage: null };
   const aujourdHui = () => new Date().toISOString().slice(0, 10);
@@ -62,10 +63,11 @@
   const view = () => construireVueApplication(donneesVues(), { dateFin: aujourdHui(), nombreMois: 6, tva: synchro?.lireConfig()?.tva ?? 0.2 });
 
   function nav() {
+    const visibles = session?.role === "Salarie" ? ["Mon espace"] : pages;
     ["tabs", "mobileTabs"].forEach(id => {
-      document.getElementById(id).innerHTML = pages.map((p, i) =>
+      document.getElementById(id).innerHTML = visibles.map((p, i) =>
         '<button data-page="' + p + '" class="' + (p === current ? "active" : "") + '">' +
-        (id === "mobileTabs" ? "<b>" + icons[i] + "</b>" : "") + p + "</button>"
+        (id === "mobileTabs" ? "<b>" + (session?.role === "Salarie" ? "♙" : icons[i]) + "</b>" : "") + p + "</button>"
       ).join("");
     });
     document.querySelectorAll("[data-page]").forEach(button => {
@@ -372,6 +374,7 @@
       ligne("Règles CNJE", c.cnje?.date ? "Depuis le " + escapeHtml(c.cnje.date) + " · JEH client " + (c.cnje.min ?? 80) + "–" + (c.cnje.max ?? 450) + " € · intervenant ≤ " + (c.cnje.maxInt ?? 300) + " €" : "Aucune règle appliquée", btn("cnje", "Modifier")) +
       ligne("Cotisations", "SMIC " + (c.smic ?? 12.31) + " € · salariales " + pc(c.cot ? tot(c.cot) : 0.183) + " · patronales " + pc(c.patr ? tot(c.patr) : 0.3014) + " · chômage " + pc(c.chomage ?? 0), btn("cot", "Modifier")) +
       ligne("Alertes", c.alertesOn === false ? "Toutes désactivées" : (ALERTES.length - ALERTES.filter(a => off[a[0]]).length) + " activées sur " + ALERTES.length, btn("alertes", "Choisir")) +
+      (session?.role === "Membre" ? ligne("Membres et codes d’accès", "Attribuer les rôles et gérer les accès individuels", btn("acces", "Gérer")) : "") +
       "</section>" + heading("Synchronisation", "Cet appareil") + '<section class="listbox rows">' +
       ligne("Serveur", escapeHtml(connexion?.essai ? "Mode essai (serveur simulé sur ce téléphone)" : connexion?.url ? "Connecté" : "Non connecté")) +
       ligne("Données affichées", e.source === "serveur" ? "À jour avec le serveur" : e.source === "cache" ? "Dernière version gardée sur cet appareil (hors ligne)" : "Aucune") +
@@ -388,6 +391,7 @@
   const pourcent = x => Math.round(Number(x || 0) * 10000) / 100;
   const versTaux = x => (x === null || x === "" ? 0 : Number(x) / 100);
   function ouvrirReglage(cle) {
+    if (cle === "acces") { ouvrirAcces(); return; }
     const c = synchro.lireConfig() || {};
     if (cle === "mandat") return formulaire({ titre: "Nouveau mandat", valeurs: {}, champs: [
       { name: "nom", label: "Nom (ex. 2026-2027)", required: true },
@@ -640,13 +644,15 @@
         v.anomalies.map(a => "<li>" + escapeHtml(a.raison || a) + "</li>").join("") + "</ul></section>";
       return;
     }
-    content.innerHTML = ({
+    content.innerHTML = session?.role === "Salarie" ? espaceSalarie(v) : ({
       Accueil: () => dashboard(v),
       Études: () => (clientOuvert ? ficheClient(clientOuvert) : etudeOuverte ? rapport(etudeOuverte) : studies(v)),
       Finances: () => finances(v),
       Équipe: () => team(v),
       Réglages: settings,
     })[current]();
+    const quickAdd = document.getElementById("quickAdd");
+    if (quickAdd) quickAdd.hidden = session?.role === "Salarie";
     document.getElementById("syncNow")?.addEventListener("click", () => synchroniser());
     document.getElementById("logout")?.addEventListener("click", deconnecter);
     const search = document.getElementById("search");
@@ -718,11 +724,15 @@
   async function demarrer() {
     const client = creerClientApiV3({ transport: connexion.essai ? transportEssai() : transportFetch(connexion.url), obtenirToken: () => connexion.token });
     synchro = creerSynchro({ client, stockage: stockageNavigateur(), creerOpId: () => nouvelId("op") });
-    try { etatSynchro = await synchro.demarrer(); }
+    try {
+      etatSynchro = await synchro.demarrer();
+      session = connexion.essai ? { role: "Membre", membreId: "demo" } : await synchro.session();
+    }
     catch (e) {
-      if (e.code === "AUTH_INVALID" || e.code === "AUTH_REQUIRED") { localStorage.removeItem(CONN); afficherConnexion("Jeton refusé par le serveur."); return; }
+      if (e.code === "AUTH_INVALID" || e.code === "AUTH_REQUIRED" || e.code === "AUTH_ROLE_REQUIRED") { localStorage.removeItem(CONN); afficherConnexion("Accès refusé ou rôle non attribué. Contactez un membre de l’association."); return; }
       afficherConnexion("Connexion impossible : " + (e.message || e.code)); return;
     }
+    if (session?.role === "Salarie") current = "Mon espace";
     data = synchro.lireEtat();
     document.getElementById("login").classList.add("hidden");
     render();
