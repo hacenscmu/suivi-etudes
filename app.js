@@ -20,7 +20,7 @@ const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const sGet=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
 const sSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
-const CONN=()=>({url:lsGet('suivi.url')||'',pass:sGet('suivi.pw')});
+const CONN=()=>({url:lsGet('suivi.url')||'',token:lsGet('suivi.token')||''}); // code d'accès personnel (v16)
 const UNLOCKED=()=>true; // plus de mot de passe dans l’appli
 
 /* ---------- configuration par défaut (réglages, pas de données) ---------- */
@@ -348,30 +348,38 @@ const TAB_ICON={
  params:'<path d="M3 6h9M16 6h5M3 12h3M10 12h11M3 18h11M18 18h3"/><circle cx="14" cy="6" r="2"/><circle cx="8" cy="12" r="2"/><circle cx="16" cy="18" r="2"/>',
  legende:'<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'};
 function renderNav(){$('#nav').innerHTML=TABS.map(([k,l])=>`<button data-tab="${k}" aria-current="${k===tab}" aria-label="${l}"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${TAB_ICON[k]}</svg><span>${TAB_SHORT[k]}</span></button>`).join('')}
+let conflitMsg='';
 function renderStatus(){
   let h='';
+  if(conflitMsg)h+='<div class="msg err">'+esc(conflitMsg)+'</div>';
   if(timeoutNote)h+='<div class="msg">Les données sont encore en cours de chargement : si ce message reste, vérifiez la connexion.</div>';
   if(dbErr)h+='<div class="msg err">'+esc(dbErr)+'</div>';
   if(db&&!canWrite)h+='<div class="msg">Lecture seule : vous ne pouvez pas modifier ces données.</div>';
   $('#status').innerHTML=h;
 }
 async function doSync(){
-  const u=($('#syu').value||'').trim(),m=$('#sym'),c=CONN();
+  const u=($('#syu').value||'').trim(),tok=(($('#syt')||{}).value||'').trim(),m=$('#sym');
   const say=(t,bad)=>{m.textContent=t;m.className='msg'+(bad?' err':'');m.hidden=false};
   if(!/^https:\/\/script\.google\.com\//.test(u))return say('L’adresse doit commencer par https://script.google.com/…',1);
+  if(!tok)return say('Saisissez votre code d’accès personnel (donné par la trésorerie).',1);
   say('Connexion…');
   try{
-    const post=b=>fetch(u,{method:'POST',body:JSON.stringify(Object.assign({pass:c.pass},b)),redirect:'follow'}).then(r=>r.json());
+    const post=b=>fetch(u,{method:'POST',body:JSON.stringify(Object.assign({token:tok},b)),redirect:'follow'}).then(r=>r.json());
+    const pg=await post({action:'ping'});
+    if(pg&&pg.error==='auth')return say('Code d’accès refusé : vérifiez-le auprès de la trésorerie.',1);
+    if(pg&&pg.error)return say('Ce script n’est pas à jour : installez la version sécurisée du Code.gs (serveur/Code.gs).',1);
+    lsSet('suivi.token',tok);if(pg&&pg.membre)lsSet('suivi.membre',pg.membre);
     const srv=await post({action:'loadAll'});
-    if(srv&&srv.error)return say(srv.error==='auth'?'Le script Google demande encore un mot de passe : recollez la dernière version de Code.gs (sans mot de passe) puis redéployez une nouvelle version.':'Erreur du script : '+srv.error,1);
+    if(srv&&srv.error)return say('Erreur du script : '+srv.error,1);
     const has=Object.values(srv||{}).some(o=>o&&Object.keys(o).length);
     if(!has){
       let loc={};try{loc=JSON.parse(lsGet('suivi.cache')||'{}')||{}}catch(e){}
-      for(const col of Object.keys(loc))for(const id of Object.keys(loc[col]||{})){const r=await post({action:'save',col,id,json:JSON.stringify(loc[col][id])});if(r&&r.error)return say('Erreur du script : '+r.error,1)}
+      for(const col of Object.keys(loc))for(const id of Object.keys(loc[col]||{})){const r=await post({action:'save',col,id,json:JSON.stringify(loc[col][id]),expected:0,op:newId('o')});if(r&&r.error)return say('Erreur du script : '+r.error,1)}
     }else{lsSet('suivi.cache',JSON.stringify(srv))}
     lsSet('suivi.url',u);location.reload();
   }catch(e){say('Connexion impossible : vérifiez l’adresse et le réseau.',1)}
 }
+let codeDemande=false;function demanderCode(){if(codeDemande)return;codeDemande=true;try{openSheet('code')}catch(e){}}
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
 let HSEL='';
 function render(){
@@ -709,6 +717,7 @@ function ct(label,path,val,ph){return `<div class="pr"><label>${label}</label><d
 function cf(label,path,val,pct,unit){return `<div class="pr"><label>${label}</label><div class="pin"><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}"><span>${pct?'%':(unit||'')}</span></div></div>`}
 function listEd(k,arr,ph){return `<div class="led">${arr.map((v,i)=>`<div class="li"><span class="hdl" data-k="${k}" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><input data-li="${k}" data-i="${i}" value="${esc(v)}"><button class="x" data-lidel="${k}:${i}" aria-label="Supprimer">✕</button></div>`).join('')}</div><button class="b ghost addl" data-liadd="${k}">+ ${ph}</button>`}
 const PIC={
+ code:'<rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2.5"/>',
  dash:'<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>',
  alert:'<path d="M12 3l10 18H2z"/><path d="M12 10v5M12 18h.01"/>',
  help:'<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.6 2.6 0 0 1 5 1c0 1.7-2.5 2.2-2.5 3.8"/><path d="M12 17.5h.01"/>',
@@ -747,7 +756,7 @@ function paramSecs(D){
 function vParams(D){
   const u=lsGet('suivi.url'),last=fmtLast(),nb=getBk().length;
   const row=(k,t,sub,attr)=>`<button class="srow" ${attr}><span class="sic">${pic(k)}</span><span class="stx"><b>${t}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`;
-  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
+  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${u?row('code','Code d’accès personnel',lsGet('suivi.token')?(lsGet('suivi.membre')?'Connecté : '+lsGet('suivi.membre'):'Enregistré sur cet appareil'):'À saisir','data-mn="code"'):''}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
   return `<h2>Paramètres</h2>${top}<div class="sh" style="margin:16px 2px 6px">Réglages des calculs</div><div class="card slist">${paramSecs(D).map(x=>`<button class="srow" data-param="${x.k}"><span class="sic">${pic(x.k)}</span><span class="stx"><b>${x.t}</b><small>${esc(x.s)}</small></span><span class="chev">›</span></button>`).join('')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
 }
 let PSEC=null,DRAG=null;
@@ -860,7 +869,7 @@ document.addEventListener('click',e=>{
 /* ---------- démarrage ---------- */
 async function api(body){
   const c=CONN();
-  const r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({pass:c.pass},body)),redirect:'follow'});
+  const r=await fetch(c.url,{method:'POST',body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'});
   const j=await r.json();
   if(j&&j.error)throw new Error(j.error);
   return j;
@@ -878,7 +887,7 @@ function makeDb(){
     if(loading||pending>0||outbox.length)return;loading=true;
     try{cache=await api({action:'loadAll'});keep();stamp();if(dbErr){dbErr='';renderStatus()}emit()}
     catch(e){
-      if(String(e.message)==='auth'){dbErr='Le script Google demande encore un mot de passe : recollez la dernière version de Code.gs (sans mot de passe) et redéployez une nouvelle version.';renderStatus();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
+      if(String(e.message)==='auth'){dbErr='Code d’accès manquant ou refusé : saisissez votre code personnel (Paramètres → Code d’accès).';renderStatus();demanderCode();subs.forEach(s=>s.err&&s.err({code:'invalid_argument'}))}
       else if(cache){dbErr='Hors connexion : dernière version enregistrée affichée, les modifications ne sont pas possibles pour le moment.';renderStatus()}
       else if(first)subs.forEach(s=>s.err&&s.err({code:'unavailable'}));
     }
@@ -893,10 +902,19 @@ function makeDb(){
   let flushing=false;
   async function flush(){
     if(flushing)return;flushing=true;pending++;
-    try{while(outbox.length){await api(outbox[0]);outbox.shift();saveOut()}stamp();
-      if(dbErr&&/Enregistrement|Hors connexion/.test(dbErr)){dbErr='';renderStatus()}}
-    catch(e){dbErr='Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.';renderStatus()}
+    let conflit=0;
+    try{while(outbox.length){
+        try{await api(outbox[0])}
+        catch(e){const m=String(e.message);
+          // Conflit : quelqu'un a modifié la fiche entre-temps. On n'écrase rien : la modification est retirée et la version à jour rechargée.
+          if(m==='conflit'||m==='json'||m==='collection'||m==='id'||m==='taille'){conflit++;outbox.shift();saveOut();continue}
+          throw e}
+        outbox.shift();saveOut()}
+      stamp();if(dbErr&&/Enregistrement|Hors connexion|Code d’accès/.test(dbErr)){dbErr='';renderStatus()}}
+    catch(e){if(String(e.message)==='auth'){dbErr='Code d’accès manquant ou refusé : saisissez votre code personnel (Paramètres → Code d’accès). Vos modifications restent gardées sur cet appareil.';renderStatus();demanderCode()}
+      else{dbErr='Hors connexion : vos modifications sont gardées sur cet appareil et partiront vers Drive dès le retour du réseau.';renderStatus()}}
     pending--;flushing=false;
+    if(conflit){conflitMsg=conflit+' modification'+(conflit>1?'s n’ont':' n’a')+' pas été enregistrée'+(conflit>1?'s':'')+' : quelqu’un a modifié la même fiche entre-temps. La version à jour est affichée.';renderStatus();clearTimeout(window.__cft);window.__cft=setTimeout(()=>{conflitMsg='';renderStatus()},30000);if(!outbox.length)load(false)}
   }
   const write=(body)=>{keep();if(local){stamp();return Promise.resolve()}outbox.push(body);saveOut();flush();return Promise.resolve()};
   if(outbox.length)setTimeout(flush,0);
@@ -904,8 +922,11 @@ function makeDb(){
     sync:async()=>{if(local)return;await flush();await load(false)},
     collection(col){return {onSnapshot(next,err){const s={err,fire:()=>cache&&next(colSnap(col))};subs.push(s);if(cache)setTimeout(s.fire,0);return()=>{const i=subs.indexOf(s);if(i>=0)subs.splice(i,1)}}}},
     doc(path){const [c,i]=path.split('/');return {
-      set:d=>{cache=cache||{};(cache[c]=cache[c]||{})[i]=JSON.parse(JSON.stringify(d));return write({action:'save',col:c,id:i,json:JSON.stringify(d)})},
-      delete:()=>{if(cache&&cache[c])delete cache[c][i];return write({action:'delete',col:c,id:i})},
+      // Version attendue = version connue de la fiche ; elle est avancée de 1 tout de suite (le serveur fait +1), pour que
+      // plusieurs modifications de la même fiche hors ligne s'enchaînent sans conflit.
+      set:d=>{cache=cache||{};const avant=cache[c]&&cache[c][i],v=avant&&typeof avant._v==='number'?avant._v:0;const o=JSON.parse(JSON.stringify(d));delete o._v;delete o._par;delete o._le;
+        (cache[c]=cache[c]||{})[i]=Object.assign({},o,{_v:v+1});return write({action:'save',col:c,id:i,json:JSON.stringify(o),expected:v,op:newId('o')})},
+      delete:()=>{const avant=cache&&cache[c]&&cache[c][i],v=avant&&typeof avant._v==='number'?avant._v:0;if(cache&&cache[c])delete cache[c][i];return write({action:'delete',col:c,id:i,expected:v,op:newId('o')})},
       onSnapshot(next,err){const s={err,fire:()=>cache&&next({exists:!!(cache[c]&&cache[c][i]),data:()=>cache[c]&&cache[c][i]})};subs.push(s);if(cache)setTimeout(s.fire,0);return()=>{const k=subs.indexOf(s);if(k>=0)subs.splice(k,1)}}}}
   };
 }
@@ -940,7 +961,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=16;
+const VERSION=17;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
@@ -1085,7 +1106,8 @@ let sheetView=null,imp=null;
 function sheetHTML(){
   const u=lsGet('suivi.url'),last=fmtLast(),bk=getBk();
   const back='<button class="mb ghost" data-mn="home">‹ Retour</button>';
-  if(sheetView==='addr')return `<h2>Adresse du script Google</h2><div class="small" style="margin-bottom:10px">À saisir une seule fois : adresse de l’application Web de votre script (elle finit par /exec). Vos données actuelles seront envoyées dans votre Drive si celui-ci est vide.</div><input id="syu" type="url" value="${esc(u||'')}" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="mb solid" data-mn="syncon">Enregistrer et synchroniser</button>${u?'<button class="mb" data-mn="syncoff">Désactiver sur cet appareil</button>':''}${back}`;
+  if(sheetView==='addr')return `<h2>Adresse du script Google</h2><div class="small" style="margin-bottom:10px">À saisir une seule fois : adresse de l’application Web de votre script (elle finit par /exec). Vos données actuelles seront envoyées dans votre Drive si celui-ci est vide.</div><input id="syu" type="url" value="${esc(u||'')}" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><input id="syt" type="password" value="${esc(lsGet('suivi.token')||'')}" style="width:100%;margin-bottom:8px" placeholder="Code d’accès personnel" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="mb solid" data-mn="syncon">Enregistrer et synchroniser</button>${u?'<button class="mb" data-mn="syncoff">Désactiver sur cet appareil</button>':''}${back}`;
+  if(sheetView==='code')return `<h2>Code d’accès personnel</h2><div class="small" style="margin-bottom:10px">Chaque membre a son propre code, donné par la trésorerie. Il est demandé une seule fois sur cet appareil.${lsGet('suivi.membre')?' Connecté en tant que <b>'+esc(lsGet('suivi.membre'))+'</b>.':''}</div><input id="syt2" type="password" style="width:100%;margin-bottom:8px" placeholder="Code d’accès" autocapitalize="off" autocomplete="off"><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="savecode">Valider</button>${lsGet('suivi.token')?'<button class="mb ghost" data-mn="forget">Oublier le code sur cet appareil</button>':''}${back}`;
   if(sheetView==='import')return `<h2>Importer un fichier</h2><div class="small" style="margin-bottom:10px">Fichier modèle Excel (.xlsx), tableau .csv, ou sauvegarde .json exportée depuis l’appli.</div><input type="file" id="imf" accept=".xlsx,.csv,.txt,.json,application/json,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="width:100%"><div class="msg" id="imm" hidden></div><div id="imb"></div><button class="mb ghost" data-mn="close">Fermer</button>`;
   if(sheetView==='restore')return `<h2>Restaurer une sauvegarde</h2><div class="small" style="margin-bottom:10px">Les 6 dernières sauvegardes automatiques de cet appareil. Restaurer remplace toutes les données actuelles (une sauvegarde de l’état actuel est faite avant).</div>${bk.length?bk.map((b,i)=>`<button class="mb" data-mn="rest" data-i="${i}"><span class="t">${esc(new Date(b.t).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})+' à '+new Date(b.t).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}))}</span><span class="s">${esc(countData(b.d))}</span></button>`).join(''):'<div class="small">Aucune sauvegarde pour le moment : elles se créent toutes seules.</div>'}<button class="mb ghost" data-mn="close">Fermer</button>`;
   return `<div class="shead"><h2>Synchronisation</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
@@ -1102,13 +1124,19 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-mn]');if(!b)return;
   const a=b.dataset.mn;
   if(a==='close'){sheetView=null;drawSheet();return}
-  if(['home','addr','import','restore'].includes(a)){openSheet(a);return}
+  if(['home','addr','import','restore','code'].includes(a)){openSheet(a);return}
+  if(a==='savecode'){const tok=(($('#syt2')||{}).value||'').trim();if(!tok)return mmsg('Saisissez votre code.',1);
+    if(!lsGet('suivi.url')){lsSet('suivi.token',tok);sheetView=null;drawSheet();render();return}
+    mmsg('Vérification…');try{const r=await fetch(lsGet('suivi.url'),{method:'POST',body:JSON.stringify({token:tok,action:'ping'}),redirect:'follow'}).then(r=>r.json());
+      if(r&&r.error==='auth')return mmsg('Code refusé : vérifiez-le auprès de la trésorerie.',1);if(r&&r.error)return mmsg('Erreur du script : '+r.error,1);
+      lsSet('suivi.token',tok);if(r.membre)lsSet('suivi.membre',r.membre);location.reload()}catch(x){mmsg('Vérification impossible : vérifiez le réseau.',1)}return}
+  if(a==='forget'){if(!confirm('Oublier le code d’accès sur cet appareil ?'))return;lsSet('suivi.token','');lsSet('suivi.membre','');location.reload();return}
   if(a==='sync'){
     if(!lsGet('suivi.url')){openSheet('addr');return}
     mmsg('Synchronisation…');
     try{await db.sync();stamp();drawSheet();mmsg('Synchronisé.')}catch(x){mmsg('Synchronisation impossible pour le moment.',1)}
     return}
-  if(a==='logout'){sSet('suivi.pw','');location.reload();return}
+  if(a==='logout'){lsSet('suivi.token','');location.reload();return}
   if(a==='theme'){lsSet('suivi.theme',b.dataset.v);applyTheme();render();return}
   if(a==='syncon'){doSync();return}
   if(a==='syncoff'){lsSet('suivi.url','');location.reload();return}
