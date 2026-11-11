@@ -12,7 +12,7 @@
 
 var API = 3;
 var COLLECTIONS_ECRITURE = ['etudes','clients','membres','factures','interventions','bvs','lignesBV','formation','config','appareils'];
-var COLLECTIONS_LECTURE = COLLECTIONS_ECRITURE.concat(['temps']);
+var COLLECTIONS_LECTURE = COLLECTIONS_ECRITURE.concat(['temps','signalementsJEH']);
 var ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;
 var OP_ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{7,127}$/;
 var MAX_REQUETE = 300000, MAX_FICHE = 100000;
@@ -113,6 +113,65 @@ function chargerAccesAdmin_() {
   liste.sort(function (a, b) { return a.nom.localeCompare(b.nom, 'fr'); });
   return {membres: liste, codesGeneres: codes};
 }
+function signalerJEH_(q, qui, role) {
+  if (role !== 'Salarie') return erreur_('FORBIDDEN', 'Cette action est réservée aux accès Salarié');
+  var I = index_(), etudeId = q.etudeId, date = q.date, duree = q.duree, nb = q.nb, commentaire = q.commentaire || '';
+  if (typeof etudeId !== 'string' || !vivante_(I, 'etudes', etudeId) || !dateValide_(date) ||
+      !nombrePositif_(duree) || duree > 100000 || typeof nb !== 'number' || nb % 1 !== 0 || nb < 1 || nb > 100 ||
+      typeof commentaire !== 'string' || commentaire.length > 1000)
+    return erreur_('INVALID_REQUEST', 'Date, étude, durée, nombre de personnes ou commentaire invalide');
+  var associee = Object.keys(I.idx).some(function(k) {
+    var e = I.idx[k];
+    return e.o && !e.corrompu && !e.doublon && e.o._deleted !== true &&
+      ((k.indexOf('interventions\u0001') === 0 && e.o.membreId === qui && e.o.etudeId === etudeId) ||
+       (k.indexOf('formation\u0001') === 0 && e.o.membreId === qui && e.o.niveaux && Object.prototype.hasOwnProperty.call(e.o.niveaux, etudeId)));
+  });
+  if (!associee) return erreur_('FORBIDDEN', 'Vous ne pouvez signaler que sur une étude qui vous est associée');
+  var id = 'sig_' + Utilities.getUuid().replace(/-/g, '');
+  var record = {id:id, membreId:qui, etudeId:etudeId, date:date, dureeTotale:duree, nbPersonnes:nb,
+    minutesIndividuelles:Math.round((duree / nb) * 100) / 100, commentaire:commentaire.trim(),
+    statut:'En attente', cree:new Date().toISOString(), _v:1, _par:qui, _le:new Date().toISOString()};
+  feuille_('Données').appendRow(['signalementsJEH', id, JSON.stringify(record)]);
+  props_().setProperty('REVISION', String(revision_() + 1));
+  return reponse_(true, sansInterne_(record), null, {revision:revision_()});
+}
+function traiterSignalementJEH_(q, qui, role) {
+  if (role !== 'Membre') return erreur_('FORBIDDEN', 'Action réservée aux membres');
+  if (typeof q.signalementId !== 'string' || !/^sig_[a-f0-9]{32}$/.test(q.signalementId) ||
+      (q.decision !== 'ajouter' && q.decision !== 'refuser'))
+    return erreur_('INVALID_REQUEST', 'Signalement ou décision invalide');
+  var I = index_(), sig = fiche_(I, 'signalementsJEH', q.signalementId);
+  if (!sig || sig._deleted === true) return erreur_('NOT_FOUND', 'Signalement introuvable');
+  if (sig.statut !== 'En attente') return erreur_('ALREADY_PROCESSED', 'Ce signalement a déjà été traité');
+  var maintenant = new Date().toISOString(), intervention = null;
+  if (q.decision === 'ajouter') {
+    var deja = Object.keys(I.idx).map(function(k) { return I.idx[k].o; }).filter(function(o) {
+      return o && o._deleted !== true && o.signalementId === sig.id;
+    })[0];
+    if (deja) intervention = deja;
+    else {
+      var etude = fiche_(I, 'etudes', sig.etudeId);
+      if (!etude || !vivante_(I, 'membres', sig.membreId)) return erreur_('INVALID_REQUEST', 'Étude ou membre lié introuvable');
+      var idInterv = 'interv_' + Utilities.getUuid().replace(/-/g, '');
+      intervention = {id:idInterv, etudeId:sig.etudeId, membreId:sig.membreId, date:sig.date,
+        statut:'Pas payé', minutesIndividuelles:sig.minutesIndividuelles,
+        prixJehHt:typeof etude.prixJehIntervenant === 'number' ? etude.prixJehIntervenant : (typeof etude.prixJehHt === 'number' ? etude.prixJehHt : 0),
+        signalementId:sig.id, _v:1, _par:qui, _le:maintenant};
+      feuille_('Données').appendRow(['interventions', idInterv, JSON.stringify(intervention)]);
+      I = index_();
+    }
+  }
+  var maj = cloner_(sig);
+  maj.statut = q.decision === 'ajouter' ? 'Ajoutée' : 'Refusée';
+  maj.traitePar = qui; maj.traiteLe = maintenant;
+  maj._v = (sig._v || 0) + 1; maj._par = qui; maj._le = maintenant;
+  var entree = I.idx['signalementsJEH\u0001' + sig.id];
+  if (!entree) return erreur_('NOT_FOUND', 'Signalement introuvable');
+  I.sh.getRange(entree.ligne, 3).setValue(JSON.stringify(maj));
+  props_().setProperty('REVISION', String(revision_() + 1));
+  return reponse_(true, {signalement:sansInterne_(maj), intervention:intervention ? sansInterne_(intervention) : null}, null, {revision:revision_()});
+}
+
 function chargerSalarie_(qui) {
   var I = index_(), data = {};
   COLLECTIONS_LECTURE.forEach(function (c) { data[c] = {}; });
@@ -140,6 +199,7 @@ function chargerSalarie_(qui) {
   Object.keys(I.idx).forEach(function (k) {
     var e = I.idx[k]; if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
     var p = k.split('\u0001'), c = p[0], id = p[1], o = e.o;
+    if (c === 'signalementsJEH' && o.membreId === qui) data.signalementsJEH[id] = cloner_(o);
     if (c === 'bvs' && Object.keys(data.lignesBV).some(function (lid) { return data.lignesBV[lid].bvId === id; })) {
       var lignesDuBV = Object.keys(I.idx).filter(function (key) {
         var ligne = I.idx[key];
@@ -197,6 +257,8 @@ function traiter_(raw) {
     if (!role) return erreur_('AUTH_ROLE_REQUIRED', 'Rôle d’accès non attribué');
     if (q.action === 'ping') return reponse_(true, {apiVersion: API, authentifie: true, membreId: qui, role: role}, null, {revision: revision_()});
     if (q.action === 'loadAll') return verrou_(function () { return role === 'Membre' ? chargerTout_() : reponse_(true, chargerSalarie_(qui), null, {revision: revision_(), schemaVersion: API, vue: 'personnelle'}); });
+    if (q.action === 'signalerJEH') return verrou_(function () { return signalerJEH_(q, qui, role); });
+    if (q.action === 'traiterSignalementJEH') return verrou_(function () { return traiterSignalementJEH_(q, qui, role); });
     if (q.action === 'save' || q.action === 'delete') {
       if (role !== 'Membre') return erreur_('FORBIDDEN', 'Les accès Salarié sont en lecture seule');
       return verrou_(function () { return muter_(q, qui); });
