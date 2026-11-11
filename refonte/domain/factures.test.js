@@ -60,3 +60,43 @@ test("un montant invalide ne produit pas de reste à encaisser fictif", () => {
   assert.equal(resultat.situation, "anomalie");
   assert.equal(resultat.resteAEncaisser, null);
 });
+
+
+test("calcule une facture par lignes HT, TVA unique et frais hors JEH", () => {
+  const { calculerFactureParLignes } = require("./factures");
+  const r = calculerFactureParLignes({ lignes: [
+    { type: "prestation", quantite: 2.8, prixUnitaireHt: 400 },
+    { type: "frais", montantHt: 70 },
+  ], tauxTva: 0.2 });
+  assert.equal(r.valide, true);
+  assert.equal(r.prestationsHt, 1120);
+  assert.equal(r.fraisHt, 70);
+  assert.equal(r.montantHt, 1190);
+  assert.equal(r.montantTva, 238);
+  assert.equal(r.montantTtc, 1428);
+});
+
+test("déduit les factures antérieures en TTC sans convertir les anciens montants", () => {
+  const { calculerFactureParLignes } = require("./factures");
+  const r = calculerFactureParLignes({ lignes: [
+    { type: "prestation", quantite: 2.8, prixUnitaireHt: 400 },
+    { type: "frais", montantHt: 70 },
+  ], tauxTva: 0.2, facturesPrecedentes: [{ montant: 600 }, { montant: 300 }] });
+  assert.equal(r.montantTtcBrut, 1428);
+  assert.equal(r.deductionTtc, 900);
+  assert.equal(r.montant, 528);
+});
+
+test("refuse un dépassement par les factures précédentes", () => {
+  const { calculerFactureParLignes } = require("./factures");
+  const r = calculerFactureParLignes({ lignes: [{ type: "prestation", quantite: 1, prixUnitaireHt: 100 }], tauxTva: 0.2, facturesPrecedentes: [{ montant: 200 }] });
+  assert.equal(r.valide, false);
+  assert.ok(r.anomalies.some(a => a.includes("dépassent")));
+});
+
+test("refuse les taux TVA et lignes invalides", () => {
+  const { calculerFactureParLignes } = require("./factures");
+  const r = calculerFactureParLignes({ lignes: [{ type: "prestation", quantite: 0, prixUnitaireHt: -1 }], tauxTva: 1.2 });
+  assert.equal(r.valide, false);
+  assert.ok(r.anomalies.length >= 3);
+});
