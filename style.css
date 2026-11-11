@@ -552,3 +552,7 @@ button.b.ghost:disabled{opacity:.4}
 /* v39 : cartes études — nom de l'étude en gras, client en discret */
 .ec2 .et b{font-size:16px;font-weight:800}.ec2 .et .ecl{color:var(--mute);font-size:12.5px;font-weight:500}
 .finnet b{white-space:nowrap;flex:none}.finnet span{min-width:0}
+
+/* v45 : alertes sur 1 case de haut */
+.wh1 .alc{padding:8px 12px}.wh1 .alc h3{margin:0}.wh1 .alc .ali{margin-top:5px;padding:6px 10px}.wh1 .alc .alx{font-size:12px}
+.wh1 .alc .alx span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}.wh1 .alc .alx span svg{display:inline;vertical-align:-2px;margin-right:4px}.wh1 .alc .alx{gap:1px}
