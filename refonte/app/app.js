@@ -688,6 +688,10 @@
   }
   function ouvrirFacture(id, preset = {}) {
     const f = id ? data.factures.find(x => x.id === id) : preset;
+    if (id && data.factures.some(x => x.id !== id && Array.isArray(x.facturesPrecedentesIds) && x.facturesPrecedentesIds.includes(id))) {
+      alert("Cette facture est déjà déduite d’une facture ultérieure. Corrigez d’abord la facture suivante.");
+      return;
+    }
     // Les factures historiques saisies en TTC restent éditables dans leur format d'origine.
     if (id && !Array.isArray(f?.lignes)) {
       formulaire({ titre: "Modifier la facture historique", valeurs: { type: "Acompte", etat: "Émise", date: aujourdHui(), ...f }, champs: [
