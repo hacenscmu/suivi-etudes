@@ -381,7 +381,7 @@
       heading("Mes bulletins de versement", bvs.length + " BV · " + money(netDejaRecu) + " net enregistré") +
       '<section class="listbox rows">' + (bvs.map(bv => {
         const lignes = data.lignesBV.filter(l => l.bvId === bv.id);
-        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(bv.reference || "Bulletin de versement") + '</strong><small>' + escapeHtml(bv.date || "") + " · " + jeh(lignes.reduce((n,l)=>n+Number(l.jeh||0),0)) + " JEH</small></div><div class="amount">' + money(bv.net || 0) + " net</div></div>";
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(bv.reference || "Bulletin de versement") + '</strong><small>' + escapeHtml(bv.date || "") + " · " + jeh(lignes.reduce((n,l)=>n+Number(l.jeh||0),0)) + ' JEH</small></div><div class="amount">' + money(bv.net || 0) + " net</div></div>";
       }).join("") || '<div class="empty">Aucun bulletin de versement enregistré.</div>') + "</section>" +
       heading("Mes études", data.etudes.length + " étude(s)") +
       '<section class="listbox rows">' + (data.etudes.map(e => '<div class="item"><div class="item-main"><strong>' + escapeHtml(e.num || "Étude") + '</strong><small>' + escapeHtml(e.resume || e.statut || "Résumé non renseigné") + '</small></div></div>').join("") || '<div class="empty">Aucune étude associée.</div>') + "</section>" +
