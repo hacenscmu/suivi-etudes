@@ -401,3 +401,63 @@ test("un signalement rejette les dates, durées et nombres de personnes invalide
     assert.equal(r.error.code, "INVALID_REQUEST");
   }
 });
+
+
+test("une facture par lignes valide est acceptée avec une déduction TTC traçable", async () => {
+  const donnees = {
+    etudes: { etude_0001: { id: "etude_0001", num: "HAC-001", date: "2026-09-01", statut: "En réalisation", montant: 1428, jeh: 400, _v: 1 } },
+    factures: { facture_0001: { id: "facture_0001", etudeId: "etude_0001", type: "Acompte", etat: "Payée", montant: 564, date: "2026-11-10", _v: 1 } },
+  };
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees });
+  const record = {
+    id: "facture_0002", etudeId: "etude_0001", type: "Solde", etat: "Émise", date: "2026-11-11",
+    modeleFacturation: "lignes",
+    lignes: [{ type: "prestation", quantite: 2.8, prixUnitaireHt: 400 }, { type: "frais", montantHt: 70 }],
+    tauxTva: 0.2, montantHt: 1190, montantTva: 238, montantTtcBrut: 1428,
+    deductionFacturesPrecedentesTtc: 564, facturesPrecedentesIds: ["facture_0001"], montantTtc: 864, montant: 864,
+  };
+  const r = await body(s, req("save", { collection: "factures", id: record.id, record, expectedVersion: 0, opId: "op_facture_lignes_0001" }));
+  assert.equal(r.ok, true);
+  assert.equal(r.data.montant, 864);
+});
+
+test("le serveur refuse une facture par lignes dont les totaux sont falsifiés", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: {
+    etudes: { etude_0001: { id: "etude_0001", num: "HAC-001", date: "2026-09-01", statut: "En réalisation", montant: 1000, jeh: 400, _v: 1 } },
+  } });
+  const record = {
+    id: "facture_0002", etudeId: "etude_0001", type: "Solde", etat: "Émise", date: "2026-11-11",
+    modeleFacturation: "lignes", lignes: [{ type: "prestation", quantite: 1, prixUnitaireHt: 400 }],
+    tauxTva: 0.2, montantHt: 400, montantTva: 80, montantTtcBrut: 480,
+    deductionFacturesPrecedentesTtc: 0, facturesPrecedentesIds: [], montantTtc: 1, montant: 1,
+  };
+  const r = await body(s, req("save", { collection: "factures", id: record.id, record, expectedVersion: 0, opId: "op_facture_fausse_0001" }));
+  assert.equal(r.error.code, "INVALID_REQUEST");
+  assert.match(r.error.message, /totaux ne correspondent pas/);
+});
+
+test("le serveur refuse de déduire une facture inexistante, d'une autre étude ou postérieure", async () => {
+  const donnees = {
+    etudes: {
+      etude_0001: { id: "etude_0001", num: "HAC-001", date: "2026-09-01", statut: "En réalisation", montant: 1000, jeh: 400, _v: 1 },
+      etude_0002: { id: "etude_0002", num: "HAC-002", date: "2026-09-01", statut: "En réalisation", montant: 1000, jeh: 400, _v: 1 },
+    },
+    factures: {
+      facture_0001: { id: "facture_0001", etudeId: "etude_0002", type: "Acompte", etat: "Payée", montant: 100, date: "2026-11-10", _v: 1 },
+      facture_0002: { id: "facture_0002", etudeId: "etude_0001", type: "Acompte", etat: "Payée", montant: 100, date: "2026-11-12", _v: 1 },
+    },
+  };
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees });
+  const baseFacture = {
+    etudeId: "etude_0001", type: "Solde", etat: "Émise", date: "2026-11-11",
+    modeleFacturation: "lignes", lignes: [{ type: "prestation", quantite: 1, prixUnitaireHt: 100 }],
+    tauxTva: 0, montantHt: 100, montantTva: 0, montantTtcBrut: 100,
+    deductionFacturesPrecedentesTtc: 0, facturesPrecedentesIds: [], montantTtc: 100, montant: 100,
+  };
+  const absente = await body(s, req("save", { collection: "factures", id: "facture_0003", record: { ...baseFacture, id: "facture_0003", facturesPrecedentesIds: ["facture_0003"] }, expectedVersion: 0, opId: "op_facture_absente_0001" }));
+  assert.equal(absente.error.code, "INVALID_REQUEST");
+  const autreEtude = await body(s, req("save", { collection: "factures", id: "facture_0003", record: { ...baseFacture, id: "facture_0003", facturesPrecedentesIds: ["facture_0001"], deductionFacturesPrecedentesTtc: 100, montantTtcBrut: 100, montantTtc: 0, montant: 0 }, expectedVersion: 0, opId: "op_facture_autre_0001" }));
+  assert.equal(autreEtude.error.code, "INVALID_REQUEST");
+  const future = await body(s, req("save", { collection: "factures", id: "facture_0003", record: { ...baseFacture, id: "facture_0003", facturesPrecedentesIds: ["facture_0002"], deductionFacturesPrecedentesTtc: 100, montantTtcBrut: 100, montantTtc: 0, montant: 0 }, expectedVersion: 0, opId: "op_facture_future_0001" }));
+  assert.equal(future.error.code, "INVALID_REQUEST");
+});
