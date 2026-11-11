@@ -537,7 +537,7 @@
 
   // ---------- Formulaires ----------
   const STATUTS_ETUDE = ["Faisabilité", "Devis envoyé", "Devis signé", "Convention envoyée", "Convention signée", "Convention étudiant avant réalisation", "En réalisation", "Archivée", "Refusé / sans suite"];
-  const STATUTS_JEH = [["Pas payé", "Fait, pas encore payé"], ["Payé", "Payé (BV versé)"], ["A venir", "À venir"], ["Non effectué", "Non effectué"]];
+  const STATUTS_JEH = [["Pas payé", "Fait, pas encore payé"], ["Payé", "Payé (BV versé)"], ["A venir", "À venir"]];
   const opts = (liste, val) => liste.map(o => { const [v, l] = Array.isArray(o) ? o : [o, o]; return '<option value="' + escapeHtml(v) + '"' + (String(v) === String(val ?? "") ? " selected" : "") + ">" + escapeHtml(l) + "</option>"; }).join("");
   const nomEtude = e => (e.num || "Étude") + " · " + (data.clients.find(c => c.id === e.clientId)?.raisonSociale || e.client || "");
 
@@ -577,6 +577,13 @@
   }
 
   async function supprimerEnregistrement(collection, id) {
+    if (collection === "interventions") {
+      const intervention = data.interventions.find(i => i.id === id);
+      if (!intervention) return "Intervention introuvable.";
+      if (intervention.statut === "Payé" || intervention.bvId || (data.lignesBV || []).some(l => l.interventionId === id)) {
+        return "Suppression impossible : cette intervention est déjà payée ou liée à un BV.";
+      }
+    }
     const r = await synchro.supprimer(collection, id);
     if (!r.valide) return r.anomalies.map(a => a.raison || a).join(" · ");
     data = synchro.lireEtat(); await majStatut();
@@ -706,7 +713,7 @@
       { name: "etudeId", label: "Étude", type: "select", required: true, options: data.etudes.map(e => [e.id, nomEtude(e)]) },
       { name: "membreId", label: "Intervenant", type: "select", required: true, options: data.membres.map(m => [m.id, m.nomComplet]) },
       { name: "date", label: "Date", type: "date", required: true },
-      { name: "statut", label: "Statut", type: "select", required: true, options: STATUTS_JEH },
+      { name: "statut", label: "Statut", type: "select", required: true, options: id && i?.statut === "Non effectué" ? [...STATUTS_JEH, ["Non effectué", "Non effectué (historique)"]] : STATUTS_JEH },
       { name: "duree", label: "Durée totale (minutes)", type: "number", required: true },
       { name: "nb", label: "Nombre de personnes", type: "number", required: true, aide: "Une ligne par personne : la durée est répartie (120 min à 2 = 60 min chacun). 480 min = 1 JEH." },
       { name: "prixJehHt", label: "JEH intervenant HT (€)", type: "number", aide: "Plafond HAC : 300 € HT" },
