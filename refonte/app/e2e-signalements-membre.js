@@ -37,13 +37,11 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
  await page.waitForSelector('[data-signalement="ajouter"]');
  ok('le Membre voit le signalement en attente',await page.locator('#content').innerText().then(t=>t.includes('Camille Martin')&&t.includes('HAC-001')));
  await page.click('[data-signalement="ajouter"]');
- await page.waitForTimeout(600);
- console.log('ETAT SIGNALLEMENT '+JSON.stringify(serveur.lireDonnees().signalementsJEH));
- console.log('LOGS SERVEUR '+JSON.stringify(serveur.journaux));
+ await page.waitForFunction(()=>document.querySelector('#content')?.innerText.includes('Ajoutée'),{timeout:5000});
  const records=serveur.lireDonnees();
  const signalement=Object.values(records.signalementsJEH||{})[0];
  const ligne=Object.values(records.interventions||{}).find(x=>x.signalementId===signalement.id);
- ok('le signalement passe à Ajoutée',signalement.statut==='Ajoutée');
+ ok('le signalement passe à Ajoutée et son statut est affiché',signalement.statut==='Ajoutée'&&await page.locator('#content').innerText().then(t=>t.includes('Ajoutée')));
  ok('une intervention est créée avec le salarié, l’étude, la date et la durée répartie',!!ligne&&ligne.membreId===SALARIE_ID&&ligne.etudeId==='etude_0001'&&ligne.date==='2026-10-03'&&ligne.minutesIndividuelles===120);
  ok('aucune erreur JavaScript',erreurs.length===0);
  await browser.close();
