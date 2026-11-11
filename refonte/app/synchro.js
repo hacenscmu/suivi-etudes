@@ -60,6 +60,8 @@ function creerSynchro({ client, stockage, creerOpId }) {
     desactiverAcces: options => client.desactiverAcces(options),
     reactiverAcces: options => client.reactiverAcces(options),
     changerMonCode: () => client.changerMonCode(),
+    signalerJEH: options => client.signalerJEH(options),
+    traiterSignalementJEH: options => client.traiterSignalementJEH(options),
     statut: async () => ({ source, enAttente: (await file.inspecter()).length, blocage: dernierBlocage }),
 
     async demarrer() {
