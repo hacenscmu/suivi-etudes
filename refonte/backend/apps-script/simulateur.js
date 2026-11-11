@@ -30,7 +30,7 @@ function creerServeurAppsScriptSimule({ token, donnees = {}, maxBytes, membre = 
   if (typeof token !== "string" || token.trim() === "") throw new TypeError("Le serveur simulé exige un token non vide");
   const noms = { "Données": ["collection", "id", "json"], "Journal": ["opId", "empreinte", "reponse", "date", "etat", "collection", "id", "membre", "reserve1", "reserve2"], "Quarantaine": ["date", "ligne", "collection", "id", "brut"] };
   const feuilles = Object.fromEntries(Object.entries(noms).map(([n, e]) => [n, feuille(e, crochets)(n)]));
-  const props = { SSID: "copie-de-test", TOKENS: JSON.stringify({ [membre]: { h: crypto.createHash("sha256").update(token, "utf8").digest("hex"), hash: crypto.createHash("sha256").update(token, "utf8").digest("hex"), active: true } }) };
+  const props = { SSID: "copie-de-test", TOKENS: JSON.stringify({ [membre]: { h: crypto.createHash("sha256").update(token, "utf8").digest("hex"), hash: crypto.createHash("sha256").update(token, "utf8").digest("hex"), active: true, role: "Membre" } }) };
   for (const [col, fiches] of Object.entries(donnees)) for (const [id, o] of Object.entries(fiches || {})) feuilles["Données"].rows.push([col, id, JSON.stringify(o)]);
   const journaux = [];
   const G = {
