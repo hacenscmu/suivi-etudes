@@ -11,7 +11,7 @@ const COLLECTIONS_ECRITURE = new Set([
 const COLLECTIONS_LECTURE = new Set([...COLLECTIONS_ECRITURE, "temps"]);
 const COLLECTIONS_TABLEAUX = Object.freeze([
   "etudes", "clients", "membres", "factures", "interventions",
-  "bvs", "lignesBV", "formation", "appareils",
+  "bvs", "lignesBV", "formation", "appareils", "signalementsJEH",
 ]);
 const ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{7,127}$/;
 const OP_ID_VALIDE = /^[a-zA-Z0-9][a-zA-Z0-9._:-]{7,127}$/;
@@ -147,6 +147,14 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
 
     async changerMonCode() {
       return (await appeler({ action: "changerMonCode" })).data;
+    },
+
+    async signalerJEH({ etudeId, date, duree, nb, commentaire = "" } = {}) {
+      return (await appeler({ action: "signalerJEH", etudeId, date, duree, nb, commentaire })).data;
+    },
+
+    async traiterSignalementJEH({ signalementId, decision } = {}) {
+      return (await appeler({ action: "traiterSignalementJEH", signalementId, decision })).data;
     },
 
     async loadAll() {
