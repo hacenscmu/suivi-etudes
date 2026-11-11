@@ -416,8 +416,8 @@
             if (el.dataset.role === session?.membreId) { connexion = { ...connexion, token: r.code }; localStorage.setItem(CONN, JSON.stringify(connexion)); session.role = r.role; }
             alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.role)?.nom || "ce membre") + " : " + r.code);
           }
+          if (session?.role === "Salarie") { dialog.close(); current = "Mon espace"; render(); return; }
           resultat = await synchro.adminAcces(); annonce = ""; afficher();
-          if (session?.role === "Salarie") { dialog.close(); current = "Mon espace"; render(); }
         } catch (e) { alert(e.message || e.code); afficher(); }
       }));
       dialog.querySelectorAll("[data-access]").forEach(el => el.addEventListener("click", async () => {
