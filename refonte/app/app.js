@@ -706,7 +706,7 @@
     const dialog = document.createElement("dialog");
     dialog.className = "study-dialog";
     const etudeDefaut = f?.etudeId || data.etudes[0]?.id || "";
-    const tva = Number(synchro?.lireConfig()?.tva ?? 0.2);
+    const tva = Number(f?.tauxTva ?? synchro?.lireConfig()?.tva ?? 0.2);
     let lignes = Array.isArray(f?.lignes) ? f.lignes.map(l => ({ ...l })) : [
       { type: "prestation", designation: "Prestation JEH", quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === etudeDefaut)?.jeh ?? "" },
     ];
@@ -719,7 +719,7 @@
       '<label>État<select name="etat">' + options(["Émise", "Payée"], f?.etat || "Émise") + '</select></label></div>' +
       '<div class="section-head"><h3>Lignes de facturation</h3><button type="button" class="ghost" data-add-prestation>＋ Prestation</button><button type="button" class="ghost" data-add-frais>＋ Frais</button></div>' +
       '<div data-lignes></div>' +
-      '<p class="sub">TVA unique : ' + escapeHtml((tva * 100).toLocaleString("fr-FR")) + ' % (réglages de l’application). Les factures antérieures sont déduites en TTC, sans conversion des anciennes factures.</p>' +
+      '<p class="sub">TVA unique : ' + escapeHtml((tva * 100).toLocaleString("fr-FR")) + ' % (réglages de l’application). Saisissez le total des lignes à couvrir ; les factures antérieures sont déduites en TTC, sans conversion des anciennes factures.</p>' +
       '<div class="panel" data-totaux><div class="rows">' +
       '<div class="row"><span>Total HT</span><strong data-ht>—</strong></div>' +
       '<div class="row"><span>TVA</span><strong data-tva>—</strong></div>' +
@@ -797,7 +797,7 @@
       if (!calc.valide) { dialog.querySelector("[data-erreur]").textContent = calc.anomalies.join(" · "); return; }
       const d = Object.fromEntries(["etudeId", "type", "etat", "date", "echeance", "datePaiement"].map(k => [k, form.elements[k].value.trim()]));
       if (d.etat === "Payée" && !d.datePaiement) d.datePaiement = aujourdHui();
-      Object.assign(d, { modeleFacturation: "lignes", lignes: lireLignes(), tauxTva: tva, montantHt: calc.montantHt, montantTva: calc.montantTva, montantTtcBrut: calc.montantTtcBrut, deductionFacturesPrecedentesTtc: calc.deductionTtc, montantTtc: calc.montantTtc, montant: calc.montant });
+      Object.assign(d, { modeleFacturation: "lignes", lignes: lireLignes(), tauxTva: tva, montantHt: calc.montantHt, montantTva: calc.montantTva, montantTtcBrut: calc.montantTtcBrut, deductionFacturesPrecedentesTtc: calc.deductionTtc, facturesPrecedentesIds: precedentes(d.etudeId).map(x => x.id), montantTtc: calc.montantTtc, montant: calc.montant });
       const erreur = await enregistrer("factures", id, d, "facture");
       if (erreur) { dialog.querySelector("[data-erreur]").textContent = erreur; return; }
       dialog.close(); render();
