@@ -109,3 +109,11 @@ test("refuse un prix ou un montant de frais laissé vide", () => {
     [{ type: "frais", montantHt: null }],
   ]) assert.equal(calculerFactureParLignes({ lignes }).valide, false);
 });
+
+
+test("refuse une facture antérieure sans montant TTC", () => {
+  const { calculerFactureParLignes } = require("./factures");
+  const r = calculerFactureParLignes({ lignes: [{ type: "prestation", quantite: 1, prixUnitaireHt: 100 }], facturesPrecedentes: [{ montant: null }] });
+  assert.equal(r.valide, false);
+  assert.ok(r.anomalies.some(a => a.includes("facture précédente")));
+});
