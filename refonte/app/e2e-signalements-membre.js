@@ -18,9 +18,9 @@ const serveur=creerServeurAppsScriptSimule({token:ADMIN,donnees,membre:ADMIN_ID,
 serveur.api.enregistrerJeton(SALARIE_ID,crypto.createHash('sha256').update(SALARIE).digest('hex'),'Salarie');
 const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exitCode=1;}else console.log('✔ '+nom);};
 (async()=>{
- const cree=await serveur.transport({apiVersion:3,action:'signalerJEH',token:SALARIE,etudeId:'etude_0001',date:'2026-10-03',duree:240,nb:2,commentaire:'Oubli'});
+ const cree=await serveur.transport({apiVersion:3,action:'signalerJEH',token:SALARIE,numEtude:'HAC-001',date:'2026-10-03',duree:240,nb:2,commentaire:'Oubli'});
  if(!cree.body.ok)throw new Error(cree.body.error.message);
- const refusInitial=await serveur.transport({apiVersion:3,action:'signalerJEH',token:SALARIE,etudeId:'etude_0001',date:'2026-10-04',duree:60,nb:1,commentaire:'Deuxième oubli'});
+ const refusInitial=await serveur.transport({apiVersion:3,action:'signalerJEH',token:SALARIE,numEtude:'HAC-001',date:'2026-10-04',duree:60,nb:1,commentaire:'Deuxième oubli'});
  if(!refusInitial.body.ok)throw new Error(refusInitial.body.error.message);
  const browser=await chromium.launch(),page=await browser.newPage(),erreurs=[];
  page.on('pageerror',e=>erreurs.push(e.message));
