@@ -167,3 +167,15 @@ Requête cible :
 - Une sauvegarde restaurable et un test de retour arrière sont obligatoires.
 
 Tant que ces conditions ne sont pas remplies, aucun module métier de la refonte ne doit écrire sur le backend de production.
+
+
+## 9. Signalement d'une ligne JEH manquante
+
+La collection de lecture `signalementsJEH` conserve les demandes sans être modifiable par les actions génériques `save` / `delete`.
+
+- `signalerJEH` : réservé au rôle `Salarie`. Reçoit `etudeId`, `date`, `duree` totale en minutes, `nb` personnes et `commentaire` facultatif (1 000 caractères maximum). Le serveur impose `membreId` depuis le jeton, vérifie que l'étude est associée au salarié par une intervention ou sa grille de formation, et calcule `minutesIndividuelles = duree / nb`. Le statut initial est `En attente`.
+- `loadAll` expose les signalements à tous les Membres ; le rôle Salarié ne reçoit que ses propres signalements.
+- `traiterSignalementJEH` : réservé au rôle `Membre`, avec `signalementId` et décision `ajouter` ou `refuser`. La décision n'est possible qu'une fois.
+- `ajouter` crée côté serveur une intervention « Pas payé » préremplie avec l'étude, le salarié, la date et la durée individuelle, puis passe le signalement à `Ajoutée`. Le lien `signalementId` permet de retrouver l'intervention en cas de reprise après interruption, sans la dupliquer.
+- `refuser` passe le signalement à `Refusée` sans créer d'intervention.
+- Toute autre écriture directe d'un Salarié reste interdite. Le serveur vérifie les rôles, les liens et les valeurs ; masquer les boutons côté interface n'est jamais considéré comme un contrôle d'accès.
