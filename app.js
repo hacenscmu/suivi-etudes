@@ -404,7 +404,7 @@ function render(){
   const views={moi:vMoi,dash:vDash,etudes:vEtudes,finances:vFinances,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams};
   const scrolls=[...document.querySelectorAll('.tw')].map(e=>e.scrollLeft);
   v.innerHTML=views[tab](D);fitCharts();
-  const hs=$('#hsel');if(hs)hs.innerHTML=tab==='finances'?HSEL:tab==='dash'?HSEL+'<button class="pen" type="button" data-dashed="1" aria-label="Modifier le tableau de bord"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>':'';
+  const hs=$('#hsel');if(hs)hs.innerHTML=tab==='finances'?HSEL:tab==='dash'?HSEL+(DEDIT?'<button class="pen on" type="button" data-dashed="1" aria-label="Terminer la disposition">Terminé</button>':'<button class="pen" type="button" data-dashed="1" aria-label="Modifier le tableau de bord"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>'):'';
   
   document.querySelectorAll('.tw').forEach((e,i)=>{if(scrolls[i])e.scrollLeft=scrolls[i]});
   if(fk){const [c,id,f]=fk.split('|');const el=v.querySelector(`[data-c="${c}"][data-id="${id}"][data-f="${f}"]`);if(el){el.focus({preventScroll:true});try{if(el.setSelectionRange&&el.type!=='number'&&el.type!=='date')el.setSelectionRange(el.value.length,el.value.length)}catch(e){}}}
@@ -486,7 +486,7 @@ function vDash(D){
   ks.filter(k=>DFULL.includes(k)).forEach(k=>{out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`});
   if(gk.length)out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${gk.map(k=>{const p=P[k];return `<div class="wgc${p.h===1?' wh1':''}" data-wk="${k}" style="grid-column:${p.x+1}/span ${p.w};grid-row:${p.y+1}/span ${p.h}">${B[k]}${DEDIT?tb(k):''}</div>`}).join('')}</div>`;
   const hid=DASH_BLOCKS.filter(([k])=>L.hide[k]);
-  const bar=DEDIT?`<div class="card wbar"><b>Disposition du tableau de bord</b><small>Glissez ${ic('move',13)} pour déplacer un bloc, étirez le coin ◢ pour l’agrandir ou le réduire. Chaque bloc garde la place et la taille que vous lui donnez.</small>${hid.length?`<div class="wre">${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}</div>`:''}<div class="wre"><button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button><button type="button" class="bsm" data-wdone="1">Terminé</button></div></div>`:'';
+  const bar=DEDIT?`<div class="wbar2"><small>Glissez ${ic('move',13)} pour déplacer, étirez le coin ◢ pour redimensionner.</small>${hid.map(([k,l])=>`<button type="button" class="bsm ghost" data-wshow="${k}">+ ${esc(l)}</button>`).join('')}<button type="button" class="bsm ghost" data-wreset="1">Réinitialiser</button></div>`:'';
   return `<div class="dwrap${DEDIT?' dedit':''}">${bar}${out}</div>`;
 }
 /* ---------- listes en cartes ---------- */
@@ -1072,7 +1072,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=34;
+const VERSION=35;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
