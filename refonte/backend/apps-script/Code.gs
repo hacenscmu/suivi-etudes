@@ -155,7 +155,6 @@ function traiterSignalementJEH_(q, qui, role) {
       var idInterv = 'interv_' + Utilities.getUuid().replace(/-/g, '');
       intervention = {id:idInterv, etudeId:sig.etudeId, membreId:sig.membreId, date:sig.date,
         statut:'Pas payé', minutesIndividuelles:sig.minutesIndividuelles,
-        prixJehHt:typeof etude.prixJehIntervenant === 'number' ? etude.prixJehIntervenant : (typeof etude.prixJehHt === 'number' ? etude.prixJehHt : 0),
         signalementId:sig.id, _v:1, _par:qui, _le:maintenant};
       feuille_('Données').appendRow(['interventions', idInterv, JSON.stringify(intervention)]);
       I = index_();
