@@ -455,7 +455,7 @@
       ligne("Règles CNJE", c.cnje?.date ? "Depuis le " + escapeHtml(c.cnje.date) + " · JEH client " + (c.cnje.min ?? 80) + "–" + (c.cnje.max ?? 450) + " € · intervenant ≤ " + (c.cnje.maxInt ?? 300) + " €" : "Aucune règle appliquée", btn("cnje", "Modifier")) +
       ligne("Cotisations", "SMIC " + (c.smic ?? 12.31) + " € · salariales " + pc(c.cot ? tot(c.cot) : 0.183) + " · patronales " + pc(c.patr ? tot(c.patr) : 0.3014) + " · chômage " + pc(c.chomage ?? 0), btn("cot", "Modifier")) +
       ligne("Alertes", c.alertesOn === false ? "Toutes désactivées" : (ALERTES.length - ALERTES.filter(a => off[a[0]]).length) + " activées sur " + ALERTES.length, btn("alertes", "Choisir")) +
-      (session?.role === "Membre" ? ligne("Membres et codes d’accès", "Attribuer les rôles et gérer les accès individuels", btn("acces", "Gérer")) : "") +
+      (session?.role === "Membre" && !connexion?.essai ? ligne("Membres et codes d’accès", "Attribuer les rôles et gérer les accès individuels", btn("acces", "Gérer")) : "") +
       "</section>" + heading("Synchronisation", "Cet appareil") + '<section class="listbox rows">' +
       ligne("Serveur", escapeHtml(connexion?.essai ? "Mode essai (serveur simulé sur ce téléphone)" : connexion?.url ? "Connecté" : "Non connecté")) +
       ligne("Données affichées", e.source === "serveur" ? "À jour avec le serveur" : e.source === "cache" ? "Dernière version gardée sur cet appareil (hors ligne)" : "Aucune") +
