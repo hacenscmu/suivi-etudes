@@ -360,6 +360,79 @@
     data = synchro.lireEtat(); await majStatut(); render();
   }
 
+  function espaceSalarie() {
+    const m = data.membres[0];
+    if (!m) return heading("Mon espace", "Accès personnel") + '<section class="panel"><p>Aucune fiche membre ne correspond à cet accès. Contactez la trésorerie.</p></section>';
+    const paie = calculerPaie({ interventions: data.interventions, membres: [m], config: {} }).lignes[0] || {};
+    const bvs = [...data.bvs].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
+    const netDejaRecu = bvs.reduce((s, bv) => s + Number(bv.net || 0), 0);
+    const jeh = n => Number(n || 0).toLocaleString("fr-FR", { maximumFractionDigits: 3 });
+    const etude = id => data.etudes.find(e => e.id === id);
+    const tuile = (label, valeur) => '<div class="stat"><div class="label">' + label + '</div><strong>' + valeur + "</strong></div>";
+    return heading("Bonjour " + escapeHtml(m.nomComplet || m.nom || ""), "Votre espace personnel") +
+      '<section class="stats">' + tuile("JEH à régler", jeh(paie.jehAPayer)) + tuile("Brut à régler", money(paie.brut)) +
+      tuile("Net estimé à recevoir", money(paie.net)) + tuile("Net déjà versé (BV)", money(netDejaRecu)) + "</section>" +
+      '<section class="panel"><p class="sub">Le net à recevoir est une estimation calculée avec les taux par défaut tant que les paramètres de paie ne sont pas transmis à cet espace. Les versements déjà effectués sont repris depuis vos bulletins de versement.</p></section>' +
+      heading("Mes interventions", data.interventions.length + " ligne(s)") +
+      '<section class="listbox rows">' + (data.interventions.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date))).map(i => {
+        const e = etude(i.etudeId);
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(e?.num || "Étude") + '</strong><small>' + escapeHtml(i.date || "") + " · " + escapeHtml(i.statut || "") + '</small></div><div class="amount">' + jeh(Number(i.minutesIndividuelles || 0) / 480) + " JEH</div></div>";
+      }).join("") || '<div class="empty">Aucune intervention enregistrée.</div>') + "</section>" +
+      heading("Mes bulletins de versement", bvs.length + " BV · " + money(netDejaRecu) + " net enregistré") +
+      '<section class="listbox rows">' + (bvs.map(bv => {
+        const lignes = data.lignesBV.filter(l => l.bvId === bv.id);
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(bv.reference || "Bulletin de versement") + '</strong><small>' + escapeHtml(bv.date || "") + " · " + jeh(lignes.reduce((n,l)=>n+Number(l.jeh||0),0)) + " JEH</small></div><div class="amount">' + money(bv.net || 0) + " net</div></div>";
+      }).join("") || '<div class="empty">Aucun bulletin de versement enregistré.</div>') + "</section>" +
+      heading("Mes études", data.etudes.length + " étude(s)") +
+      '<section class="listbox rows">' + (data.etudes.map(e => '<div class="item"><div class="item-main"><strong>' + escapeHtml(e.num || "Étude") + '</strong><small>' + escapeHtml(e.resume || e.statut || "Résumé non renseigné") + '</small></div></div>').join("") || '<div class="empty">Aucune étude associée.</div>') + "</section>" +
+      heading("Ma formation", data.formation.length + " grille(s)") +
+      '<section class="listbox rows">' + (data.formation.map(f => '<div class="item"><div class="item-main"><strong>' + escapeHtml(f.nom || "Formation") + '</strong><small>' + Object.entries(f.niveaux || {}).map(([id,n]) => escapeHtml(etude(id)?.num || id) + " : niveau " + n).join(" · ") + '</small></div></div>').join("") || '<div class="empty">Aucune grille de formation.</div>') + "</section>" +
+      '<section class="panel"><button class="action" id="changerMonCode">Changer mon code d’accès</button></section>';
+  }
+
+  async function ouvrirAcces() {
+    let resultat;
+    try { resultat = await synchro.adminAcces(); }
+    catch (e) { alert("Impossible de charger les accès : " + (e.message || e.code)); return; }
+    const dialog = document.createElement("dialog");
+    dialog.className = "study-dialog";
+    let annonce = resultat.codesGeneres?.length
+      ? "Codes générés maintenant — transmets-les individuellement : " + resultat.codesGeneres.map(x => (resultat.membres.find(m => m.id === x.id)?.nom || x.id) + " : " + x.code).join(" · ")
+      : "";
+    const afficher = () => {
+      dialog.innerHTML = '<div class="section-head"><h2>Membres et codes d’accès</h2><button class="ghost close-dialog" aria-label="Fermer">×</button></div>' +
+        (annonce ? '<section class="panel"><strong>Codes à transmettre maintenant</strong><p>' + escapeHtml(annonce) + '</p><small class="sub">Ils ne seront plus affichés après fermeture. Tu peux les copier avant de fermer.</small></section>' : "") +
+        '<section class="listbox rows">' + resultat.membres.map(m => '<div class="item"><div class="item-main"><strong>' + escapeHtml(m.nom) + '</strong><small>' + (m.active ? "Accès actif" : "Accès désactivé") + '</small></div>' +
+          '<select data-role="' + m.id + '" aria-label="Rôle de ' + escapeHtml(m.nom) + '">' + opts([["Membre","Membre — tous les droits"],["Salarie","Salarié — données personnelles"]],m.role) + '</select>' +
+          '<button class="ghost action" data-access="regen" data-id="' + m.id + '">Nouveau code</button>' +
+          '<button class="ghost action" data-access="' + (m.active ? "off" : "on") + '" data-id="' + m.id + '">' + (m.active ? "Désactiver" : "Réactiver") + '</button></div>').join("") +
+          '</section><div class="dialog-actions"><button class="action" data-close>Fermer</button></div>';
+      dialog.querySelector(".close-dialog").onclick = () => dialog.close();
+      dialog.querySelector("[data-close]").onclick = () => dialog.close();
+      dialog.querySelectorAll("[data-role]").forEach(el => el.addEventListener("change", async () => {
+        try {
+          const r = await synchro.definirRole({ membreId: el.dataset.role, role: el.value });
+          if (r.code) alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.role)?.nom || "ce membre") + " : " + r.code);
+          resultat = await synchro.adminAcces(); annonce = ""; afficher();
+        } catch (e) { alert(e.message || e.code); afficher(); }
+      }));
+      dialog.querySelectorAll("[data-access]").forEach(el => el.addEventListener("click", async () => {
+        try {
+          let r;
+          if (el.dataset.access === "regen") r = await synchro.regenererCode({ membreId: el.dataset.id });
+          else if (el.dataset.access === "off") r = await synchro.desactiverAcces({ membreId: el.dataset.id });
+          else r = await synchro.reactiverAcces({ membreId: el.dataset.id });
+          if (r.code) alert("Nouveau code à transmettre à " + (resultat.membres.find(m=>m.id===el.dataset.id)?.nom || "ce membre") + " : " + r.code);
+          resultat = await synchro.adminAcces(); annonce = ""; afficher();
+        } catch (e) { alert(e.message || e.code); }
+      }));
+    };
+    document.body.appendChild(dialog);
+    dialog.addEventListener("close", () => dialog.remove());
+    afficher();
+    dialog.showModal();
+  }
+
   function settings() {
     const e = etatSynchro, c = synchro?.lireConfig() || {};
     const ligne = (titre, detail, bouton) => '<div class="item"><div class="item-main"><strong>' + titre + "</strong><small>" + detail + "</small></div>" + (bouton || "") + "</div>";
@@ -676,6 +749,12 @@
     brancher("[data-payer]", el => creerBVPour(el.dataset.payer));
     brancher("[data-reglage]", el => ouvrirReglage(el.dataset.reglage));
     brancher("#dashboardLayout", () => ouvrirDispositionDashboard());
+    brancher("#changerMonCode", async () => {
+      try {
+        const r = await synchro.changerMonCode();
+        alert("Ton nouveau code d’accès est : " + r.code + "\\nNote-le maintenant : il ne sera plus affiché.");
+      } catch (e) { alert(e.message || e.code); }
+    });
     brancher("#exportJson", () => exporter());
     brancher("[data-client]", el => { clientOuvert = el.dataset.client; etudeOuverte = null; current = "Études"; render(); window.scrollTo(0, 0); });
     brancher("[data-invoice]", el => ouvrirFacture(el.dataset.invoice));
