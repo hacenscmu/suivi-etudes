@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { creerSynchro } = require("./synchro");
+const { creerSynchro, prefixeStockageUtilisateur } = require("./synchro");
 const { creerClientApiV3 } = require("../backend/client-api-v3");
 const { creerServeurAppsScriptSimule } = require("../backend/apps-script/simulateur");
 const { preparerAjout, preparerModification } = require("../application/commandes");
@@ -174,4 +174,18 @@ test("suppression logique : une fiche historique en version 0 est versionnée pu
   assert.equal(r.envoi.restantes, 0);
   assert.equal(serveur.lireDonnees().factures.facture_0001._deleted, true);
   assert.equal(serveur.lireDonnees().factures.facture_0001._v, 2);
+});
+
+
+test("le préfixe de cache est isolé par empreinte du jeton et ne révèle pas le jeton", async () => {
+  const cryptoApi = { subtle: { digest: async (algorithm, bytes) => {
+    assert.equal(algorithm, "SHA-256");
+    assert.ok(bytes instanceof Uint8Array);
+    return new Uint8Array(32).fill(bytes[0]).buffer;
+  } } };
+  const a = await prefixeStockageUtilisateur("compte-A", cryptoApi);
+  const b = await prefixeStockageUtilisateur("compte-B", cryptoApi);
+  assert.notEqual(a, b);
+  assert.match(a, /^hac\\.v3\\.user\\.[0-9a-f]{64}\\.$/);
+  assert.ok(!a.includes("compte-A"));
 });
