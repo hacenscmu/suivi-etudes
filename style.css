@@ -551,3 +551,4 @@ button.b.ghost:disabled{opacity:.4}
 
 /* v39 : cartes études — nom de l'étude en gras, client en discret */
 .ec2 .et b{font-size:16px;font-weight:800}.ec2 .et .ecl{color:var(--mute);font-size:12.5px;font-weight:500}
+.finnet b{white-space:nowrap;flex:none}.finnet span{min-width:0}
