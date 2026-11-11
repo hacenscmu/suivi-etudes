@@ -289,14 +289,14 @@ function donut(parts,center,sub){
   else segs=`<circle cx="90" cy="90" r="${R}" fill="none" stroke="var(--line)" stroke-width="30"/>`;
   return `<svg viewBox="0 0 180 180" role="img" aria-label="${esc(sub)}" data-c="${esc(String(center))}">${segs}<text class="ctr" x="90" y="92" text-anchor="middle" dominant-baseline="middle" style="font-size:36px">${center}</text><text class="ctl" x="90" y="118" text-anchor="middle"></text></svg>`;
 }
-// Toucher une partie d'anneau : elle est mise en avant, le centre affiche son nombre et une pastille sous l'anneau donne sa signification ; toucher à nouveau pour revenir au total.
-document.addEventListener('click',e=>{const seg=e.target.closest&&e.target.closest('.dseg'),svgs=document.querySelectorAll('svg.dsel');
-  const reset=v=>{v.classList.remove('dsel');v.querySelectorAll('.dseg').forEach(c=>c.classList.remove('on'));v.querySelector('.ctr').textContent=v.dataset.c;v.querySelector('.ctr').setAttribute('y','92');v.querySelector('.ctl').textContent='';const bx=v.closest('.donutbox'),di=bx&&bx.parentElement.querySelector('.dinfo');if(di)di.remove()};
-  if(!seg){svgs.forEach(reset);return}
-  const v=seg.closest('svg');if(seg.classList.contains('on')){reset(v);return}svgs.forEach(x=>{if(x!==v)reset(x)});
-  v.classList.add('dsel');v.querySelectorAll('.dseg').forEach(c=>c.classList.toggle('on',c===seg));
-  const t=v.querySelector('.ctr');t.textContent=seg.dataset.v;
-  const bx=v.closest('.donutbox');if(bx){let di=bx.parentElement.querySelector('.dinfo');if(!di){di=document.createElement('div');di.className='dinfo';bx.after(di)}di.innerHTML=`<i style="background:${seg.getAttribute('stroke')}"></i><b>${esc(seg.dataset.l)}</b> · ${seg.dataset.v} (${seg.dataset.p} %)`}});
+// Partie d'anneau : un petit message indique ce qu'elle représente, au survol de la souris ou quand on la touche.
+let DTIP=null,DTT=0;
+function dTip(seg,x,y,auto){if(!DTIP){DTIP=document.createElement('div');DTIP.className='dtip';document.body.appendChild(DTIP)}
+  DTIP.innerHTML=`<i style="background:${seg.getAttribute('stroke')}"></i>${esc(seg.dataset.l)} · <b>${seg.dataset.v}</b> (${seg.dataset.p} %)`;DTIP.style.display='flex';
+  const w=DTIP.offsetWidth;DTIP.style.left=Math.max(8,Math.min(innerWidth-w-8,x-w/2))+'px';DTIP.style.top=Math.max(8,y-44)+'px';clearTimeout(DTT);if(auto)DTT=setTimeout(()=>{DTIP.style.display='none'},2500)}
+document.addEventListener('pointermove',e=>{if(e.pointerType!=='mouse')return;const seg=e.target.closest&&e.target.closest('.dseg');if(seg)dTip(seg,e.clientX,e.clientY,false);else if(DTIP&&DTIP.style.display!=='none'&&!DTT)DTIP.style.display='none'});
+document.addEventListener('pointerout',e=>{if(e.pointerType==='mouse'&&e.target.closest&&e.target.closest('.dseg')&&DTIP){clearTimeout(DTT);DTT=0;DTIP.style.display='none'}});
+document.addEventListener('click',e=>{const seg=e.target.closest&&e.target.closest('.dseg');if(seg){dTip(seg,e.clientX,e.clientY,true)}else if(DTIP)DTIP.style.display='none'});
 function legendHtml(parts){return '<div class="legend">'+parts.map(p=>`<span><i style="background:${p.c}"></i>${esc(p.l)} · ${p.v}</span>`).join('')+'</div>'}
 function smooth(a){const f=(x,i)=>x[i]===null?null:((x[i-1]==null?x[i]:x[i-1])+2*x[i]+(x[i+1]==null?x[i]:x[i+1]))/4;const o=a.map((_,i)=>f(a,i));return o}
 let GRAD=0;
@@ -1122,7 +1122,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=46;
+const VERSION=47;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
