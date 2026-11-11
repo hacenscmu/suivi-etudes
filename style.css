@@ -547,3 +547,4 @@ button.b.ghost:disabled{opacity:.4}
 
 .wdrg{box-shadow:0 16px 40px rgba(0,0,0,.28)!important;opacity:.92;transform:scale(1.02);z-index:50}
 .wins{display:none}
+.legend .lgi{vertical-align:-3px;margin-right:4px;flex:none}.legend span{display:inline-flex;align-items:center}
