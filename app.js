@@ -40,7 +40,8 @@ const IN_PROGRESS=['Faisabilité','Devis envoyé','Devis signé','Convention env
 const SIGNED=['Devis signé','Convention signée','Convention étudiant avant réalisation','En réalisation','Archivée'];
 const L_STAT=['Convention signée','Convention étudiant avant réalisation','En réalisation','Archivée'];
 const INVOICED=['Acompte facturé','Facture intermédiaire','Solde facturé'];
-const BV_STAT=['Pas payé','Payé','A venir','Non effectué'];
+// « Non effectué » est retiré : une intervention annulée se supprime. Les anciennes lignes à ce statut restent lues (exclues des calculs) et sont signalées.
+const BV_STAT=['Pas payé','Payé','A venir'];
 
 /* ---------- état ---------- */
 const S={etudes:{},factures:{},temps:{},formation:{},clients:{},signalements:{},cfg:null};
@@ -112,7 +113,7 @@ function compute(){
     else if(ls.some(t=>!['Payé','A venir','Non effectué'].includes(t.stat)))e.N='À payer';
     else if(ls.some(t=>t.stat==='A venir'))e.N='À venir';
     else if(ls.some(t=>t.stat==='Payé'))e.N='Payé';
-    else e.N='Non effectué';
+    else e.N='';
     e.cnje=!!(cnjeDate!==null&&((e.d!==null&&e.d>=cnjeDate)||(e.statut!=='Archivée'&&e.statut!=='Refusé / sans suite')));
     e.R=ls.length?ls.reduce((a,t)=>a+num(t.I),0):null;
     e.S=ls.length?Math.max(...ls.map(t=>num(t.jeh))):null;
@@ -710,18 +711,19 @@ function vFactures(D){const n=D.fact.filter(x=>x.late).length;return `<h2>Factur
 function selEtude(c,r,f,D){return sel(c,r,f,D.etudes.map(e=>e.num).filter(Boolean))}
 function jehCard(t,D){
   const e=D.etudes.find(x=>x.num===t.etude),st=t.statut?t.stat:'Sans statut',paye=t.stat==='Payé';
-  const lib={'Pas payé':'À payer','Payé':'Payé','A venir':'À venir','Non effectué':'Non effectué','Sans statut':'Statut à choisir'}[st]||st;
+  const lib={'Pas payé':'À payer','Payé':'Payé','A venir':'À venir','Non effectué':'Annulée · à supprimer','Sans statut':'Statut à choisir'}[st]||st;
   return `<button class="card lcard jc" data-edit="temps:${t.id}">${dayBox(t.d)}
   <div class="lm"><b>${esc(t.prenom)||'Prénom à saisir'}</b><span class="small">${t.etude?'Étude '+esc(t.etude)+(e&&e.client?' · '+esc(e.client):''):'Étude à choisir'}</span>
   <span class="small">${hm(t.min)}${num(t.nb)>1?' à '+num(t.nb)+' personnes':''}${t.note?' · '+esc(t.note):''}</span></div>
-  <div class="rt"><span class="jj">${t.I===null?'—':nf3.format(Math.round(t.I*1000)/1000)+' JEH'}</span><span class="small">${t.J===null?'—':eur(t.J)}</span><span class="jst ${paye?'ok':!t.statut?'warn':st==='Pas payé'?'due':''}">${lib}</span></div></button>`;
+  <div class="rt"><span class="jj">${t.I===null?'—':nf3.format(Math.round(t.I*1000)/1000)+' JEH'}</span><span class="small">${t.J===null?'—':eur(t.J)}</span><span class="jst ${paye?'ok':!t.statut||st==='Non effectué'?'warn':st==='Pas payé'?'due':''}">${lib}</span></div></button>`;
 }
 function listTemps(D){
   const f=FLT.temps,q=f.q.trim().toLowerCase();
   const topay=t=>!['Payé','A venir','Non effectué'].includes(t.stat);
   const L=D.temps.filter(t=>(f.s==='all'||(f.s==='pay'&&topay(t))||(f.s==='paid'&&t.stat==='Payé'))&&(!q||[t.prenom,t.etude,t.note,t.mandat].join(' ').toLowerCase().includes(q))).sort((a,b)=>(b.d||0)-(a.d||0));
   const jeh=L.reduce((a,t)=>a+num(t.I),0),brut=L.filter(topay).reduce((a,t)=>a+num(t.J),0);
-  return `<div class="sum"><b>${L.length}</b> ligne${L.length>1?'s':''} · <b>${nf3.format(Math.round(jeh*1000)/1000)}</b> JEH${brut?' · '+eur0(brut)+' brut à payer':''}</div>`+(L.map(t=>jehCard(t,D)).join('')||emptyMsg('Aucune ligne de temps.'));
+  const ne=D.temps.filter(t=>t.stat==='Non effectué').length;
+  return (ne?`<div class="card alc" style="padding:10px 12px;margin-bottom:10px"><b style="color:var(--acc)">${ne} ligne${ne>1?'s':''} « Non effectué »</b><div class="small">Ce statut n’existe plus : si l’intervention n’a pas eu lieu, ouvrez la ligne et supprimez-la.</div></div>`:'')+`<div class="sum"><b>${L.length}</b> ligne${L.length>1?'s':''} · <b>${nf3.format(Math.round(jeh*1000)/1000)}</b> JEH${brut?' · '+eur0(brut)+' brut à payer':''}</div>`+(L.map(t=>jehCard(t,D)).join('')||emptyMsg('Aucune ligne de temps.'));
 }
 function signalementsHtml(){
   const G=Object.entries(S.signalements).filter(([,g])=>g.statut==='nouveau').sort((a,b)=>String(a[1].le).localeCompare(String(b[1].le)));
@@ -742,7 +744,7 @@ function vRemun(D){
     <div class="emeta"><span>Déjà payé : ${eur(r.dejaPaye)} · ${nf3.format(Math.round(r.jehPay*1e3)/1e3)} JEH${nbBV&&r.dejaPaye>0?' · '+nbBV+' BV':''}</span></div></div>`}).join('');
   return `<h2>Rémunérations</h2><div class="card pcard tot"><div class="small">Net à virer en tout</div><div class="net big">${eur(T.net)}</div><div class="ef3" style="margin-top:8px"><span>Brut ${eur(T.brut)}</span><span>Cotisations ${eur(T.brut-T.net)}</span><span>Coût Junior ${eur(T.cout)}</span></div></div>
   ${cards||emptyMsg('Personne à payer pour le moment.')}
-  <details class="how"><summary>Comment c’est calculé ?</summary><div class="small">Page automatique : rien à saisir. Pour chaque personne, elle regroupe les JEH du journal qui ne sont ni « Payé », ni « A venir », ni « Non effectué », puis calcule brut, net (après cotisations salariales) et coût Junior. Par BV, en dessous de 1 JEH, cotisations et charges sont calculées sur 1 JEH (le BV reste valide). Passez les lignes d’un BV à « Payé » : celles passées le même jour forment un BV, et la personne repart à zéro.</div></details>`;
+  <details class="how"><summary>Comment c’est calculé ?</summary><div class="small">Page automatique : rien à saisir. Pour chaque personne, elle regroupe les JEH du journal qui ne sont ni « Payé », ni « A venir » (une intervention annulée se supprime), puis calcule brut, net (après cotisations salariales) et coût Junior. Par BV, en dessous de 1 JEH, cotisations et charges sont calculées sur 1 JEH (le BV reste valide). Passez les lignes d’un BV à « Payé » : celles passées le même jour forment un BV, et la personne repart à zéro.</div></details>`;
 }
 let FSORT=null;
 function vFormation(D){
@@ -777,7 +779,7 @@ function edBody(r,D){
   if(c==='clients')return fld('Nom du client',inT(c,r,'nom'))+fld('Contact (nom, fonction)',inT(c,r,'contact'))+`<div class="f2">${fld('E-mail',inT(c,r,'email'))}${fld('Téléphone',inT(c,r,'tel'))}</div>`+fld('Adresse de facturation',inT(c,r,'adresse'))+fld('SIRET',inT(c,r,'siret'))+`<div class="f2">${fld('Collaboration',sel(c,r,'collab',['Ponctuelle','Récurrente']))}${fld('Facturation périodique',sel(c,r,'cadence',['Mensuelle','Trimestrielle','Semestrielle','Annuelle']))}</div>`+fld('Notes',inT(c,r,'notes'))+`<div class="small" style="margin-top:6px">Collaboration, facturation périodique et adresse s’appliquent aux études de ce client qui ne les précisent pas.</div>`;
   if(c==='etudes')return fld('Client',`<input list="cll" ${attr(c,r.id,'client')} value="${esc(r.client)}" autocomplete="off"><datalist id="cll">${D.clients.map(x=>`<option value="${esc(x.nom)}">`).join('')}</datalist>`)+fld('N° d’étude',inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut de l’étude',sel(c,r,'statut',cf.statuts))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div>`+fld('Dont frais HT (labo…, hors JEH)',inN(c,r,'frais'))+fld('Nom court de l’étude (pour les références, ex. RAV)',inT(c,r,'code',r.num||''))+fld('Adresse de facturation du client',inT(c,r,'adresse'))+`<div class="f2">${fld('Collaboration',sel(c,r,'collab',['Ponctuelle','Récurrente']))}${fld('Facturation périodique',sel(c,r,'cadence',['Mensuelle','Trimestrielle','Semestrielle','Annuelle']))}</div>`+fld('Date de création',inD(c,r,'date'));
   if(c==='factures')return fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Type',sel(c,r,'type',F_TYPES,false))}${fld('Montant TTC',inN(c,r,'montant'))}</div><div class="f2">${fld('Date d’émission',inD(c,r,'date'))}${fld('Échéance',inD(c,r,'echeance'))}</div><div class="f2">${fld('État',sel(c,r,'etat',F_ETATS,false))}${fld('Payée le',inD(c,r,'datePaiement'))}</div>`+editeurLignes(r,D)+(r.type==='Solde'?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" data-deduire="${r.id}" ${r.deduire===false?'':'checked'}> Déduire les factures précédentes de l’étude</label>`:'')+(r.id?`<button class="b" type="button" data-pdf="${r.id}" style="margin-top:10px">Générer la facture (PDF)</button>`:'');
-  return fld('Prénom',`<input list="pl" ${attr(c,r.id,'prenom')} value="${esc(r.prenom)}" autocomplete="off"><datalist id="pl">${persons(D).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`)+fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Date',inD(c,r,'date'))}${fld('Statut',sel(c,{id:r.id,statut:r.stat},'statut',BV_STAT,false))}</div><div class="f2">${fld('Minutes travaillées',inN(c,r,'min'))}${fld('Nb de personnes',inN(c,r,'nb'))}</div>${fld('JEH intervenant HT',inN(c,r,'jeh'))}${fld('Note',inT(c,r,'note'))}`;
+  return fld('Prénom',`<input list="pl" ${attr(c,r.id,'prenom')} value="${esc(r.prenom)}" autocomplete="off"><datalist id="pl">${persons(D).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`)+fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Date',inD(c,r,'date'))}${fld('Statut',sel(c,{id:r.id,statut:r.stat},'statut',r.stat==='Non effectué'?BV_STAT.concat('Non effectué'):BV_STAT,false))+(r.stat==='Non effectué'?'<div class="small" style="color:var(--warn);margin:-4px 0 8px">Statut retiré : si l’intervention n’a pas eu lieu, supprimez cette ligne.</div>':'')}</div><div class="f2">${fld('Minutes travaillées',inN(c,r,'min'))}${fld('Nb de personnes',inN(c,r,'nb'))}</div>${fld('JEH intervenant HT',inN(c,r,'jeh'))}${fld('Note',inT(c,r,'note'))}`;
 }
 const ED_TITLE={clients:['Nouveau client','Fiche client'],etudes:['Nouvelle étude','Modifier l’étude'],factures:['Nouvelle facture','Modifier la facture'],temps:['Nouvelle ligne de temps','Modifier la ligne de temps']};
 function openEdit(col,id,isNew){
@@ -1112,7 +1114,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=43;
+const VERSION=44;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
