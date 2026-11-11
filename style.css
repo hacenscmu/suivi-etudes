@@ -429,3 +429,19 @@ button.b.ghost:disabled{opacity:.4}
 .ladd{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.ladd .b{flex:1;min-width:90px}
 .ltot{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;margin-top:10px;font-size:13px}.ltot b{font-size:15px}.ltot .small{flex-basis:100%}
 .lj{flex:none;min-width:96px;text-align:right;font-size:13px;padding-bottom:8px;color:var(--mute)}.lj b{color:var(--ink)}.lgn.frais{background:transparent;border:1px solid var(--line)}
+
+/* v16 : carte JEH du tableau de bord, version épurée */
+.jehk2{padding:16px 16px 14px}
+.jk-h{display:flex;gap:10px;align-items:center}.jk-h b{display:block;font-size:15px}.jk-h small{font-size:12px;color:var(--mute)}
+.jk-ic{width:34px;height:34px;border-radius:11px;background:var(--card2);display:grid;place-items:center;color:var(--ink)}
+.jk-b{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-top:14px}
+.jk-n .jehbig{font-size:60px;line-height:.95;font-weight:800;letter-spacing:-2.5px;color:var(--ink);margin:0}
+.jk-s{font-size:13px;color:var(--mute);margin-top:6px}.jk-m{display:inline-block;margin-top:8px;font-size:12px;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--card2)}
+.jk-g{flex:1;max-width:230px;height:120px;display:flex;gap:8px;align-items:stretch}
+.jk-c{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.jk-bar{flex:1;width:100%;display:flex;align-items:flex-end;justify-content:center;background:var(--card2);border-radius:10px;overflow:hidden}
+.jk-bar i{display:block;width:100%;border-radius:10px;background:linear-gradient(180deg,var(--mute),var(--line))}
+.jk-c.cur .jk-bar i{background:linear-gradient(180deg,var(--acc),var(--c2))}
+.jk-v{font-size:10px;font-weight:700;color:var(--mute);height:12px}.jk-c.cur .jk-v{color:var(--ink)}
+.jk-c small{font-size:10.5px;color:var(--mute)}.jk-c.cur small{color:var(--ink);font-weight:700}
+.jk-bar{background:transparent}

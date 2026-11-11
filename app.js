@@ -45,7 +45,7 @@ const BV_STAT=['Pas payé','Payé','A venir','Non effectué'];
 /* ---------- état ---------- */
 const S={etudes:{},factures:{},temps:{},formation:{},clients:{},cfg:null};
 let loaded={etudes:false,factures:false,temps:false,formation:false,clients:false,cfg:false};
-let db=null,userCap=null,canWrite=true,tab=(['factures','remun'].includes(lsGet('suivi.tab'))&&lsSet('suivi.tab','finances'),['dash','etudes','finances','temps','formation','params'].includes(lsGet('suivi.tab'))?lsGet('suivi.tab'):'dash'),mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
+let db=null,userCap=null,canWrite=true,tab=(lsGet('suivi.tab')==='temps'&&(lsSet('suivi.fseg','jeh'),lsSet('suivi.tab','finances')),['factures','remun'].includes(lsGet('suivi.tab'))&&lsSet('suivi.tab','finances'),['dash','etudes','finances','temps','formation','params'].includes(lsGet('suivi.tab'))?lsGet('suivi.tab'):'dash'),mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
 let dirty=false,pendingRender=false,timeoutNote=false,dbErr='';
 // un mandat finit la veille du début du suivant ; le dernier n'a pas de fin
 function withEnds(ms){const st=ms.map(m=>dnum(m.debut));return ms.map((m,i)=>{const a=st[i];if(a===null)return Object.assign({},m,{fin:''});const nx=st.filter(x=>x!==null&&x>a);return Object.assign({},m,{fin:nx.length?dstr(Math.min(...nx)-1):'2999-12-31',ouvert:!nx.length})})}
@@ -319,7 +319,7 @@ const sel=(c,r,f,opts,blank)=>{const v=r[f]||'';const o=opts.slice();if(v&&!o.in
 const delBtn=(c,id)=>`<button class="x" data-del="${c}:${id}" title="Supprimer la ligne" aria-label="Supprimer la ligne">✕</button>`;
 
 /* ---------- vues ---------- */
-const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['finances','Finances'],['temps','JEH'],['formation','Qualité formation'],['params','Paramètres']];
+const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['finances','Finances'],['formation','Qualité formation'],['params','Paramètres']];
 const ICO={
  trend:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
  sign:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>',
@@ -422,13 +422,10 @@ function vDash(D){
    vue:`<div class="card"><h3>${ic('pie')}Où en sont les études ?</h3><div class="hint">Vue d’ensemble</div><div class="donutbox">${donut(vue,d.total,'Études au total')}</div>${legendHtml(vue)}</div>`,
    det:`<div class="card"><h3>${ic('list')}Détail des études en cours</h3><div class="hint">Nombre d’études par statut</div><div class="donutbox">${donut(det,d.enCours,'Détail des études en cours')}</div>${legendHtml(det)}</div>`,
    alert:n?`<div class="card alc"><h3>${ic('bell')}Alertes à traiter<span class="cnt">${d.nbAlerts}</span></h3>${al.map(e=>`<button class="ali" data-open="${e.id}"><span class="aln"><b>${esc(e.num||'(sans n°)')}</b><small>${esc(e.client||'')}</small></span><span class="alx">${e.alerts.map(a=>`<span>${ic('warn',13)}${esc(a)}</span>`).join('')}</span><span class="chev">›</span></button>`).join('')}${n>6?`<button class="b ghost addl" data-goalerts="1">Voir les ${n} études</button>`:''}</div>`:`<div class="card alc ok"><h3>${ic('ok')}Alertes à traiter</h3><div class="small">Rien à signaler.</div></div>`,
-   jeh:(()=>{const mx=Math.max(...d.jehMois.map(m=>m.v),0.0001),top=d.jehParEtud.slice(0,5),tmx=top.length?top[0][1]:1,pf=d.jehF>0?Math.min(100,Math.round(d.jehEtud/d.jehF*100)):0;
-     return `<div class="card jehk"><h3>${ic('users')}JEH réalisées par les étudiants</h3><div class="hint">${d.all?'Tout l’historique':esc(mandatSel)} · travail effectué (payé ou à payer)</div>
-      <div class="jtop"><div><div class="jehbig">${nf1.format(Math.round(d.jehEtud*10)/10)}</div><div class="small">JEH · <b>${d.nbEtud}</b> étudiant${d.nbEtud>1?'s':''} rémunéré${d.nbEtud>1?'s':''}</div></div>
-      <div class="jm">${d.jehMois.map((m,i)=>`<div class="jmc"><b>${m.v?nf1.format(Math.round(m.v*10)/10):''}</b><i style="height:${Math.round(m.v/mx*100)}%" class="${i===5?'cur':''}"></i><small>${esc(m.l)}</small></div>`).join('')}</div></div>
-      ${top.length?`<div class="jet">${top.map(([n,v])=>`<div class="jer"><span class="cav sm">${esc(iniP(n))}</span><span class="jn">${esc(n)}</span><span class="jb"><i style="width:${Math.round(v/tmx*100)}%"></i></span><b>${nf1.format(Math.round(v*10)/10)}</b></div>`).join('')}${d.jehParEtud.length>5?`<div class="small">+ ${d.jehParEtud.length-5} autre${d.jehParEtud.length>6?'s':''}</div>`:''}</div>`:''}
-      ${d.jehF>0?`<div class="eprog" style="margin-top:12px"><div class="eph"><span>Réalisées sur <b>${nf1.format(Math.round(d.jehF*10)/10)}</b> JEH facturées aux clients</span><b>${pf} %</b></div><div class="svt"><i style="width:${pf}%"></i></div></div>`:''}
-      ${d.aClasser?`<div class="eal" style="margin-top:10px">${ic('warn',13)} ${d.aClasser} ligne${d.aClasser>1?'s':''} JEH sans statut à classer (non comptée${d.aClasser>1?'s':''})</div>`:''}</div>`})(),
+   jeh:(()=>{const mx=Math.max(...d.jehMois.map(m=>m.v),0.0001),cur=d.jehMois[5].v;
+     return `<div class="card jehk2"><div class="jk-h"><span class="jk-ic">${ic('users',16)}</span><div><b>JEH réalisées</b><small>${d.all?'Tout l’historique':esc(mandatSel)} · par les étudiants</small></div></div>
+      <div class="jk-b"><div class="jk-n"><div class="jehbig">${nf1.format(Math.round(d.jehEtud*10)/10)}</div><div class="jk-s">JEH · ${d.nbEtud} étudiant${d.nbEtud>1?'s':''}</div>${cur>0?`<div class="jk-m">+${nf1.format(Math.round(cur*10)/10)} ce mois-ci</div>`:''}</div>
+      <div class="jk-g">${d.jehMois.map((m,i)=>`<div class="jk-c${i===5?' cur':''}"><span class="jk-v">${m.v?nf1.format(Math.round(m.v*10)/10):''}</span><span class="jk-bar"><i style="height:${Math.max(4,Math.round(m.v/mx*100))}%"></i></span><small>${esc(m.l)}</small></div>`).join('')}</div></div></div>`})(),
    enc:`<div class="card"><h3>${ic('trend')}Encaissé et dépenses</h3><div class="hint">${d.all?'Cumul HT · tout l’historique':'Cumul HT · '+esc(mandatSel)} · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c1)',l:'Encaissé HT',v:d.ser.enc,area:true},{c:'var(--c3)',l:'Dépenses',v:d.ser.dep}],v=>mf(v)+' €')}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h15a3 3 0 0 1 3 3v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 7l12-4v4"/><path d="M17 13.5h.01"/></svg></span><b class="tm">${eur0(d.enc)}</b></div><small>Encaissé HT</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 9v8M14.5 14.5 17 17l2.5-2.5"/></svg></span><b class="tm">${eur0(d.dep)}</b></div><small>Dépenses${d.enc?' · '+Math.round(d.dep/d.enc*100)+' % du CA':''}</small></div></div></div>`,
    cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">Cumul · en rose = les clients fidèles · du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
   const L=dashLayout();
@@ -606,7 +603,7 @@ function listFact(D){
   const enc=L.filter(x=>x.paid).reduce((a,x)=>a+num(x.montant),0),due=L.filter(x=>!x.paid).reduce((a,x)=>a+num(x.montant),0);
   return `<div class="sum"><b>${L.length}</b> facture${L.length>1?'s':''} · ${eur0(enc)} TTC encaissés${due?' · <b>'+eur0(due)+'</b> TTC à encaisser':''}</div>`+(L.map(x=>factCard(x,true)).join('')||emptyMsg('Aucune facture.'));
 }
-let FSEG=lsGet('suivi.fseg')==='paie'?'paie':'factures';
+let FSEG=['paie','jeh'].includes(lsGet('suivi.fseg'))?lsGet('suivi.fseg'):'factures';
 function vFinances(D){
   const M=['Tous les mandats'].concat(D.c.mandats.map(m=>m.nom));if(!M.includes(mandatSel))mandatSel='Tous les mandats';
   HSEL=`<select id="msel" aria-label="Mandat">${M.map(m=>`<option${m===mandatSel?' selected':''}>${esc(m)}</option>`).join('')}</select>`;
@@ -623,8 +620,8 @@ function vFinances(D){
     ${kpi('À ENCAISSER HT',eur0(du),'dont retard '+nf0.format(Math.round(late))+' €','hour')}
     <div class="sve"><div class="svh"><span><b>${eur0(enc)}</b> encaissés sur <b>${eur0(fact)}</b> facturés</span><b class="pct">${pe} %</b></div><div class="svt"><i style="width:${pe}%"></i></div></div>
     <div class="finnet"><span>Net à verser aux étudiants (prochains BV)</span><b>${eur(R.T.net)}</b></div></div>
-  <div class="seg finseg" role="group" aria-label="Finances"><button data-fseg="factures" aria-pressed="${FSEG==='factures'}">Factures</button><button data-fseg="paie" aria-pressed="${FSEG==='paie'}">Paie (BV)</button></div>
-  ${(FSEG==='paie'?vRemun(D):vFactures(D)).replace(/^<h2>[^<]*<\/h2>/,'')}`;
+  <div class="seg finseg" role="group" aria-label="Finances"><button data-fseg="factures" aria-pressed="${FSEG==='factures'}">Factures</button><button data-fseg="jeh" aria-pressed="${FSEG==='jeh'}">JEH</button><button data-fseg="paie" aria-pressed="${FSEG==='paie'}">Paie (BV)</button></div>
+  ${(FSEG==='paie'?vRemun(D):FSEG==='jeh'?vTemps(D):vFactures(D)).replace(/^<h2>[^<]*<\/h2>/,'')}`;
 }
 function vFactures(D){const n=D.fact.filter(x=>x.late).length;return `<h2>Factures</h2>${searchBox('factures')}${chipsRow('factures',[['all','Toutes'],['due','À encaisser'],['late','En retard'+(n?' · '+n:'')],['paid','Payées']])}<div id="lst">${listFact(D)}</div>${fab('factures','Ajouter une facture')}`}
 function selEtude(c,r,f,D){return sel(c,r,f,D.etudes.map(e=>e.num).filter(Boolean))}
@@ -943,7 +940,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=15;
+const VERSION=16;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
