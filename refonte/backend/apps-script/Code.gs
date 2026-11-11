@@ -88,15 +88,15 @@ function nouveauCode_(id, role, existant) {
   return code;
 }
 function membreExiste_(id) {
-  var I = index_(), e = I.idx['membres\\u0001' + id];
+  var I = index_(), e = I.idx['membres\u0001' + id];
   return e && e.o && !e.corrompu && !e.doublon && e.o._deleted !== true ? e.o : null;
 }
 function exigerAdmin_(qui) { return roleAcces_(qui) === 'Membre'; }
 function chargerAccesAdmin_() {
   var I = index_(), t = jetons_(), codes = [], liste = [];
   Object.keys(I.idx).forEach(function (k) {
-    if (k.indexOf('membres\\u0001') !== 0) return;
-    var e = I.idx[k], id = k.split('\\u0001')[1];
+    if (k.indexOf('membres\u0001') !== 0) return;
+    var e = I.idx[k], id = k.split('\u0001')[1];
     if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
     if (!t[id] || !simple_(t[id]) || (t[id].role !== 'Membre' && t[id].role !== 'Salarie')) {
       var code = nouveauCode_(id, 'Salarie');
@@ -118,14 +118,14 @@ function chargerSalarie_(qui) {
   var etudes = {};
   Object.keys(I.idx).forEach(function (k) {
     var e = I.idx[k]; if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
-    var p = k.split('\\u0001'), c = p[0], id = p[1], o = e.o;
+    var p = k.split('\u0001'), c = p[0], id = p[1], o = e.o;
     if (c === 'interventions' && o.membreId === qui) { data.interventions[id] = cloner_(o); etudes[o.etudeId] = true; }
     if (c === 'lignesBV' && o.membreId === qui) data.lignesBV[id] = cloner_(o);
     if (c === 'formation' && o.membreId === qui) data.formation[id] = cloner_(o);
   });
   Object.keys(I.idx).forEach(function (k) {
     var e = I.idx[k]; if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
-    var p = k.split('\\u0001'), c = p[0], id = p[1], o = e.o;
+    var p = k.split('\u0001'), c = p[0], id = p[1], o = e.o;
     if (c === 'bvs' && Object.keys(data.lignesBV).some(function (lid) { return data.lignesBV[lid].bvId === id; })) data.bvs[id] = cloner_(o);
     if (c === 'etudes' && etudes[id]) data.etudes[id] = {id: id, num: o.num || '', resume: o.resume || '', date: o.date || '', statut: o.statut || ''};
   });
