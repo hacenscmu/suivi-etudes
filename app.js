@@ -45,7 +45,7 @@ const BV_STAT=['Pas payé','Payé','A venir','Non effectué'];
 /* ---------- état ---------- */
 const S={etudes:{},factures:{},temps:{},formation:{},clients:{},cfg:null};
 let loaded={etudes:false,factures:false,temps:false,formation:false,clients:false,cfg:false};
-let db=null,userCap=null,canWrite=true,tab=(['factures','remun'].includes(lsGet('suivi.tab'))&&lsSet('suivi.tab','finances'),['dash','etudes','finances','temps','formation','params'].includes(lsGet('suivi.tab'))?lsGet('suivi.tab'):'dash'),mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
+let db=null,userCap=null,canWrite=true,tab=(lsGet('suivi.tab')==='temps'&&(lsSet('suivi.fseg','jeh'),lsSet('suivi.tab','finances')),['factures','remun'].includes(lsGet('suivi.tab'))&&lsSet('suivi.tab','finances'),['dash','etudes','finances','temps','formation','params'].includes(lsGet('suivi.tab'))?lsGet('suivi.tab'):'dash'),mandatSel=lsGet('suivi.mandat')||'Tous les mandats';
 let dirty=false,pendingRender=false,timeoutNote=false,dbErr='';
 // un mandat finit la veille du début du suivant ; le dernier n'a pas de fin
 function withEnds(ms){const st=ms.map(m=>dnum(m.debut));return ms.map((m,i)=>{const a=st[i];if(a===null)return Object.assign({},m,{fin:''});const nx=st.filter(x=>x!==null&&x>a);return Object.assign({},m,{fin:nx.length?dstr(Math.min(...nx)-1):'2999-12-31',ouvert:!nx.length})})}
@@ -319,7 +319,7 @@ const sel=(c,r,f,opts,blank)=>{const v=r[f]||'';const o=opts.slice();if(v&&!o.in
 const delBtn=(c,id)=>`<button class="x" data-del="${c}:${id}" title="Supprimer la ligne" aria-label="Supprimer la ligne">✕</button>`;
 
 /* ---------- vues ---------- */
-const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['finances','Finances'],['temps','JEH'],['formation','Qualité formation'],['params','Paramètres']];
+const TABS=[['dash','Tableau de bord'],['etudes','Suivi des études'],['finances','Finances'],['formation','Qualité formation'],['params','Paramètres']];
 const ICO={
  trend:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
  sign:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>',
@@ -606,7 +606,7 @@ function listFact(D){
   const enc=L.filter(x=>x.paid).reduce((a,x)=>a+num(x.montant),0),due=L.filter(x=>!x.paid).reduce((a,x)=>a+num(x.montant),0);
   return `<div class="sum"><b>${L.length}</b> facture${L.length>1?'s':''} · ${eur0(enc)} TTC encaissés${due?' · <b>'+eur0(due)+'</b> TTC à encaisser':''}</div>`+(L.map(x=>factCard(x,true)).join('')||emptyMsg('Aucune facture.'));
 }
-let FSEG=lsGet('suivi.fseg')==='paie'?'paie':'factures';
+let FSEG=['paie','jeh'].includes(lsGet('suivi.fseg'))?lsGet('suivi.fseg'):'factures';
 function vFinances(D){
   const M=['Tous les mandats'].concat(D.c.mandats.map(m=>m.nom));if(!M.includes(mandatSel))mandatSel='Tous les mandats';
   HSEL=`<select id="msel" aria-label="Mandat">${M.map(m=>`<option${m===mandatSel?' selected':''}>${esc(m)}</option>`).join('')}</select>`;
@@ -623,8 +623,8 @@ function vFinances(D){
     ${kpi('À ENCAISSER HT',eur0(du),'dont retard '+nf0.format(Math.round(late))+' €','hour')}
     <div class="sve"><div class="svh"><span><b>${eur0(enc)}</b> encaissés sur <b>${eur0(fact)}</b> facturés</span><b class="pct">${pe} %</b></div><div class="svt"><i style="width:${pe}%"></i></div></div>
     <div class="finnet"><span>Net à verser aux étudiants (prochains BV)</span><b>${eur(R.T.net)}</b></div></div>
-  <div class="seg finseg" role="group" aria-label="Finances"><button data-fseg="factures" aria-pressed="${FSEG==='factures'}">Factures</button><button data-fseg="paie" aria-pressed="${FSEG==='paie'}">Paie (BV)</button></div>
-  ${(FSEG==='paie'?vRemun(D):vFactures(D)).replace(/^<h2>[^<]*<\/h2>/,'')}`;
+  <div class="seg finseg" role="group" aria-label="Finances"><button data-fseg="factures" aria-pressed="${FSEG==='factures'}">Factures</button><button data-fseg="jeh" aria-pressed="${FSEG==='jeh'}">JEH</button><button data-fseg="paie" aria-pressed="${FSEG==='paie'}">Paie (BV)</button></div>
+  ${(FSEG==='paie'?vRemun(D):FSEG==='jeh'?vTemps(D):vFactures(D)).replace(/^<h2>[^<]*<\/h2>/,'')}`;
 }
 function vFactures(D){const n=D.fact.filter(x=>x.late).length;return `<h2>Factures</h2>${searchBox('factures')}${chipsRow('factures',[['all','Toutes'],['due','À encaisser'],['late','En retard'+(n?' · '+n:'')],['paid','Payées']])}<div id="lst">${listFact(D)}</div>${fab('factures','Ajouter une facture')}`}
 function selEtude(c,r,f,D){return sel(c,r,f,D.etudes.map(e=>e.num).filter(Boolean))}
@@ -943,7 +943,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=15;
+const VERSION=16;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
