@@ -1255,7 +1255,7 @@
     
     module.exports = { creerSynchro, stockageNavigateur, transportFetch, prefixeStockageUtilisateur };
     
-    },
+    }
   };
   const cache = Object.create(null);
 
