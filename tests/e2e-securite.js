@@ -88,5 +88,11 @@ const URL_='https://script.google.com/macros/s/TEST/exec';
   appel({token:CODE,action:'desactiver',nom:'Zoé.B'});await p4.reload();await p4.waitForTimeout(1500);
   ok('code désactivé : l’appli redemande le code',await p4.isVisible('#syt2'));
   await p4.close();
+  // anciennes modifications en attente (format d'avant la sécurité : sans op ni expected) → converties et envoyées
+  const p5=await ctx.newPage();await p5.goto('http://localhost:8766/index.html');await p5.evaluate(c=>{localStorage.clear();localStorage.setItem('suivi.url','https://script.google.com/macros/s/TEST/exec');localStorage.setItem('suivi.token',c);localStorage.setItem('suivi.role','membre');
+    localStorage.setItem('suivi.outbox',JSON.stringify([{action:'save',col:'etudes',id:'e1',json:JSON.stringify({client:'B+T',num:'1',statut:'En réalisation',montant:1428,jeh:400,date:'2026-09-01',resume:'ancien'})},{action:'save',col:'etudes',id:'eNouv',json:JSON.stringify({client:'Nouveau',num:'9'})}]))},CODE);
+  await p5.reload();await p5.waitForTimeout(3000);
+  ok('anciennes modifications en attente : converties et enregistrées',etude().resume==='ancien'&&rows.some(r=>r[1]==='eNouv')&&(await p5.evaluate(()=>JSON.parse(localStorage.getItem('suivi.outbox')).length))===0);
+  await p5.close();
   ok('aucune erreur JavaScript',errs.length===0||console.log(errs));
   await b.close();console.log(pass+' réussis, '+fail+' échoués');process.exitCode=fail?1:0})();
