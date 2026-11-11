@@ -94,5 +94,19 @@ const URL_='https://script.google.com/macros/s/TEST/exec';
   await p5.reload();await p5.waitForTimeout(3000);
   ok('anciennes modifications en attente : converties et enregistrées',etude().resume==='ancien'&&rows.some(r=>r[1]==='eNouv')&&(await p5.evaluate(()=>JSON.parse(localStorage.getItem('suivi.outbox')).length))===0);
   await p5.close();
+  // changement de code sur un même appareil : rien de l'accès précédent n'est montré ni envoyé sous le nouvel accès
+  const ZC=appel({token:CODE,action:'reactiver',nom:'Zoé.B'}).code;
+  const p6=await ctx.newPage();await p6.goto('http://localhost:8766/index.html');await p6.evaluate(c=>{localStorage.clear();localStorage.setItem('suivi.url','https://script.google.com/macros/s/TEST/exec');localStorage.setItem('suivi.token',c);localStorage.setItem('suivi.role','membre');localStorage.setItem('suivi.membre','Membres')},CODE);
+  await p6.reload();await p6.waitForTimeout(2000);
+  ok('membre : cache marqué à son identité',(await p6.evaluate(()=>localStorage.getItem('suivi.cacheQui')))==='membre:Membres');
+  horsLigne=true;await p6.evaluate(()=>localStorage.setItem('suivi.outbox',JSON.stringify([{action:'save',col:'etudes',id:'e1',json:'{}',expected:1,op:'oXXXX'}])));horsLigne=false;
+  await p6.click('#nav [data-tab="params"]');await p6.click('[data-mn="code"]');await p6.fill('#syt2',ZC);await p6.click('[data-mn="savecode"]');await p6.waitForTimeout(2500);
+  const v6=await p6.innerText('#view');
+  ok('passage au code salarié : file de l’accès précédent effacée, données du membre plus visibles',(await p6.evaluate(()=>JSON.parse(localStorage.getItem('suivi.outbox')||'[]').length))===0&&!v6.includes('Alex')&&(await p6.evaluate(()=>localStorage.getItem('suivi.cacheQui')))==='salarie:Zoé.B');
+  // démarrage hors ligne avec un cache d'une autre identité : rien n'est affiché
+  await p6.evaluate(()=>{localStorage.setItem('suivi.cache',JSON.stringify({temps:{x:{prenom:'Alex.M',etude:'1',min:60,nb:1,statut:'Payé'}}}));localStorage.setItem('suivi.cacheQui','membre:Membres')});
+  horsLigne=true;await p6.reload();await p6.waitForTimeout(1500);horsLigne=false;
+  ok('hors ligne, cache d’une autre identité : non affiché',!(await p6.innerText('body')).includes('Alex'));
+  await p6.close();
   ok('aucune erreur JavaScript',errs.length===0||console.log(errs));
   await b.close();console.log(pass+' réussis, '+fail+' échoués');process.exitCode=fail?1:0})();

@@ -380,6 +380,7 @@ async function doSync(){
     const pg=await post({action:'ping'});
     if(pg&&pg.error==='auth')return say('Code d’accès refusé : vérifiez-le auprès de la trésorerie.',1);
     if(pg&&pg.error)return say('Ce script n’est pas à jour : installez la version sécurisée du Code.gs (serveur/Code.gs).',1);
+    if(!changerIdentite((pg&&pg.role||'membre')+':'+(pg&&pg.membre||'')))return say('Changement d’accès annulé.',1);
     lsSet('suivi.token',tok);if(pg&&pg.membre)lsSet('suivi.membre',pg.membre);lsSet('suivi.admin',pg&&pg.admin?'1':'');lsSet('suivi.role',pg&&pg.role||'membre');if(pg&&pg.role==='salarie')lsSet('suivi.tab','moi');
     const srv=await post({action:'loadAll'});
     if(srv&&srv.error)return say('Erreur du script : '+srv.error,1);
@@ -387,10 +388,16 @@ async function doSync(){
     if(!has){
       let loc={};try{loc=JSON.parse(lsGet('suivi.cache')||'{}')||{}}catch(e){}
       for(const col of Object.keys(loc))for(const id of Object.keys(loc[col]||{})){const r=await post({action:'save',col,id,json:JSON.stringify(loc[col][id]),expected:0,op:newId('o')});if(r&&r.error)return say('Erreur du script : '+r.error,1)}
-    }else{lsSet('suivi.cache',JSON.stringify(srv))}
+    }else{lsSet('suivi.cache',JSON.stringify(srv));lsSet('suivi.cacheQui',(pg&&pg.role||'membre')+':'+(pg&&pg.membre||''))}
     lsSet('suivi.url',u);location.reload();
   }catch(e){say('Connexion impossible : vérifiez l’adresse et le réseau.',1)}
 }
+// Identité de l'accès (rôle + nom). Les données gardées sur l'appareil et les modifications en attente appartiennent à une identité :
+// en cas de changement de code, elles ne sont ni montrées ni envoyées sous le nouvel accès.
+function quiCour(){return (lsGet('suivi.role')||'membre')+':'+(lsGet('suivi.membre')||'')}
+function changerIdentite(nouv){if(!lsGet('suivi.token')||quiCour()===nouv)return true;let ob=[];try{ob=JSON.parse(lsGet('suivi.outbox')||'[]')||[]}catch(e){}
+  if(ob.length&&!confirm(ob.length+' modification'+(ob.length>1?'s faites':' faite')+' avec l’accès précédent n’'+(ob.length>1?'ont':'a')+' pas encore été envoyée'+(ob.length>1?'s':'')+'. Elle'+(ob.length>1?'s seront effacées':' sera effacée')+' de cet appareil. Continuer ?'))return false;
+  lsSet('suivi.outbox','[]');lsSet('suivi.cache','');lsSet('suivi.cacheQui','');return true}
 function toastMsg(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
 let codeDemande=false;function demanderCode(){if(codeDemande)return;codeDemande=true;try{openSheet('code')}catch(e){}}
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
@@ -1011,10 +1018,12 @@ function makeDb(){
   const c=CONN();const local=!c.url;
   const subs=[];let cache=null,pending=0,loading=false;
   try{cache=JSON.parse(lsGet('suivi.cache')||'null')}catch(e){cache=null}
+  // données ou modifications d'une autre identité sur cet appareil : on ne les montre pas et on ne les envoie pas
+  if(!local&&lsGet('suivi.cacheQui')&&lsGet('suivi.cacheQui')!==quiCour()){cache=null;lsSet('suivi.cache','');lsSet('suivi.outbox','[]')}
   if(local&&!cache)cache={};
   const colSnap=col=>({docs:Object.keys(cache[col]||{}).map(id=>({id,exists:true,data:()=>cache[col][id]}))});
   const emit=()=>subs.forEach(s=>{try{s.fire()}catch(e){}});
-  const keep=()=>{try{lsSet('suivi.cache',JSON.stringify(cache))}catch(e){}};
+  const keep=()=>{try{lsSet('suivi.cache',JSON.stringify(cache));if(!local)lsSet('suivi.cacheQui',quiCour())}catch(e){}};
   async function load(first){
     if(local)return;
     if(loading||pending>0||outbox.length)return;loading=true;
@@ -1098,7 +1107,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=39;
+const VERSION=40;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
@@ -1311,14 +1320,15 @@ document.addEventListener('click',async e=>{
     if(!lsGet('suivi.url')){lsSet('suivi.token',tok);sheetView=null;drawSheet();render();return}
     mmsg('Vérification…');try{const r=await fetch(lsGet('suivi.url'),{method:'POST',body:JSON.stringify({token:tok,action:'ping'}),redirect:'follow'}).then(r=>r.json());
       if(r&&r.error==='auth')return mmsg('Code refusé : vérifiez-le auprès de la trésorerie.',1);if(r&&r.error)return mmsg('Erreur du script : '+r.error,1);
+      if(!changerIdentite((r.role||'membre')+':'+(r.membre||'')))return mmsg('Changement de code annulé.',1);
       lsSet('suivi.token',tok);if(r.membre)lsSet('suivi.membre',r.membre);lsSet('suivi.admin',r.admin?'1':'');lsSet('suivi.role',r.role||'membre');if(r.role==='salarie')lsSet('suivi.tab','moi');location.reload()}catch(x){mmsg('Vérification impossible : vérifiez le réseau.',1)}return}
-  if(a==='forget'){if(!confirm('Oublier le code d’accès sur cet appareil ?'))return;lsSet('suivi.token','');lsSet('suivi.membre','');lsSet('suivi.role','');location.reload();return}
+  if(a==='forget'){if(!confirm('Oublier le code d’accès sur cet appareil ? Les données gardées sur l’appareil et les modifications pas encore envoyées seront effacées.'))return;lsSet('suivi.outbox','[]');lsSet('suivi.cache','');lsSet('suivi.cacheQui','');lsSet('suivi.token','');lsSet('suivi.membre','');lsSet('suivi.role','');location.reload();return}
   if(a==='sync'){
     if(!lsGet('suivi.url')){openSheet('addr');return}
     mmsg('Synchronisation…');
     try{await db.sync();stamp();drawSheet();mmsg('Synchronisé.')}catch(x){mmsg('Synchronisation impossible pour le moment.',1)}
     return}
-  if(a==='logout'){lsSet('suivi.token','');location.reload();return}
+  if(a==='logout'){lsSet('suivi.outbox','[]');lsSet('suivi.cache','');lsSet('suivi.cacheQui','');lsSet('suivi.token','');location.reload();return}
   if(a==='theme'){lsSet('suivi.theme',b.dataset.v);applyTheme();render();return}
   if(a==='syncon'){doSync();return}
   if(a==='syncoff'){lsSet('suivi.url','');location.reload();return}
