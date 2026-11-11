@@ -369,7 +369,7 @@
       ligne("Mandats", mandats().map(m => escapeHtml(m.nom) + " (dès le " + escapeHtml(m.debut) + ")").join(" · ") || "Aucun mandat", btn("mandat", "＋ Mandat")) +
       ligne("TVA et relances", "TVA " + pc(c.tva ?? 0.2) + " · 1re relance à " + (c.relance1 ?? 3) + " j · 2e relance après " + (c.relance2 ?? 10) + " j", btn("tva", "Modifier")) +
       ligne("Règles CNJE", c.cnje?.date ? "Depuis le " + escapeHtml(c.cnje.date) + " · JEH client " + (c.cnje.min ?? 80) + "–" + (c.cnje.max ?? 450) + " € · intervenant ≤ " + (c.cnje.maxInt ?? 300) + " €" : "Aucune règle appliquée", btn("cnje", "Modifier")) +
-      ligne("Cotisations", "SMIC " + (c.smic ?? 12.02) + " € · salariales " + pc(c.cot ? tot(c.cot) : 0.183) + " · patronales " + pc(c.patr ? tot(c.patr) : 0.3014) + " · chômage " + pc(c.chomage ?? 0), btn("cot", "Modifier")) +
+      ligne("Cotisations", "SMIC " + (c.smic ?? 12.31) + " € · salariales " + pc(c.cot ? tot(c.cot) : 0.183) + " · patronales " + pc(c.patr ? tot(c.patr) : 0.3014) + " · chômage " + pc(c.chomage ?? 0), btn("cot", "Modifier")) +
       ligne("Alertes", c.alertesOn === false ? "Toutes désactivées" : (ALERTES.length - ALERTES.filter(a => off[a[0]]).length) + " activées sur " + ALERTES.length, btn("alertes", "Choisir")) +
       "</section>" + heading("Synchronisation", "Cet appareil") + '<section class="listbox rows">' +
       ligne("Serveur", escapeHtml(connexion?.essai ? "Mode essai (serveur simulé sur ce téléphone)" : connexion?.url ? "Connecté" : "Non connecté")) +
@@ -406,10 +406,10 @@
     if (cle === "cot") {
       const cot = c.cot || { maladie: 0.013, retraiteP: 0.069, retraiteD: 0.004, csgD: 0.068, csgND: 0.029 };
       const patr = c.patr || { maladie: 0.13, at: 0.0123, retraiteP: 0.0855, retraiteD: 0.0211, famille: 0.0525, autres: 0 };
-      const champs = [{ name: "smic", label: "SMIC horaire brut (€)", type: "number", required: true }, { name: "chomage", label: "Chômage (%)", type: "number" }]
+      const champs = [{ name: "smic", label: "SMIC horaire brut (€) · 12,31 € depuis le 01/06/2026", type: "number", required: true }, { name: "chomage", label: "Chômage (%)", type: "number" }]
         .concat(Object.keys(cot).map(k => ({ name: "cot_" + k, label: "Salariale · " + k + " (%)", type: "number" })))
         .concat(Object.keys(patr).map(k => ({ name: "patr_" + k, label: "Patronale · " + k + " (%)", type: "number" })));
-      const valeurs = { smic: c.smic ?? 12.02, chomage: pourcent(c.chomage ?? 0) };
+      const valeurs = { smic: c.smic ?? 12.31, chomage: pourcent(c.chomage ?? 0) };
       Object.keys(cot).forEach(k => { valeurs["cot_" + k] = pourcent(cot[k]); }); Object.keys(patr).forEach(k => { valeurs["patr_" + k] = pourcent(patr[k]); });
       return formulaire({ titre: "Cotisations", valeurs, champs, onValider: d => {
         const nc = {}, np = {}; Object.keys(cot).forEach(k => { nc[k] = versTaux(d["cot_" + k]); }); Object.keys(patr).forEach(k => { np[k] = versTaux(d["patr_" + k]); });
