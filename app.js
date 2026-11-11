@@ -285,10 +285,18 @@ function dash(D,sel){
 const PAL=['var(--c1)','var(--c2)','var(--c3)','var(--c4)','var(--c5)','var(--c6)'];
 function donut(parts,center,sub){
   const tot=parts.reduce((a,p)=>a+p.v,0),R=62,C=2*Math.PI*R;let off=0,segs='';
-  if(tot>0)parts.forEach(p=>{if(p.v<=0)return;const len=C*p.v/tot;segs+=`<circle cx="90" cy="90" r="${R}" fill="none" stroke="${p.c}" stroke-width="30" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 90 90)"/>`;off+=len});
+  if(tot>0)parts.forEach(p=>{if(p.v<=0)return;const len=C*p.v/tot;segs+=`<circle class="dseg" data-l="${esc(p.l)}" data-v="${p.v}" data-p="${Math.round(p.v/tot*100)}" cx="90" cy="90" r="${R}" fill="none" stroke="${p.c}" stroke-width="30" stroke-dasharray="${len} ${C-len}" stroke-dashoffset="${-off}" transform="rotate(-90 90 90)"/>`;off+=len});
   else segs=`<circle cx="90" cy="90" r="${R}" fill="none" stroke="var(--line)" stroke-width="30"/>`;
-  return `<svg viewBox="0 0 180 180" role="img" aria-label="${esc(sub)}">${segs}<text class="ctr" x="90" y="92" text-anchor="middle" dominant-baseline="middle" style="font-size:36px">${center}</text></svg>`;
+  return `<svg viewBox="0 0 180 180" role="img" aria-label="${esc(sub)}" data-c="${esc(String(center))}">${segs}<text class="ctr" x="90" y="92" text-anchor="middle" dominant-baseline="middle" style="font-size:36px">${center}</text><text class="ctl" x="90" y="118" text-anchor="middle"></text></svg>`;
 }
+// Toucher une partie d'anneau : elle est mise en avant, le centre affiche son nombre et une pastille sous l'anneau donne sa signification ; toucher à nouveau pour revenir au total.
+document.addEventListener('click',e=>{const seg=e.target.closest&&e.target.closest('.dseg'),svgs=document.querySelectorAll('svg.dsel');
+  const reset=v=>{v.classList.remove('dsel');v.querySelectorAll('.dseg').forEach(c=>c.classList.remove('on'));v.querySelector('.ctr').textContent=v.dataset.c;v.querySelector('.ctr').setAttribute('y','92');v.querySelector('.ctl').textContent='';const bx=v.closest('.donutbox'),di=bx&&bx.parentElement.querySelector('.dinfo');if(di)di.remove()};
+  if(!seg){svgs.forEach(reset);return}
+  const v=seg.closest('svg');if(seg.classList.contains('on')){reset(v);return}svgs.forEach(x=>{if(x!==v)reset(x)});
+  v.classList.add('dsel');v.querySelectorAll('.dseg').forEach(c=>c.classList.toggle('on',c===seg));
+  const t=v.querySelector('.ctr');t.textContent=seg.dataset.v;
+  const bx=v.closest('.donutbox');if(bx){let di=bx.parentElement.querySelector('.dinfo');if(!di){di=document.createElement('div');di.className='dinfo';bx.after(di)}di.innerHTML=`<i style="background:${seg.getAttribute('stroke')}"></i><b>${esc(seg.dataset.l)}</b> · ${seg.dataset.v} (${seg.dataset.p} %)`}});
 function legendHtml(parts){return '<div class="legend">'+parts.map(p=>`<span><i style="background:${p.c}"></i>${esc(p.l)} · ${p.v}</span>`).join('')+'</div>'}
 function smooth(a){const f=(x,i)=>x[i]===null?null:((x[i-1]==null?x[i]:x[i-1])+2*x[i]+(x[i+1]==null?x[i]:x[i+1]))/4;const o=a.map((_,i)=>f(a,i));return o}
 let GRAD=0;
@@ -1114,7 +1122,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=45;
+const VERSION=46;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
