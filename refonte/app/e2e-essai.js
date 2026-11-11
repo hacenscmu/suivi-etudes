@@ -4,6 +4,14 @@ const {chromium}=require('playwright');let failures=0;const ok=(n,c)=>{if(!c)fai
 let net=0;p.on('request',r=>{if(!r.url().startsWith('http://localhost'))net++});
 await p.goto('http://localhost:8766/refonte/app/index.html');await p.click('#essai');await p.waitForTimeout(600);
 ok('alertes affichées à l’accueil',(await p.textContent('#content')).includes('Alertes à traiter'));ok('alerte de facturation récurrente affichée',(await p.textContent('#content')).includes('Facture périodique à émettre'));ok('mode essai démarré avec données d’exemple',(await p.textContent('#syncBanner')).includes('Mode essai')&&(await p.textContent('#content')).includes('JEH'));
+await p.click('#dashboardLayout');await p.selectOption('dialog [name=visibleEncaissement]','non');await p.click('dialog [data-ok]');await p.waitForTimeout(250);
+ok('graphique encaissement masqué',!(await p.locator('#content .panel h3').allTextContents()).includes('Encaissement'));
+await p.reload();await p.waitForTimeout(600);
+ok('préférence de masquage conservée après rechargement',!(await p.locator('#content .panel h3').allTextContents()).includes('Encaissement'));
+await p.click('#dashboardLayout');await p.selectOption('dialog [name=visibleEncaissement]','oui');await p.selectOption('dialog [name=positionActivite]','2');await p.selectOption('dialog [name=positionEncaissement]','1');await p.click('dialog [data-ok]');await p.waitForTimeout(250);
+ok('ordre des graphiques modifié',JSON.stringify(await p.locator('#content .grid .panel h3').allTextContents())===JSON.stringify(['Encaissement','Activité des étudiants']));
+await p.reload();await p.waitForTimeout(600);
+ok('ordre des graphiques conservé après rechargement',JSON.stringify(await p.locator('#content .grid .panel h3').allTextContents())===JSON.stringify(['Encaissement','Activité des étudiants']));
 await p.click('#tabs [data-page="Études"]');await p.click('[data-etude="etude_0002"]');await p.click('[data-modifier-etude]');await p.selectOption('dialog [name=statut]','Devis signé');await p.click('dialog [data-ok]');await p.waitForTimeout(400);
 await p.reload();await p.waitForTimeout(600);await p.click('#tabs [data-page="Études"]');
 ok('modification conservée après rechargement',(await p.textContent('#content')).includes('Devis signé'));
