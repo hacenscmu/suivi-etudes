@@ -161,3 +161,17 @@ test("suppression logique hors ligne : conservée dans la file puis appliquée a
   assert.equal(sync.restantes, 0);
   assert.equal(m.serveur.lireDonnees().factures.facture_0001._deleted, true);
 });
+
+
+test("suppression logique : une fiche historique en version 0 est versionnée puis tombstonée", async () => {
+  const legacy = JSON.parse(JSON.stringify(donnees));
+  delete legacy.factures.facture_0001._v;
+  const serveur = creerServeurAppsScriptSimule({ token: TOKEN, donnees: legacy });
+  const { s } = monter({ serveur });
+  await s.demarrer();
+  const r = await s.supprimer("factures", "facture_0001");
+  assert.equal(r.valide, true);
+  assert.equal(r.envoi.restantes, 0);
+  assert.equal(serveur.lireDonnees().factures.facture_0001._deleted, true);
+  assert.equal(serveur.lireDonnees().factures.facture_0001._v, 2);
+});
