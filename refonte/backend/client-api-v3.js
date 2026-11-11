@@ -8,7 +8,7 @@ const COLLECTIONS_ECRITURE = new Set([
   "etudes", "clients", "membres", "factures", "interventions",
   "bvs", "lignesBV", "formation", "config", "appareils",
 ]);
-const COLLECTIONS_LECTURE = new Set([...COLLECTIONS_ECRITURE, "temps"]);
+const COLLECTIONS_LECTURE = new Set([...COLLECTIONS_ECRITURE, "temps", "signalementsJEH"]);
 const COLLECTIONS_TABLEAUX = Object.freeze([
   "etudes", "clients", "membres", "factures", "interventions",
   "bvs", "lignesBV", "formation", "appareils", "signalementsJEH",
