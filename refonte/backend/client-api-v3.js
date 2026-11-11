@@ -114,6 +114,41 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
       return enveloppe.data;
     },
 
+    async session() {
+      const enveloppe = await appeler({ action: "ping" });
+      return enveloppe.data;
+    },
+
+    async adminAcces() {
+      return (await appeler({ action: "adminAcces" })).data;
+    },
+
+    async definirRole({ membreId, role } = {}) {
+      if (typeof membreId !== "string" || !ID_VALIDE.test(membreId) || !["Membre", "Salarie"].includes(role)) {
+        throw new ErreurApiV3("INVALID_REQUEST", "Membre ou rôle invalide");
+      }
+      return (await appeler({ action: "adminDefinirRole", membreId, role })).data;
+    },
+
+    async regenererCode({ membreId } = {}) {
+      if (typeof membreId !== "string" || !ID_VALIDE.test(membreId)) throw new ErreurApiV3("INVALID_REQUEST", "Membre invalide");
+      return (await appeler({ action: "adminRegenererCode", membreId })).data;
+    },
+
+    async desactiverAcces({ membreId } = {}) {
+      if (typeof membreId !== "string" || !ID_VALIDE.test(membreId)) throw new ErreurApiV3("INVALID_REQUEST", "Membre invalide");
+      return (await appeler({ action: "adminDesactiver", membreId })).data;
+    },
+
+    async reactiverAcces({ membreId } = {}) {
+      if (typeof membreId !== "string" || !ID_VALIDE.test(membreId)) throw new ErreurApiV3("INVALID_REQUEST", "Membre invalide");
+      return (await appeler({ action: "adminReactiver", membreId })).data;
+    },
+
+    async changerMonCode() {
+      return (await appeler({ action: "changerMonCode" })).data;
+    },
+
     async loadAll() {
       const enveloppe = await appeler({ action: "loadAll" });
       if (!objetSimple(enveloppe.data)) {
