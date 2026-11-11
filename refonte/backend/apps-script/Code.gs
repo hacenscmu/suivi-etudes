@@ -119,6 +119,13 @@ function chargerSalarie_(qui) {
   var membre = fiche_(I, 'membres', qui);
   if (!membre || membre._deleted === true) return data;
   data.membres[qui] = cloner_(membre);
+  var configuration = fiche_(I, 'config', 'main');
+  if (configuration) data.config.main = {
+    smic: configuration.smic,
+    cot: configuration.cot,
+    patr: configuration.patr,
+    chomage: configuration.chomage
+  };
   var etudes = {};
   Object.keys(I.idx).forEach(function (k) {
     var e = I.idx[k]; if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
