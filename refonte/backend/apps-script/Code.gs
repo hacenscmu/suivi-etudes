@@ -57,13 +57,79 @@ function revision_() { var r = +props_().getProperty('REVISION'); return isFinit
 
 // ---------- Authentification ----------
 // Le jeton est comparé à des empreintes : le serveur ne connaît jamais les jetons.
-function membre_(token) {
+function jetons_() {
   var raw = props_().getProperty('TOKENS'), t;
   try { t = raw ? JSON.parse(raw) : {}; } catch (x) { throw new ConfigErr('TOKENS illisible'); }
   if (!simple_(t)) throw new ConfigErr('TOKENS invalide');
-  var h = sha_(token), trouve = null;
+  return t;
+}
+function membre_(token) {
+  var t = jetons_(), h = sha_(token), trouve = null;
   Object.keys(t).forEach(function (m) { var e = t[m]; if (simple_(e) && e.active === true && egal_(h, String(e.h))) trouve = m; });
   return trouve;
+}
+function roleAcces_(id) {
+  var e = jetons_()[id];
+  return e && (e.role === 'Membre' || e.role === 'Salarie') ? e.role : null;
+}
+function nomMembre_(m) { return m.nomComplet || [m.prenom, m.nom].filter(Boolean).join(' ') || m.nom || m.id; }
+function codeAleatoire_(n) {
+  var alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789', brut = '';
+  while (brut.length < n) brut += Utilities.getUuid().replace(/-/g, '').toUpperCase();
+  var code = '';
+  for (var i = 0; i < n; i++) code += alphabet.charAt(parseInt(brut.charAt(i * 2) + brut.charAt(i * 2 + 1), 16) % alphabet.length);
+  return code;
+}
+function nouveauCode_(id, role, existant) {
+  var t = jetons_(), code = codeAleatoire_(role === 'Salarie' ? 8 : 32);
+  t[id] = {h: sha_(code), active: true, role: role, cree: new Date().toISOString()};
+  if (existant && existant.cree) t[id].cree = existant.cree;
+  props_().setProperty('TOKENS', JSON.stringify(t));
+  return code;
+}
+function membreExiste_(id) {
+  var I = index_(), e = I.idx['membres\\u0001' + id];
+  return e && e.o && !e.corrompu && !e.doublon && e.o._deleted !== true ? e.o : null;
+}
+function exigerAdmin_(qui) { return roleAcces_(qui) === 'Membre'; }
+function chargerAccesAdmin_() {
+  var I = index_(), t = jetons_(), codes = [], liste = [];
+  Object.keys(I.idx).forEach(function (k) {
+    if (k.indexOf('membres\\u0001') !== 0) return;
+    var e = I.idx[k], id = k.split('\\u0001')[1];
+    if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
+    if (!t[id] || !simple_(t[id]) || (t[id].role !== 'Membre' && t[id].role !== 'Salarie')) {
+      var code = nouveauCode_(id, 'Salarie');
+      codes.push({id: id, code: code});
+      t = jetons_();
+    }
+    var acces = t[id];
+    liste.push({id: id, nom: nomMembre_(e.o), role: acces.role, active: acces.active === true});
+  });
+  liste.sort(function (a, b) { return a.nom.localeCompare(b.nom, 'fr'); });
+  return {membres: liste, codesGeneres: codes};
+}
+function chargerSalarie_(qui) {
+  var I = index_(), data = {};
+  COLLECTIONS_LECTURE.forEach(function (c) { data[c] = {}; });
+  var membre = fiche_(I, 'membres', qui);
+  if (!membre || membre._deleted === true) return data;
+  data.membres[qui] = cloner_(membre);
+  var etudes = {};
+  Object.keys(I.idx).forEach(function (k) {
+    var e = I.idx[k]; if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
+    var p = k.split('\\u0001'), c = p[0], id = p[1], o = e.o;
+    if (c === 'interventions' && o.membreId === qui) { data.interventions[id] = cloner_(o); etudes[o.etudeId] = true; }
+    if (c === 'lignesBV' && o.membreId === qui) data.lignesBV[id] = cloner_(o);
+    if (c === 'formation' && o.membreId === qui) data.formation[id] = cloner_(o);
+  });
+  Object.keys(I.idx).forEach(function (k) {
+    var e = I.idx[k]; if (!e.o || e.corrompu || e.doublon || e.o._deleted === true) return;
+    var p = k.split('\\u0001'), c = p[0], id = p[1], o = e.o;
+    if (c === 'bvs' && Object.keys(data.lignesBV).some(function (lid) { return data.lignesBV[lid].bvId === id; })) data.bvs[id] = cloner_(o);
+    if (c === 'etudes' && etudes[id]) data.etudes[id] = {id: id, num: o.num || '', resume: o.resume || '', date: o.date || '', statut: o.statut || ''};
+  });
+  return data;
 }
 
 // ---------- Index des Données ----------
@@ -94,15 +160,23 @@ function traiter_(raw) {
     if (typeof raw !== 'string' || raw.length > MAX_REQUETE || octets_(raw) > MAX_REQUETE) return erreur_('PAYLOAD_TOO_LARGE', 'Requête trop volumineuse');
     var q; try { q = JSON.parse(raw); } catch (x) { return erreur_('INVALID_REQUEST', 'JSON invalide'); }
     if (!simple_(q) || q.apiVersion !== API) return erreur_('API_VERSION_MISMATCH', "Version d'API incompatible");
-    if (q.action === 'ping') {
-      var auth = typeof q.token === 'string' && q.token !== '' && membre_(q.token) !== null;
-      return reponse_(true, {apiVersion: API, authentifie: auth}, null, {revision: revision_()});
+    if (q.action === 'ping' && (typeof q.token !== 'string' || q.token === '' || membre_(q.token) === null)) {
+      return reponse_(true, {apiVersion: API, authentifie: false}, null, {revision: revision_()});
     }
     if (typeof q.token !== 'string' || q.token.trim() === '') return erreur_('AUTH_REQUIRED', 'Authentification requise');
     var qui = membre_(q.token);
     if (!qui) return erreur_('AUTH_INVALID', 'Jeton invalide');
-    if (q.action === 'loadAll') return verrou_(chargerTout_);
-    if (q.action === 'save' || q.action === 'delete') return verrou_(function () { return muter_(q, qui); });
+    var role = roleAcces_(qui);
+    if (!role) return erreur_('AUTH_ROLE_REQUIRED', 'Rôle d’accès non attribué');
+    if (q.action === 'ping') return reponse_(true, {apiVersion: API, authentifie: true, membreId: qui, role: role}, null, {revision: revision_()});
+    if (q.action === 'loadAll') return verrou_(function () { return role === 'Membre' ? chargerTout_() : reponse_(true, chargerSalarie_(qui), null, {revision: revision_(), schemaVersion: API, vue: 'personnelle'}); });
+    if (q.action === 'save' || q.action === 'delete') {
+      if (role !== 'Membre') return erreur_('FORBIDDEN', 'Les accès Salarié sont en lecture seule');
+      return verrou_(function () { return muter_(q, qui); });
+    }
+    if (q.action === 'adminAcces' || q.action === 'adminDefinirRole' || q.action === 'adminRegenererCode' || q.action === 'adminDesactiver' || q.action === 'adminReactiver' || q.action === 'changerMonCode') {
+      return verrou_(function () { return gererAcces_(q, qui, role); });
+    }
     return erreur_('INVALID_REQUEST', 'Action inconnue');
   } catch (x) {
     if (x instanceof ConfigErr) { console.log('Configuration serveur : ' + x.config); return erreur_('INTERNAL_ERROR', 'Configuration du serveur incomplète'); }
@@ -261,6 +335,36 @@ function dependance_(I, c, id) {
   return '';
 }
 
+function gererAcces_(q, qui, role) {
+  var t = jetons_(), cible = q.membreId;
+  if (q.action === 'changerMonCode') {
+    var codePerso = nouveauCode_(qui, role, t[qui]);
+    return reponse_(true, {code: codePerso, role: role}, null, {revision: revision_()});
+  }
+  if (role !== 'Membre') return erreur_('FORBIDDEN', 'Action réservée aux membres administrateurs');
+  if (q.action === 'adminAcces') return reponse_(true, chargerAccesAdmin_(), null, {revision: revision_()});
+  if (typeof cible !== 'string' || !ID_VALIDE.test(cible) || !membreExiste_(cible)) return erreur_('NOT_FOUND', 'Membre introuvable');
+  var acces = t[cible];
+  if (!acces || !simple_(acces)) return erreur_('NOT_FOUND', 'Accès non initialisé ; actualisez la liste des accès');
+  if (q.action === 'adminDefinirRole') {
+    if (q.role !== 'Membre' && q.role !== 'Salarie') return erreur_('INVALID_REQUEST', 'Rôle invalide');
+    if (acces.role === q.role) return reponse_(true, {role: q.role, code: null}, null, {revision: revision_()});
+    var codeRole = nouveauCode_(cible, q.role, acces);
+    return reponse_(true, {role: q.role, code: codeRole}, null, {revision: revision_()});
+  }
+  if (q.action === 'adminRegenererCode') {
+    var codeNouveau = nouveauCode_(cible, acces.role, acces);
+    return reponse_(true, {role: acces.role, code: codeNouveau}, null, {revision: revision_()});
+  }
+  if (q.action === 'adminDesactiver' || q.action === 'adminReactiver') {
+    t = jetons_(); t[cible].active = q.action === 'adminReactiver';
+    if (t[cible].active) delete t[cible].revoque; else t[cible].revoque = new Date().toISOString();
+    props_().setProperty('TOKENS', JSON.stringify(t));
+    return reponse_(true, {active: t[cible].active}, null, {revision: revision_()});
+  }
+  return erreur_('INVALID_REQUEST', 'Action inconnue');
+}
+
 function muter_(q, qui) {
   var inv = valider_(q); if (inv) return erreur_(inv[0], inv[1]);
   var empreinte = sha_(stable_({action: q.action, collection: q.collection, id: q.id, record: q.action === 'save' ? q.record : null, expectedVersion: q.expectedVersion}));
@@ -296,13 +400,13 @@ function muter_(q, qui) {
 
 // ---------- Administration (éditeur Apps Script uniquement, jamais par doPost) ----------
 // Le jeton est généré hors d'Apps Script (crypto.getRandomValues) ; on n'enregistre ici que son empreinte.
-function enregistrerJeton(membre, empreinte) {
-  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(membre) || !/^[0-9a-f]{64}$/.test(empreinte)) throw new Error('paramètres invalides');
-  var t = JSON.parse(props_().getProperty('TOKENS') || '{}'); t[membre] = {h: empreinte, active: true, cree: new Date().toISOString()};
+function enregistrerJeton(membre, empreinte, role) {
+  if (!ID_VALIDE.test(membre) || !/^[0-9a-f]{64}$/.test(empreinte) || (role !== 'Membre' && role !== 'Salarie')) throw new Error('paramètres invalides');
+  var t = jetons_(); t[membre] = {h: empreinte, active: true, role: role, cree: new Date().toISOString()};
   props_().setProperty('TOKENS', JSON.stringify(t));
 }
 function revoquerJeton(membre) {
-  var t = JSON.parse(props_().getProperty('TOKENS') || '{}');
+  var t = jetons_();
   if (t[membre]) { t[membre].active = false; t[membre].revoque = new Date().toISOString(); props_().setProperty('TOKENS', JSON.stringify(t)); }
 }
 function mettreEnQuarantaine(collection, id) {
