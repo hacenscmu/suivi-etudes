@@ -435,18 +435,29 @@ function packDash(L,ks){const N=DCOLS,rows=[];let r=null;
   const out=[];let y=0;rows.forEach(r=>{const W=split(N,r.cols.map(c=>c.cw));let x=0;
     r.cols.forEach((c,ci)=>{const Hs=split(r.H,c.items.map(i=>i.h));let yy=y;c.items.forEach((it,ii)=>{out.push({k:it.k,x,y:yy,W:W[ci],H:Hs[ii]});yy+=Hs[ii]});x+=W[ci]});y+=r.H});
   return out}
-// Grille libre : chaque bloc garde la place {x,y} et la taille {w,h} qu'on lui donne (mémorisées par nombre de colonnes).
-// Si deux blocs se chevauchent, celui qu'on vient de poser reste et les autres descendent ; rien d'autre ne bouge.
-function resolveDash(P,fixed){const ov=(a,b)=>a.x<b.x+b.w&&b.x<a.x+a.w&&a.y<b.y+b.h&&b.y<a.y+a.h;
-  const ks=Object.keys(P).sort((a,b)=>a===fixed?-1:b===fixed?1:P[a].y-P[b].y||P[a].x-P[b].x),placed=[];
-  ks.forEach(k=>{const it=P[k];let hit;while((hit=placed.filter(p=>ov(p,it))).length)it.y=Math.max(...hit.map(p=>p.y+p.h));placed.push(it)});return P}
-function dashPos(L,ks){const G=L.grid[DCOLS],P={};
-  if(!G){packDash(L,ks).forEach(o=>P[o.k]={x:o.x,y:o.y,w:o.W,h:o.H});return P}
-  ks.forEach(k=>{const q=G[k];if(!q)return;const m=DMIN[k],w=Math.min(DCOLS,Math.max(m[0],q.w|0)),h=Math.min(12,Math.max(m[1],q.h|0));P[k]={x:Math.max(0,Math.min(DCOLS-w,q.x|0)),y:Math.max(0,q.y|0),w,h}});
-  let bas=Math.max(0,...Object.values(P).map(p=>p.y+p.h));ks.filter(k=>!P[k]).forEach(k=>{const [w,h]=dashSize(L,k);P[k]={x:0,y:bas,w,h};bas+=h});
-  return resolveDash(P,null)}
-function dashSavePos(P){const L=dashLayout();L.grid[DCOLS]=JSON.parse(JSON.stringify(P));dashSave(L)}
-let DPOS={};
+// Disposition en lignes (propre à chaque appareil et à chaque nombre de colonnes) : on choisit la ligne, l'ordre et la largeur de chaque bloc.
+// Chaque ligne remplit toute la largeur ; tous les blocs d'une ligne prennent la hauteur du plus haut (par défaut : la plus grande des hauteurs minimales).
+function dashNorm(lines,fixed){const N=DCOLS,out=[];let q=lines.map(l=>l.slice());
+  for(let i=0;i<q.length;i++){const l=q[i].map(it=>{const m=DMIN[it.k];return {k:it.k,w:Math.min(N,Math.max(m[0],it.w|0)),h:Math.min(12,Math.max(m[1],it.h|0))}});if(!l.length)continue;
+    const over=[];let sum=()=>l.reduce((a,x)=>a+x.w,0);
+    for(let j=l.length-1;j>=0&&sum()>N;j--){if(l[j].k===fixed)continue;l[j].w=Math.max(DMIN[l[j].k][0],l[j].w-(sum()-N))}
+    while(sum()>N&&l.length>1){let j=l.length-1;if(l[j].k===fixed)j--;over.unshift(l.splice(j,1)[0])}
+    let ex=N-sum();if(ex>0){const oth=l.filter(x=>x.k!==fixed),tg=oth.length?oth:l,s0=tg.reduce((a,x)=>a+x.w,0);let r=ex;tg.forEach((x,ii)=>{const a=ii===tg.length-1?r:Math.floor(ex*x.w/s0);x.w+=a;r-=a})}
+    out.push(l);if(over.length)q.splice(i+1,0,over)}
+  return out}
+function dashLines(L,ks){let G=L.grid[DCOLS];let lines;
+  if(Array.isArray(G))lines=G.map(l=>l.filter(it=>ks.includes(it.k)));
+  else{lines=[];let cur=[],u=0;ks.forEach(k=>{const [w,h]=dashSize(L,k);if(u+w>DCOLS&&cur.length){lines.push(cur);cur=[];u=0}cur.push({k,w,h:DMIN[k][1]});u+=w});if(cur.length)lines.push(cur)}
+  const seen=new Set(lines.flat().map(x=>x.k)),add=ks.filter(k=>!seen.has(k));if(add.length)lines.push(add.map(k=>({k,w:DMIN[k][0],h:DMIN[k][1]})));
+  return dashNorm(lines.filter(l=>l.length))}
+function linesPos(lines){const P={};let yy=0;lines.forEach(l=>{const H=Math.max(...l.map(x=>x.h));let xx=0;l.forEach(x=>{P[x.k]={x:xx,y:yy,w:x.w,h:H};xx+=x.w});yy+=H});return P}
+function applyMove(lines,k,t){if(t.before===k)return lines;let L2=lines.map(l=>l.map(x=>Object.assign({},x)));const src=L2.findIndex(l=>l.some(x=>x.k===k)),it=L2[src].find(x=>x.k===k);
+  L2[src]=L2[src].filter(x=>x!==it);
+  if(t.nl!=null){it.w=DMIN[k][0];L2.splice(t.nl,0,[it])}
+  else{if(t.li!==src)it.w=DMIN[k][0];const l=L2[t.li];const i=t.before?l.findIndex(x=>x.k===t.before):l.length;l.splice(i<0?l.length:i,0,it)}
+  return dashNorm(L2.filter(l=>l.length),null)}
+function dashSaveLines(lines){const L=dashLayout();L.grid[DCOLS]=lines;dashSave(L)}
+let DLINES=[];
 function dashSec(){const L=dashLayout(),lab=Object.fromEntries(DASH_BLOCKS);
   return {k:'dash',t:'Tableau de bord',b:()=>`<div class="small" style="margin-bottom:8px">Glissez ⠿ pour changer l’ordre, l’interrupteur pour afficher ou masquer. Pour la taille des blocs : bouton ✎ du tableau de bord. Réglage propre à cet appareil.</div><div class="led">${L.order.map(k=>`<div class="li dli"><span class="hdl" data-k="dash" aria-label="Déplacer"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.7"/><circle cx="15" cy="6" r="1.7"/><circle cx="9" cy="12" r="1.7"/><circle cx="15" cy="12" r="1.7"/><circle cx="9" cy="18" r="1.7"/><circle cx="15" cy="18" r="1.7"/></svg></span><label class="tg"><span><b>${esc(lab[k])}</b></span><input type="checkbox" data-dshow="${k}" ${L.hide[k]?'':'checked'}><i></i></label></div>`).join('')}</div>`}}
 function vDash(D){
@@ -481,7 +492,7 @@ function vDash(D){
    cli:`<div class="card"><h3>${ic('users')}Clients totaux et fidèles</h3><div class="hint">${d.all?'':esc(mandatSel)+' · '}Nombre cumulé, du ${fdate(d.t0)} au ${fdate(d.t1)}</div>${lineChart(d.pts,[{c:'var(--c3)',l:'Clients totaux',v:d.ser.tot,area:true},{c:'var(--c1)',l:'Clients fidèles',v:d.ser.fid}],v=>String(Math.round(v)),true)}<div class="tiles"><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M19 8v6M16 11h6"/></svg></span><b>${d.nouveaux}</b></div><small>Nouveaux clients</small></div><div class="tile"><div class="tr"><span class="ti"><svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10A4.3 4.3 0 0 1 12 7.4 4.3 4.3 0 0 1 19.5 10c0 5.4-7.5 10-7.5 10z"/></svg></span><b>${d.fideles}</b></div><small>Clients fidèles</small></div></div></div>`};
   const L=dashLayout();
   DCOLS=dashCols();const ks=L.order.filter(k=>!L.hide[k]&&B[k]);let out='';
-  const gk=ks.filter(k=>!DFULL.includes(k)),P=dashPos(L,gk);DPOS=P;
+  const gk=ks.filter(k=>!DFULL.includes(k)),lines=dashLines(L,gk);DLINES=lines;const P=linesPos(lines);
   const tb=k=>`<div class="wtb"><span class="wdh" data-wk="${k}" aria-label="Déplacer">${ic('move',15)}</span><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div><span class="wrs" data-wk="${k}" aria-label="Étirer pour agrandir ou réduire"><i>${P[k].w}×${P[k].h}</i></span>`;
   ks.filter(k=>DFULL.includes(k)).forEach(k=>{out+=`<div class="wfull${DEDIT?' wed':''}" data-wk="${k}">${B[k]}${DEDIT?`<div class="wtb"><button type="button" class="wx" data-whide="${k}" aria-label="Masquer">✕</button></div>`:''}</div>`});
   if(gk.length)out+=`<div class="wgrid" style="grid-template-columns:repeat(${DCOLS},minmax(0,1fr))${DCOLS<=3?';grid-auto-rows:92px':''}">${gk.map(k=>{const p=P[k];return `<div class="wgc${p.h===1?' wh1':''}" data-wk="${k}" style="grid-column:${p.x+1}/span ${p.w};grid-row:${p.y+1}/span ${p.h}">${B[k]}${DEDIT?tb(k):''}</div>`}).join('')}</div>`;
@@ -835,21 +846,34 @@ function vParams(D){
 let PSEC=null,DRAG=null;
 document.addEventListener('pointerdown',e=>{const h=e.target.closest('.hdl');if(!h)return;e.preventDefault();const row=h.closest('.li'),rows=[...row.parentElement.children],i=rows.indexOf(row);DRAG={k:h.dataset.k,from:i,to:i,row,rows,y0:e.clientY};row.classList.add('drg');try{h.setPointerCapture(e.pointerId)}catch(x){}});
 document.addEventListener('pointermove',e=>{if(!DRAG)return;const dy=e.clientY-DRAG.y0,H=DRAG.row.offsetHeight+6,n=DRAG.rows.length,f=DRAG.from;DRAG.row.style.transform=`translateY(${dy}px)`;const to=Math.max(0,Math.min(n-1,f+Math.round(dy/H)));DRAG.to=to;DRAG.rows.forEach((r,i)=>{if(r===DRAG.row)return;const sh=(f<to&&i>f&&i<=to)?-H:(f>to&&i<f&&i>=to)?H:0;r.style.transform=sh?`translateY(${sh}px)`:''})});
-// Déplacer (poignée) ou étirer (coin ◢) un bloc : il se cale sur la case sous le doigt ; une ombre montre où il sera posé.
+// Déplacer (poignée) : le bloc suit le doigt et les autres se décalent en direct pour lui faire de la place (comme des applis qu'on intercale).
+// Étirer (coin ◢) : largeur et hauteur en cases ; les autres blocs de la ligne se partagent le reste de la largeur.
 let WOP=null;
 function wGeo(el){const g=el.parentElement,cs=getComputedStyle(g),gap=parseFloat(cs.columnGap)||8;return {g,gap,colW:(g.clientWidth-gap*(DCOLS-1))/DCOLS,rowH:parseFloat(cs.gridAutoRows)||92}}
+function wPlace(W){const P=linesPos(W.lines);W.g.querySelectorAll('.wgc').forEach(c=>{if(c===W.el)return;const p=P[c.dataset.wk];if(p){c.style.gridColumn=(p.x+1)+'/span '+p.w;c.style.gridRow=(p.y+1)+'/span '+p.h}});
+  const p=P[W.k];W.gh.style.gridColumn=(p.x+1)+'/span '+p.w;W.gh.style.gridRow=(p.y+1)+'/span '+p.h}
 document.addEventListener('pointerdown',e=>{if(!DEDIT)return;const h=e.target.closest('.wdh,.wrs');if(!h)return;const el=h.closest('.wgc');if(!el)return;e.preventDefault();e.stopPropagation();
-  const k=el.dataset.wk,p=Object.assign({},DPOS[k]),G=wGeo(el),gh=document.createElement('div');gh.className='wghost';G.g.appendChild(gh);
-  WOP=Object.assign({k,el,p,n:Object.assign({},p),gh,mode:h.classList.contains('wrs')?'rs':'mv',x0:e.clientX,y0:e.clientY+scrollY,r:el.getBoundingClientRect()},G);el.classList.add(WOP.mode==='rs'?'wrsz':'wdrg');wGhost();try{h.setPointerCapture(e.pointerId)}catch(x){}},true);
-function wGhost(){const W=WOP,n=W.n;W.gh.style.gridColumn=(n.x+1)+'/span '+n.w;W.gh.style.gridRow=(n.y+1)+'/span '+n.h;const l=W.el.querySelector('.wrs i');if(l)l.textContent=n.w+'×'+n.h}
-document.addEventListener('pointermove',e=>{if(!WOP)return;const W=WOP,m=DMIN[W.k],dx=e.clientX-W.x0,dy=e.clientY+scrollY-W.y0,cx=W.colW+W.gap,cy=W.rowH+W.gap;
+  const k=el.dataset.wk,G=wGeo(el),r=el.getBoundingClientRect(),mode=h.classList.contains('wrs')?'rs':'mv';
+  WOP=Object.assign({k,el,mode,x0:e.clientX,y0:e.clientY,r,lines:DLINES},G);
+  if(mode==='mv'){const gh=document.createElement('div');gh.className='wghost';G.g.appendChild(gh);WOP.gh=gh;Object.assign(el.style,{position:'fixed',left:r.left+'px',top:r.top+'px',width:r.width+'px',height:r.height+'px',margin:0});el.classList.add('wdrg');wPlace(WOP)}
+  else el.classList.add('wrsz');
+  try{h.setPointerCapture(e.pointerId)}catch(x){}},true);
+function wDrop(x,y){const W=WOP,cards=[...W.g.querySelectorAll('.wgc')].filter(c=>c!==W.el).map(c=>({k:c.dataset.wk,r:c.getBoundingClientRect()}));cards.push({k:W.k,r:W.gh.getBoundingClientRect()});
+  const bands=W.lines.map((l,li)=>{const rs=cards.filter(c=>l.some(it=>it.k===c.k));return rs.length?{li,top:Math.min(...rs.map(c=>c.r.top)),bot:Math.max(...rs.map(c=>c.r.bottom)),rs}:null}).filter(Boolean);
+  for(const b of bands){const e=Math.min(28,(b.bot-b.top)*.2);if(y<b.top+e)return {nl:b.li};
+    if(y<=b.bot-e){const rs=b.rs.slice().sort((a,c)=>a.r.left-c.r.left);const i=rs.findIndex(c=>x<c.r.left+c.r.width/2);return {li:b.li,before:i<0?null:rs[i].k}}
+    if(y<b.bot+6)return {nl:b.li+1}}
+  return {nl:W.lines.length}}
+document.addEventListener('pointermove',e=>{if(!WOP)return;const W=WOP,m=DMIN[W.k],dx=e.clientX-W.x0,dy=e.clientY-W.y0,cx=W.colW+W.gap,cy=W.rowH+W.gap;
   if(e.clientY>innerHeight-110)scrollBy(0,12);else if(e.clientY<80)scrollBy(0,-12);
-  if(W.mode==='mv'){W.el.style.transform=`translate(${dx}px,${dy}px)`;W.n.x=Math.max(0,Math.min(DCOLS-W.p.w,Math.round(W.p.x+dx/cx)));W.n.y=Math.max(0,Math.round(W.p.y+dy/cy))}
+  if(W.mode==='mv'){W.el.style.left=(W.r.left+dx)+'px';W.el.style.top=(W.r.top+dy)+'px';
+    const t=wDrop(e.clientX,e.clientY),key=JSON.stringify(t);if(key!==W.tk){W.tk=key;const nl=applyMove(W.lines,W.k,t);if(JSON.stringify(nl)!==JSON.stringify(W.lines)){W.lines=nl;wPlace(W)}}}
   else{const nw=Math.max(40,W.r.width+dx),nh=Math.max(40,W.r.height+dy);W.el.style.width=nw+'px';W.el.style.height=nh+'px';
-    W.n.w=Math.max(m[0],Math.min(DCOLS-W.p.x,Math.round((nw+W.gap)/cx)));W.n.h=Math.max(m[1],Math.min(12,Math.round((nh+W.gap)/cy)))}
-  wGhost()});
-const endWOP=()=>{if(!WOP)return;const W=WOP;WOP=null;const P=JSON.parse(JSON.stringify(DPOS));P[W.k]=W.n;resolveDash(P,W.k);dashSavePos(P);render()};
-document.addEventListener('pointerup',endWOP);document.addEventListener('pointercancel',endWOP);
+    W.nw=Math.max(m[0],Math.min(DCOLS,Math.round((nw+W.gap)/cx)));W.nh=Math.max(m[1],Math.min(12,Math.round((nh+W.gap)/cy)));const l=W.el.querySelector('.wrs i');if(l)l.textContent=W.nw+'×'+W.nh}});
+const endWOP=()=>{if(!WOP)return;const W=WOP;WOP=null;let lines=W.lines;
+  if(W.mode==='rs'&&W.nw){lines=lines.map(l=>l.map(x=>Object.assign({},x)));const l=lines.find(l=>l.some(x=>x.k===W.k)),it=l.find(x=>x.k===W.k);it.w=W.nw;it.h=W.nh;l.forEach(x=>{if(x!==it)x.h=DMIN[x.k][1]});lines=dashNorm(lines,W.k)}
+  dashSaveLines(lines);render()};
+document.addEventListener('pointerup',endWOP);document.addEventListener('pointerup',endWOP);document.addEventListener('pointerup',endWOP);document.addEventListener('pointercancel',endWOP);
 const endDrag=()=>{if(!DRAG)return;const {k,from,to}=DRAG;DRAG=null;if(from!==to){const c=ensureCfg();if(k==='dash'){const L=dashLayout();const [x]=L.order.splice(from,1);L.order.splice(to,0,x);dashSave(L);render()}else{const [x]=c[k].splice(from,1);c[k].splice(to,0,x);saveCfg();render()}}if(PSEC)drawParam()};
 document.addEventListener('pointerup',endDrag);document.addEventListener('pointercancel',endDrag);
 function openParam(k){PSEC=k;ED=null;drawParam()}
@@ -1072,7 +1096,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=36;
+const VERSION=37;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
