@@ -66,6 +66,18 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
  await page.click('#changerMonCode');
  await page.waitForFunction(old=>{const c=JSON.parse(localStorage.getItem('hac.v3.connexion')||'{}').token;return c&&c!==old;},nouveauCode);
  ok('le nouveau code authentifie les requêtes suivantes',JSON.parse(await page.evaluate(()=>localStorage.getItem('hac.v3.connexion'))).token!==nouveauCode);
+ await page.click('#signalerJEH');
+ await page.selectOption('select[name=etudeId]','etude_0001');
+ await page.fill('input[name=date]','2026-10-03');
+ await page.fill('input[name=duree]','240');
+ await page.fill('input[name=nb]','2');
+ await page.fill('input[name=commentaire]','Intervention oubliée');
+ await page.click('button[data-ok]');
+ await page.waitForFunction(()=>document.querySelector('#content')?.innerText.includes('En attente'));
+ const reports=await serveur.lireDonnees();
+ const report=Object.values(reports.signalementsJEH||{})[0];
+ ok('signalement JEH créé avec identité serveur et durée répartie',!!report&&report.membreId===ID&&report.minutesIndividuelles===120&&report.statut==='En attente');
+ ok('le salarié ne peut signaler que ses études associées',Object.keys(dernierLoad.signalementsJEH||{}).length===1);
  ok('aucune erreur JavaScript',erreurs.length===0);
  await browser.close();
  if(process.exitCode)process.exit(process.exitCode);
