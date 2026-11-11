@@ -36,7 +36,7 @@ Ces tests sont simulés : ils ne remplacent pas un essai sur un vrai projet Apps
 
 La collection `signalementsJEH` est stockée dans la feuille `Données` au même format `collection | id | json` ; aucune quatrième feuille métier n'est nécessaire. Elle est en lecture seule via `save` / `delete` et n'est modifiée que par les actions serveur dédiées :
 
-- `signalerJEH` : accès Salarié uniquement ; le serveur impose l'identité et vérifie l'association à l'étude.
+- `signalerJEH` : accès Salarié uniquement ; le serveur impose l'identité et résout le numéro d'étude exact et unique, sans exiger de ligne JEH préexistante.
 - `traiterSignalementJEH` : accès Membre uniquement ; création de l'intervention « Pas payé » ou refus du signalement.
 - `loadAll` filtre les signalements du salarié et expose la file complète aux Membres.
 
