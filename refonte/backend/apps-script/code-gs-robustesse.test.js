@@ -158,3 +158,90 @@ test("un id JSON incohérent ou une version invalide est mis en quarantaine logi
   assert.equal(write.error.code, "INVALID_REQUEST");
   assert.equal(JSON.stringify(s.feuilles["Données"].rows), unchanged);
 });
+
+
+const crypto = require("node:crypto");
+const tokenHash = value => crypto.createHash("sha256").update(value, "utf8").digest("hex");
+const donneesAcces = {
+  membres: {
+    membre_0001: { id: "membre_0001", nomComplet: "Alice Martin", _v: 1 },
+    membre_0002: { id: "membre_0002", nomComplet: "Bob Durand", _v: 1 },
+  },
+  clients: { client_0001: { id: "client_0001", raisonSociale: "Client confidentiel", _v: 1 } },
+  etudes: {
+    etude_0001: { id: "etude_0001", num: "HAC-001", resume: "Étude Alice", client: "Client confidentiel", montant: 5000, _v: 1 },
+    etude_0002: { id: "etude_0002", num: "HAC-002", resume: "Étude Bob", client: "Autre client", montant: 9000, _v: 1 },
+  },
+  factures: { facture_0001: { id: "facture_0001", etudeId: "etude_0001", montant: 5000, _v: 1 } },
+  interventions: {
+    interv_0001: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", minutesIndividuelles: 240, statut: "Pas payé", _v: 1 },
+    interv_0002: { id: "interv_0002", etudeId: "etude_0002", membreId: "membre_0002", minutesIndividuelles: 480, statut: "Payé", _v: 1 },
+  },
+  bvs: { bv_0000001: { id: "bv_0000001", reference: "BV-Alice", _v: 1 }, bv_0000002: { id: "bv_0000002", reference: "BV-Bob", _v: 1 } },
+  lignesBV: {
+    ligne_000001: { id: "ligne_000001", bvId: "bv_0000001", membreId: "membre_0001", jeh: 0.5, _v: 1 },
+    ligne_000002: { id: "ligne_000002", bvId: "bv_0000002", membreId: "membre_0002", jeh: 1, _v: 1 },
+  },
+  formation: {
+    form_000001: { id: "form_000001", membreId: "membre_0001", nom: "Formation Alice", niveaux: { etude_0001: 2 }, _v: 1 },
+    form_000002: { id: "form_000002", membreId: "membre_0002", nom: "Formation Bob", niveaux: { etude_0002: 3 }, _v: 1 },
+  },
+};
+
+test("la liste des accès crée un code salarié de 8 caractères au plus une seule fois", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: donneesAcces });
+  const first = await body(s, req("adminAcces"));
+  assert.equal(first.ok, true);
+  assert.equal(first.data.membres.length, 2);
+  assert.equal(first.data.codesGeneres.length, 2);
+  assert.ok(first.data.codesGeneres.every(x => x.code.length <= 8 && /^[A-HJ-NP-Z2-9]+$/.test(x.code)));
+  const second = await body(s, req("adminAcces"));
+  assert.deepEqual(second.data.codesGeneres, []);
+  assert.ok(second.data.membres.every(x => x.role === "Salarie"));
+});
+
+test("un salarié ne reçoit que ses données et les fiches strictement nécessaires", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: donneesAcces });
+  const admin = await body(s, req("adminAcces"));
+  const alice = admin.data.codesGeneres.find(x => x.id === "membre_0001").code;
+  const loaded = await body(s, { action: "loadAll", apiVersion: 3, token: alice });
+  assert.equal(loaded.ok, true);
+  assert.deepEqual(Object.keys(loaded.data.membres), ["membre_0001"]);
+  assert.deepEqual(Object.keys(loaded.data.interventions), ["interv_0001"]);
+  assert.deepEqual(Object.keys(loaded.data.lignesBV), ["ligne_000001"]);
+  assert.deepEqual(Object.keys(loaded.data.bvs), ["bv_0000001"]);
+  assert.deepEqual(Object.keys(loaded.data.formation), ["form_000001"]);
+  assert.deepEqual(Object.keys(loaded.data.etudes), ["etude_0001"]);
+  assert.deepEqual(loaded.data.etudes.etude_0001, { id: "etude_0001", num: "HAC-001", resume: "Étude Alice", date: "", statut: "" });
+  assert.deepEqual(loaded.data.clients, {});
+  assert.deepEqual(loaded.data.factures, {});
+  assert.deepEqual(loaded.data.config, {});
+  assert.equal(JSON.stringify(loaded.data).includes("Client confidentiel"), false);
+  assert.equal(JSON.stringify(loaded.data).includes("Bob Durand"), false);
+  assert.equal(JSON.stringify(loaded.data).includes("HAC-002"), false);
+});
+
+test("un salarié ne peut ni écrire ni administrer les accès", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: donneesAcces });
+  const admin = await body(s, req("adminAcces"));
+  const alice = admin.data.codesGeneres.find(x => x.id === "membre_0001").code;
+  const write = await body(s, { action: "save", apiVersion: 3, token: alice, collection: "clients", id: "client_0001", record: { id: "client_0001", raisonSociale: "Intrusion" }, expectedVersion: 1, opId: "op_forbidden_0001" });
+  assert.equal(write.error.code, "FORBIDDEN");
+  const manage = await body(s, { action: "adminAcces", apiVersion: 3, token: alice });
+  assert.equal(manage.error.code, "FORBIDDEN");
+});
+
+test("seul un membre peut changer le rôle, régénérer ou désactiver un accès", async () => {
+  const s = creerServeurAppsScriptSimule({ token: TOKEN, donnees: donneesAcces });
+  const admin = await body(s, req("adminAcces"));
+  const alice = admin.data.codesGeneres.find(x => x.id === "membre_0001").code;
+  const promotion = await body(s, req("adminDefinirRole", { membreId: "membre_0001", role: "Membre" }));
+  assert.equal(promotion.data.role, "Membre");
+  assert.equal(promotion.data.code.length, 32);
+  assert.equal((await body(s, { action: "loadAll", apiVersion: 3, token: alice })).error.code, "AUTH_INVALID");
+  const ping = await body(s, { action: "ping", apiVersion: 3, token: promotion.data.code });
+  assert.equal(ping.data.role, "Membre");
+  const off = await body(s, req("adminDesactiver", { membreId: "membre_0001" }));
+  assert.equal(off.data.active, false);
+  assert.equal((await body(s, { action: "loadAll", apiVersion: 3, token: promotion.data.code })).error.code, "AUTH_INVALID");
+});
