@@ -186,3 +186,17 @@ test("expose les opérations de gestion des accès avec validation des identifia
   await assert.rejects(c.definirRole({ membreId: "bad", role: "Membre" }), e => e.code === "INVALID_REQUEST");
   await assert.rejects(c.definirRole({ membreId: "membre_0001", role: "Président" }), e => e.code === "INVALID_REQUEST");
 });
+
+
+test("bloque les écritures génériques sur les signalements JEH", async () => {
+  let called = false;
+  const c = client(async () => { called = true; return succes({}); });
+  await assert.rejects(c.save({
+    collection: "signalementsJEH",
+    id: "sig_12345678",
+    record: { id: "sig_12345678" },
+    opId: "op_signalement_0001",
+    expectedVersion: 0,
+  }), e => e.code === "READ_ONLY_COLLECTION");
+  assert.equal(called, false);
+});
