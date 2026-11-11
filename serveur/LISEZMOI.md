@@ -13,5 +13,8 @@ Faites ces étapes **sur ordinateur**, le même jour que la fusion de l'appli v1
 
 Dans l'appli (Paramètres → Membres et codes d'accès, visible par les membres) :
 - **Code des membres** : un seul code de 8 caractères pour tous les membres (tous les droits). Il ne change pas.
-- **Codes salariés** : chaque nom présent dans les JEH ou la formation reçoit automatiquement son code de 8 caractères ; le salarié ne voit que ses données (ses JEH, sa paie, sa formation, ses signalements). Boutons Copier, Nouveau code, Désactiver.
+- **Personnes** : chaque nom présent dans les JEH ou la formation est ajouté automatiquement avec le statut **Salarié** et un code de 8 caractères ; il ne voit que ses données (ses JEH, sa paie, sa formation, ses signalements). Statut modifiable : Salarié ou **Sans accès** (son code ne marche plus). On ne supprime personne.
+- **Code d'un salarié** : les membres ne peuvent pas le changer. Le salarié le change lui-même dans ses Paramètres → Changer mon code ; il n'est alors plus visible par personne.
+
+Qui peut retrouver les codes : le code des membres est visible dans l'appli par les membres, et dans le projet Apps Script (fonction `codeMembres` ou Paramètres du projet → Propriétés du script) par les comptes Google qui ont accès au projet. Les codes ne sont jamais écrits dans le Google Sheet.
 Retour arrière : recollez l'ancien Code.gs (étape 3) et redéployez une nouvelle version.
