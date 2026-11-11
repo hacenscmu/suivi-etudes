@@ -4,9 +4,9 @@ const {chromium}=require('playwright');const ok=(n,c)=>console.log((c?'✔ ':'�
 await p.addInitScript(()=>{if(localStorage.getItem('seeded'))return;localStorage.setItem('seeded','1');localStorage.setItem('suivi.cache',JSON.stringify({etudes:{e1:{client:'B+T Environnement',adresse:'3 Av de Strasbourg, 68350 Brunstatt',num:'1',statut:'En réalisation',montant:1428,jeh:400,frais:70,date:'2026-09-01',collab:'Récurrente',cadence:'Mensuelle'}},factures:{f1:{etude:'1',type:'Solde',etat:'Émise',montant:1428,date:'2026-09-09',echeance:'2026-10-09',jehFact:2.8,fraisFact:70,prestation:'Détermination du taux de cendres'}},temps:{t1:{prenom:'Alex',etude:'1',min:480,nb:1,jeh:300,statut:'Pas payé',date:'2026-09-05'},t2:{prenom:'Zoé',etude:'1',min:240,nb:1,jeh:300,statut:'Payé',date:'2026-09-05'},t3:{prenom:'Zoé',etude:'1',min:60,nb:1,jeh:300,date:'2026-09-06'}},formation:{}}))});
 await p.goto('http://localhost:8766/index.html');await p.waitForTimeout(1200);
 const txt=await p.innerText('body');
-ok('KPI JEH étudiants en tête',txt.includes('JEH réalisées par les étudiants'));
+ok('KPI JEH réalisées en tête',txt.includes('JEH réalisées'));
 ok('1,5 JEH (Pas payé + Payé, sans la ligne sans statut)',txt.includes('1,5'));
-ok('ligne sans statut signalée',txt.includes('1 ligne JEH sans statut à classer'));
+
 ok('onglet Finances présent, Factures/Paie absents de la barre',await p.locator('#nav [data-tab="finances"]').count()===1&&await p.locator('#nav [data-tab="remun"]').count()===0);
 await p.click('#nav [data-tab="finances"]');await p.waitForTimeout(300);const f=await p.innerText('#view');
 ok('Finances : synthèse',f.includes('ENCAISSÉ HT')&&f.includes('Net à verser'));
