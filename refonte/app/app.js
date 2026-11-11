@@ -240,7 +240,10 @@
       '<section class="listbox rows">' + (tous.map(s => {
         const membre = data.membres.find(m => m.id === s.membreId);
         const etude = data.etudes.find(e => e.id === s.etudeId);
-        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(membre?.nomComplet || membre?.nom || "Salarié") + ' · ' + escapeHtml(etude?.num || "Étude") + '</strong><small>' + escapeHtml(s.date) + ' · ' + Number(s.minutesIndividuelles || 0) + ' min individuelles · ' + Number(s.nbPersonnes || 1) + ' personne(s)' + (s.commentaire ? ' · ' + escapeHtml(s.commentaire) : '') + '</small></div><div class="item-actions"><button class="action" data-signalement="ajouter" data-id="' + s.id + '">Créer la ligne</button><button class="ghost" data-signalement="refuser" data-id="' + s.id + '">Refuser</button></div></div>';
+        const actions = s.statut === "En attente"
+          ? '<div class="item-actions"><button class="action" data-signalement="ajouter" data-id="' + s.id + '">Créer la ligne</button><button class="ghost" data-signalement="refuser" data-id="' + s.id + '">Refuser</button></div>'
+          : "";
+        return '<div class="item"><div class="item-main"><strong>' + escapeHtml(membre?.nomComplet || membre?.nom || "Salarié") + ' · ' + escapeHtml(etude?.num || "Étude") + '</strong><small>' + escapeHtml(s.date) + ' · ' + Number(s.minutesIndividuelles || 0) + ' min individuelles · ' + Number(s.nbPersonnes || 1) + ' personne(s)' + (s.commentaire ? ' · ' + escapeHtml(s.commentaire) : '') + '</small></div><span class="pill ' + (s.statut === "Ajoutée" ? "green" : s.statut === "Refusée" ? "muted" : "pink") + '">' + escapeHtml(s.statut) + '</span>' + actions + '</div>';
       }).join("") || '<div class="empty">Aucun signalement à traiter.</div>') + "</section>";
   }
 
