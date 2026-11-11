@@ -416,7 +416,7 @@ function dashLocal(){try{return JSON.parse(lsGet('suivi.dash')||'{}')||{}}catch(
 function dashSave(x){lsSet('suivi.dash',JSON.stringify(x))}
 function dashLayout(){const c=dashLocal();const all=DASH_BLOCKS.map(x=>x[0]);const o=(c.order||[]).filter(k=>all.includes(k));all.forEach(k=>{if(!o.includes(k))o.push(k)});return {order:o,hide:c.hide||{},size:c.size||{},grid:c.grid||{}}}
 // Widgets : grille de 9 colonnes, taille minimale [largeur, hauteur] en cases ; chaque ligne est complétée pour prendre toute la largeur.
-let DCOLS=9;const DMIN={vue:[3,3],det:[3,3],jeh:[2,1],alert:[3,2],enc:[4,3],cli:[4,3]},DDEF={jeh:[3,1]},DFULL=['banner','kpis'];
+let DCOLS=9;const DMIN={vue:[3,2],det:[3,2],jeh:[2,2],alert:[3,2],enc:[4,3],cli:[4,3]},DDEF={jeh:[3,2]},DFULL=['banner','kpis'];
 let DEDIT=false,WDRAG=null;
 // nombre de cases selon la largeur de l'écran : 3 sur téléphone (blocs l'un sous l'autre, pleine largeur), puis ≈ 80 px par case jusqu'à 18
 function dashCols(){const v=document.getElementById('view'),w=(v&&v.clientWidth)||window.innerWidth;return w<600?3:Math.max(9,Math.min(18,Math.round(w/80)))}
@@ -1072,7 +1072,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=35;
+const VERSION=36;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
