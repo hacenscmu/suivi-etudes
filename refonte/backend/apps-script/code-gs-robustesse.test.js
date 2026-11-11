@@ -137,7 +137,7 @@ test("le serveur refuse une intervention aux champs métier invalides", async ()
   } });
   const r = await body(s, req("save", {
     collection: "interventions", id: "interv_bad_001",
-    record: { id: "interv_bad_001", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-02-30", statut: "Pas payé", minutesIndividuelles: -1 },
+    record: { id: "interv_bad_001", numEtude: "HAC-001", membreId: "membre_0001", date: "2026-02-30", statut: "Pas payé", minutesIndividuelles: -1 },
     expectedVersion: 0, opId: "op_interv_bad_001",
   }));
   assert.equal(r.error.code, "INVALID_REQUEST");
@@ -172,10 +172,10 @@ const donneesAcces = {
     etude_0001: { id: "etude_0001", num: "HAC-001", resume: "Étude Alice", client: "Client confidentiel", montant: 5000, _v: 1 },
     etude_0002: { id: "etude_0002", num: "HAC-002", resume: "Étude Bob", client: "Autre client", montant: 9000, _v: 1 },
   },
-  factures: { facture_0001: { id: "facture_0001", etudeId: "etude_0001", montant: 5000, _v: 1 } },
+  factures: { facture_0001: { id: "facture_0001", numEtude: "HAC-001", montant: 5000, _v: 1 } },
   interventions: {
-    interv_0001: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", minutesIndividuelles: 240, statut: "Pas payé", _v: 1 },
-    interv_0002: { id: "interv_0002", etudeId: "etude_0002", membreId: "membre_0002", minutesIndividuelles: 480, statut: "Payé", _v: 1 },
+    interv_0001: { id: "interv_0001", numEtude: "HAC-001", membreId: "membre_0001", minutesIndividuelles: 240, statut: "Pas payé", _v: 1 },
+    interv_0002: { id: "interv_0002", numEtude: "HAC-002", membreId: "membre_0002", minutesIndividuelles: 480, statut: "Payé", _v: 1 },
   },
   bvs: { bv_0000001: { id: "bv_0000001", reference: "BV-Alice", _v: 1 }, bv_0000002: { id: "bv_0000002", reference: "BV-Bob", _v: 1 } },
   lignesBV: {
@@ -319,7 +319,7 @@ const donneesSignalement = {
     etude_0002: { id: "etude_0002", num: "HAC-002", resume: "Autre étude", statut: "En réalisation", date: "2026-10-01", montant: 0, client: "Client B", _v: 1 },
   },
   interventions: {
-    interv_0001: { id: "interv_0001", etudeId: "etude_0001", membreId: "membre_0001", date: "2026-10-01", statut: "Pas payé", minutesIndividuelles: 120, _v: 1 },
+    interv_0001: { id: "interv_0001", numEtude: "HAC-001", membreId: "membre_0001", date: "2026-10-01", statut: "Pas payé", minutesIndividuelles: 120, _v: 1 },
   },
 };
 function serveurSignalement() {
@@ -329,10 +329,10 @@ function serveurSignalement() {
 }
 const reqSalarie = (action, extra = {}) => ({ action, apiVersion: 3, token: TOKEN_SALARIE, ...extra });
 
-test("un salarié signale uniquement une étude associée ; son identité est imposée et son signalement reste privé", async () => {
+test("un salarié signale une étude par son numéro ; son identité est imposée et son signalement reste privé", async () => {
   const s = serveurSignalement();
   const r = await body(s, reqSalarie("signalerJEH", {
-    etudeId: "etude_0001", date: "2026-10-03", duree: 240, nb: 2,
+    numEtude: "HAC-001", date: "2026-10-03", duree: 240, nb: 2,
     commentaire: "Intervention oubliée", membreId: "membre_test",
   }));
   assert.equal(r.ok, true);
@@ -342,21 +342,32 @@ test("un salarié signale uniquement une étude associée ; son identité est im
   const charge = await body(s, reqSalarie("loadAll"));
   assert.equal(Object.keys(charge.data.signalementsJEH).length, 1);
   assert.equal((await body(s, reqSalarie("signalerJEH", {
-    etudeId: "etude_0002", date: "2026-10-03", duree: 240, nb: 2,
-  }))).error.code, "FORBIDDEN");
+    numEtude: "HAC-999", date: "2026-10-03", duree: 240, nb: 2,
+  }))).error.code, "NOT_FOUND");
   assert.equal((await body(s, reqSalarie("loadAll"))).data.signalementsJEH[r.data.id].membreId, "membre_0001");
+});
+
+test("un salarié peut signaler une étude même sans intervention JEH préexistante", async () => {
+  const s = serveurSignalement();
+  const r = await body(s, reqSalarie("signalerJEH", {
+    numEtude: "HAC-002", date: "2026-10-03", duree: 90, nb: 1,
+  }));
+  assert.equal(r.ok, true);
+  assert.equal(r.data.etudeId, "etude_0002");
+  assert.equal(r.data.numEtude, "HAC-002");
+  assert.equal(r.data.minutesIndividuelles, 90);
 });
 
 test("un salarié ne peut ni traiter un signalement ni écrire une intervention", async () => {
   const s = serveurSignalement();
-  const r = await body(s, reqSalarie("signalerJEH", { etudeId: "etude_0001", date: "2026-10-03", duree: 240, nb: 2 }));
+  const r = await body(s, reqSalarie("signalerJEH", { numEtude: "HAC-001", date: "2026-10-03", duree: 240, nb: 2 }));
   assert.equal((await body(s, reqSalarie("traiterSignalementJEH", { signalementId: r.data.id, decision: "ajouter" }))).error.code, "FORBIDDEN");
   assert.equal((await body(s, reqSalarie("save", { collection: "interventions", id: "interv_0002", record: { id: "interv_0002" }, expectedVersion: 0, opId: "op_salarie_jeh_0001" }))).error.code, "FORBIDDEN");
 });
 
 test("un membre transforme le signalement en une seule ligne JEH préremplie", async () => {
   const s = serveurSignalement();
-  const r = await body(s, reqSalarie("signalerJEH", { etudeId: "etude_0001", date: "2026-10-03", duree: 240, nb: 2, commentaire: "Oubli" }));
+  const r = await body(s, reqSalarie("signalerJEH", { numEtude: "HAC-001", date: "2026-10-03", duree: 240, nb: 2, commentaire: "Oubli" }));
   const traitee = await body(s, req("traiterSignalementJEH", { signalementId: r.data.id, decision: "ajouter" }));
   assert.equal(traitee.ok, true);
   assert.equal(traitee.data.signalement.statut, "Ajoutée");
@@ -371,7 +382,7 @@ test("un membre transforme le signalement en une seule ligne JEH préremplie", a
 
 test("un membre peut refuser un signalement sans créer d'intervention", async () => {
   const s = serveurSignalement();
-  const r = await body(s, reqSalarie("signalerJEH", { etudeId: "etude_0001", date: "2026-10-03", duree: 240, nb: 2 }));
+  const r = await body(s, reqSalarie("signalerJEH", { numEtude: "HAC-001", date: "2026-10-03", duree: 240, nb: 2 }));
   const traitee = await body(s, req("traiterSignalementJEH", { signalementId: r.data.id, decision: "refuser" }));
   assert.equal(traitee.data.signalement.statut, "Refusée");
   assert.equal(traitee.data.intervention, null);
@@ -386,7 +397,7 @@ test("un signalement rejette les dates, durées et nombres de personnes invalide
     { date: "2026-10-03", duree: 240, nb: 0 },
     { date: "2026-10-03", duree: 240, nb: 1.5 },
   ]) {
-    const r = await body(s, reqSalarie("signalerJEH", { etudeId: "etude_0001", ...extra }));
+    const r = await body(s, reqSalarie("signalerJEH", { numEtude: "HAC-001", ...extra }));
     assert.equal(r.error.code, "INVALID_REQUEST");
   }
 });
