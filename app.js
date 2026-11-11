@@ -119,7 +119,7 @@ function compute(){
     e.S=ls.length?Math.max(...ls.map(t=>num(t.jeh))):null;
     const cost=ls.reduce((a,t)=>(['A venir','Non effectué'].includes(t.stat)||t.I===null)?a:a+num(t.J)*(1+chom)+t.I*baseJEH*patrTot,0);
     e.P=num(e.montant)?cost/(num(e.montant)/(1+tva)):null;
-    const cf=clientDe(e.client);if(cf){if(!e.collab)e.collab=cf.collab;if(!e.cadence)e.cadence=cf.cadence;if(!e.adresse)e.adresse=cf.adresse}
+    const cf=clientDe(e.client);if(cf){if(!e.adresse)e.adresse=cf.adresse}
     e.alerts=alertsOf(e,c,ls,nums,personEtude,fact).filter(a=>alertOn(a,c));
   });
   // Fiches clients : une par nom de client (fiche saisie ou déduite des études). Statut par rapport au mandat en cours.
@@ -150,7 +150,6 @@ const ALERTS=[
 ['refusee',/^Étude refusée/,'Étude refusée mais facturée','Refusée avec facture ou encaissement.'],
 ['solde_reste',/^Solde encaissé mais/,'Solde encaissé mais reste à encaisser','Montant ou encaissé à corriger.'],
 ['solde_af',/^Facturer le solde/,'Facturer le solde','Étude archivée, solde pas encore facturé.'],
-['periodique',/^Facture périodique/,'Facture périodique à émettre','Étude récurrente : période écoulée sans facture.'],
 ['date',/^Renseigner la date/,'Renseigner la date de création','Étude rattachée à aucun mandat.'],
 ['double',/^N° d’étude en double/,'N° d’étude en double','Deux études avec le même numéro.'],
 ['cnje_cli',/^CNJE : JEH client/,'CNJE : JEH client hors fourchette','JEH client hors min–max.'],
@@ -178,10 +177,6 @@ function alertsOf(e,c,ls,nums,pe,fact){
   if(fa==='Solde encaissé'&&st!=='Archivée'&&st!=='Refusé / sans suite'&&I>0&&e.N!=='À payer'&&L<=0)A.push('Tout est soldé : archiver l’étude');
   if(st==='Refusé / sans suite'&&e.inv.length)A.push('Étude refusée mais facturée');
   if(fa==='Solde encaissé'&&L>0)A.push('Solde encaissé mais reste à encaisser');
-  // Étude récurrente : une facture par période (Manuel trésorerie : « une facture chaque mois pour les études en cours »)
-  if(e.collab==='Récurrente'&&e.cadence&&IN_PROGRESS.includes(st)){const mois={Mensuelle:1,Trimestrielle:3,Semestrielle:6,Annuelle:12}[e.cadence];
-    const ref=e.inv.length?Math.max(...e.inv.map(f=>f.de||0)):e.d;if(mois&&ref){const r=new Date(ref*864e5);r.setUTCMonth(r.getUTCMonth()+mois);const lim=r.getTime()/864e5;
-      if(lim<=TODAY)A.push('Facture périodique à émettre ('+e.cadence.toLowerCase()+', dernière le '+fdate(ref)+')')}}
   if(e.d===null)A.push('Renseigner la date de création');
   if(e.num&&nums[e.num]>1)A.push('N° d’étude en double');
   if(e.cnje){
@@ -552,10 +547,10 @@ function cardEtude(e){
   const ini=p=>esc(iniP(p));
   const jf=num(e.J),jr=num(e.R),jeh=(jf>0||jr>0)?`<span title="JEH réalisées sur JEH facturées">${ic('clock',13)}${nf1.format(Math.round(jr*10)/10)} JEH réalisées sur ${nf1.format(Math.round(jf*10)/10)}</span>`:'';
   return `<button class="card ecard ec2" data-open="${e.id}" data-st="${cls}">
-  <div class="eh"><div class="enb"><span>N°</span><b>${esc(e.num)||'?'}</b></div><div class="et"><b>${esc(e.code||e.resume||e.client||'Sans nom')}</b>${(e.code||e.resume)&&e.client?`<span class="ecl">${esc(e.client)}</span>`:''}${e.code&&e.resume?`<span class="ecl">${esc(e.resume)}</span>`:''}</div>${pill(e.statut||'Sans statut',cls)}</div>
+  <div class="eh"><div class="enb"><span>N°</span><b>${esc(e.num)||'?'}</b></div><div class="et"><b>${esc(e.resume||e.client||'Sans nom')}</b>${e.resume&&e.client?`<span class="ecl">${esc(e.client)}</span>`:''}</div>${pill(e.statut||'Sans statut',cls)}</div>
   ${m>0?`<div class="eprog"><div class="eph"><span><b>${eur0(e.K)}</b> encaissés sur ${eur0(m)} TTC</span><b>${pct} %</b></div><div class="svt"><i style="width:${pct}%"></i></div></div>`:'<div class="small" style="margin-top:10px">Montant non renseigné</div>'}
-  <div class="etags">${e.facture?`<span class="etag">${esc(e.facture)}</span>`:''}${ech!==null?`<span class="etag${late?' late':''}">${late?'En retard · ':'Échéance '}${fdate(ech)}</span>`:''}${e.N==='À payer'?'<span class="etag bv">BV à payer</span>':''}${e.collab==='Récurrente'?`<span class="etag">Récurrente${e.cadence?' · '+esc(e.cadence.toLowerCase()):''}</span>`:''}</div>
-  <div class="emeta"><span class="ef3">${pers.length?`<span class="avs">${pers.slice(0,4).map(p=>`<i title="${esc(p)}">${ini(p)}</i>`).join('')}${pers.length>4?`<i>+${pers.length-4}</i>`:''}</span>`:''}${jeh}<span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span></span></div>
+  <div class="etags">${e.facture?`<span class="etag">${esc(e.facture)}</span>`:''}${ech!==null?`<span class="etag${late?' late':''}">${late?'En retard · ':'Échéance '}${fdate(ech)}</span>`:''}${e.N==='À payer'?'<span class="etag bv">BV à payer</span>':''}</div>
+  <div class="emeta"><span class="ef3"><span>${sd(e.d)}${e.mandat?' · '+esc(e.mandat):''}</span></span></div>
   ${n?`<div class="eal">${ic('warn',13)} ${esc(e.alerts[0])}${n>1?` <b>+${n-1}</b>`:''}</div>`:''}
   </button>`;
 }
@@ -577,9 +572,9 @@ function vReport(e,D){
   const key=nm=>'f_'+nm.toLowerCase().replace(/[^a-z0-9]+/g,'_');
   const lv=Object.keys(per).map(p=>{const d=S.formation[key(p)];const v=d&&d.niveaux&&isNum(d.niveaux[e.num])?num(d.niveaux[e.num]):null;return [p,v]}).filter(x=>x[1]!==null);
   return `<button class="back" data-closerep="1">‹ Études</button>
-  <div class="card hero"><div class="eh ehn"><div class="enb"><span>N°</span><b>${esc(e.num)||'?'}</b></div><div class="et"><b>${esc(e.code||e.resume||e.client||'Sans nom')}</b><span>${(e.code||e.resume)?esc(e.client||'Sans client'):''}${e.mandat?((e.code||e.resume)?' · ':'')+esc(e.mandat):''}</span></div><button class="pen" data-edit="etudes:${e.id}" aria-label="Modifier l’étude"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button></div>
+  <div class="card hero"><div class="eh ehn"><div class="enb"><span>N°</span><b>${esc(e.num)||'?'}</b></div><div class="et"><b>${esc(e.resume||e.client||'Sans nom')}</b><span>${e.resume?esc(e.client||'Sans client'):''}${e.mandat?(e.resume?' · ':'')+esc(e.mandat):''}</span></div><button class="pen" data-edit="etudes:${e.id}" aria-label="Modifier l’étude"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button></div>
    ${e.resume?`<div class="er">${esc(e.resume)}</div>`:''}
-   <div class="pills">${pill(e.statut||'Sans statut',stCls(e.statut))}${e.facture?pill(e.facture,'fin'):''}${e.collab==='Récurrente'?pill('Récurrente'+(e.cadence?' · '+e.cadence.toLowerCase():''),'fin'):''}</div>
+   <div class="pills">${pill(e.statut||'Sans statut',stCls(e.statut))}${e.facture?pill(e.facture,'fin'):''}</div>
    <div class="small" style="margin-top:6px">Créée le ${sd(e.d)}</div></div>
   ${n?`<div class="card alc"><h3>${ic('bell')}À traiter<span class="cnt">${n}</span></h3><ul class="al wr">${e.alerts.map(a=>`<li>${ic('warn',13)} ${esc(a)}</li>`).join('')}</ul></div>`:''}
   <div class="card"><h3>${ic('euro')}Finances</h3><div class="ftg">${ft('Montant TTC',m?eur0(m):'—')}${ft('Encaissé TTC',eur0(e.K),'acc')}${ft('Reste à encaisser',e.L===null?'—':eur0(e.L))}${ft('Prochaine échéance',ne!==null?fdate(ne):'—',ne!==null&&ne<TODAY?'late':'')}</div>
@@ -606,7 +601,7 @@ const CL_ST={'Nouveau':'s2','Fidèle':'s5','Ancien client':'arch','Sans étude':
 function cardClient(cl){
   const ini=esc(cl.nom.split(/[\s-]+/).map(x=>x[0]||'').join('').slice(0,2).toUpperCase());
   return `<button class="card ecard cc" data-openc="${esc(ncl(cl.nom))}"><div class="eh"><div class="cch"><span class="cav">${ini}</span><div class="et"><b>${esc(cl.nom)}</b><span>${cl.nb} étude${cl.nb>1?'s':''}${cl.derniere?' · dernière le '+fdate(cl.derniere):''}</span></div></div>${pill(cl.statut,CL_ST[cl.statut])}</div>
-  <div class="etags">${cl.collab==='Récurrente'?`<span class="etag">Récurrente${cl.cadence?' · '+esc(cl.cadence.toLowerCase()):''}</span>`:''}${cl.contact?`<span class="etag">${esc(cl.contact)}</span>`:''}${cl.id?'':'<span class="etag">Fiche à compléter</span>'}</div>
+  <div class="etags">${cl.ref?`<span class="etag">Réf. ${esc(cl.ref)}</span>`:''}${cl.contact?`<span class="etag">${esc(cl.contact)}</span>`:''}${cl.id?'':'<span class="etag">Fiche à compléter</span>'}</div>
   <div class="ftg cft">${[['CA signé TTC',eur0(cl.ca)],['Encaissé TTC',eur0(cl.enc)],['Reste dû',eur0(cl.reste)]].map(([l,v],i)=>`<div class="ft${i===2&&cl.reste>0?' acc':''}"><small>${l}</small><b>${v}</b></div>`).join('')}</div>
   ${cl.alertes?`<div class="eal">${ic('warn',13)} ${cl.alertes} alerte${cl.alertes>1?'s':''} sur ses études</div>`:''}</button>`;
 }
@@ -614,7 +609,7 @@ function vClient(cl,D){
   const lig=(k,v)=>v?`<div class="stat"><span>${k}</span><span>${esc(v)}</span></div>`:'';
   return `<button class="back" data-closec="1">‹ Clients</button>
   <div class="card hero"><div class="eh"><div class="et"><b>${esc(cl.nom)}</b><span>${cl.nb} étude${cl.nb>1?'s':''}</span></div><button class="pen" data-editc="${esc(ncl(cl.nom))}" aria-label="Modifier la fiche client"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button></div>
-   <div class="pills">${pill(cl.statut,CL_ST[cl.statut])}${cl.collab?pill(cl.collab+(cl.cadence?' · '+cl.cadence.toLowerCase():''),'fin'):''}</div></div>
+   <div class="pills">${pill(cl.statut,CL_ST[cl.statut])}${cl.ref?pill('Réf. '+cl.ref,'fin'):''}</div></div>
   <div class="card"><h3>${ic('users')}Coordonnées</h3>${lig('Contact',cl.contact)+lig('E-mail',cl.email)+lig('Téléphone',cl.tel)+lig('Adresse de facturation',cl.adresse)+lig('SIRET',cl.siret)||'<div class="small">Aucune coordonnée : touchez le crayon pour compléter la fiche.</div>'}${cl.notes?`<div class="er" style="margin-top:8px">${esc(cl.notes)}</div>`:''}</div>
   <div class="card"><h3>${ic('euro')}Chiffres</h3><div class="ftg"><div class="ft"><small>CA signé TTC</small><b>${eur0(cl.ca)}</b></div><div class="ft acc"><small>Encaissé TTC</small><b>${eur0(cl.enc)}</b></div><div class="ft"><small>Reste dû</small><b>${eur0(cl.reste)}</b></div><div class="ft"><small>Études</small><b>${cl.nb}</b></div></div></div>
   <h3 style="margin:16px 2px 8px">Études</h3>${cl.etudes.slice().sort((a,b)=>(b.d||0)-(a.d||0)).map(cardEtude).join('')||emptyMsg('Aucune étude.')}
@@ -629,7 +624,7 @@ function ouvrirFicheClient(cle){
 function refFacture(f,e){
   if(f.ref)return f.ref;
   // Référence au format HAC : FS-RAV-202607-02 = type - nom court de l'étude - année et mois - rang de la facture dans l'étude
-  const p={Acompte:'FA',Intermédiaire:'FI',Solde:'FS'}[f.type]||'F',cli=String((e&&(e.code||e.num))||'X').normalize('NFD').replace(/[^A-Za-z0-9+]/g,'').toUpperCase().slice(0,10)||'X';
+  const p={Acompte:'FA',Intermédiaire:'FI',Solde:'FS'}[f.type]||'F',cli=String((e&&e.num)||'X').normalize('NFD').replace(/[^A-Za-z0-9+]/g,'').toUpperCase().slice(0,10)||'X';
   const d=String(f.date||dstr(TODAY)).slice(0,7).replace('-','');
   const rang=Object.values(S.factures).filter(x=>x.etude===f.etude&&String(x.date||'')<=String(f.date||'9')).length;
   return p+'-'+cli+'-'+d+'-'+String(rang||1).padStart(2,'0');
@@ -716,6 +711,11 @@ function vFinances(D){
   ${(FSEG==='paie'?vRemun(D):FSEG==='jeh'?vTemps(D):vFactures(D)).replace(/^<h2>[^<]*<\/h2>/,'')}`;
 }
 function vFactures(D){const n=D.fact.filter(x=>x.late).length;return `<h2>Factures</h2>${searchBox('factures')}${chipsRow('factures',[['all','Toutes'],['due','À encaisser'],['late','En retard'+(n?' · '+n:'')],['paid','Payées']])}<div id="lst">${listFact(D)}</div>${fab('factures','Ajouter une facture')}`}
+// N° d'étude automatique : « réf. du client_n° » (ex. RAV_3), n = plus grand numéro déjà utilisé pour cette référence + 1.
+function numAuto(client,sauf){const cl=clientDe(client),ref=String(cl&&cl.ref||'').trim();if(!ref)return '';
+  const re=new RegExp('^'+ref.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'_(\\d+)$','i');let mx=0;
+  Object.keys(S.etudes).forEach(i=>{if(i===sauf)return;const m=re.exec(String(S.etudes[i].num||'').trim());if(m)mx=Math.max(mx,+m[1])});
+  return ref+'_'+(mx+1)}
 function selEtude(c,r,f,D){return sel(c,r,f,D.etudes.map(e=>e.num).filter(Boolean))}
 function jehCard(t,D){
   const e=D.etudes.find(x=>x.num===t.etude),st=t.statut?t.stat:'Sans statut',paye=t.stat==='Payé';
@@ -784,8 +784,8 @@ function edSummary(r,D){
 }
 function edBody(r,D){
   const c=ED.col,cf=D.c;
-  if(c==='clients')return fld('Nom du client',inT(c,r,'nom'))+fld('Contact (nom, fonction)',inT(c,r,'contact'))+`<div class="f2">${fld('E-mail',inT(c,r,'email'))}${fld('Téléphone',inT(c,r,'tel'))}</div>`+fld('Adresse de facturation',inT(c,r,'adresse'))+fld('SIRET',inT(c,r,'siret'))+`<div class="f2">${fld('Collaboration',sel(c,r,'collab',['Ponctuelle','Récurrente']))}${fld('Facturation périodique',sel(c,r,'cadence',['Mensuelle','Trimestrielle','Semestrielle','Annuelle']))}</div>`+fld('Notes',inT(c,r,'notes'))+`<div class="small" style="margin-top:6px">Collaboration, facturation périodique et adresse s’appliquent aux études de ce client qui ne les précisent pas.</div>`;
-  if(c==='etudes')return fld('Client',`<input list="cll" ${attr(c,r.id,'client')} value="${esc(r.client)}" autocomplete="off"><datalist id="cll">${D.clients.map(x=>`<option value="${esc(x.nom)}">`).join('')}</datalist>`)+fld('N° d’étude',inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut de l’étude',sel(c,r,'statut',cf.statuts))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div>`+fld('Dont frais HT (labo…, hors JEH)',inN(c,r,'frais'))+fld('Nom court de l’étude (pour les références, ex. RAV)',inT(c,r,'code',r.num||''))+fld('Adresse de facturation du client',inT(c,r,'adresse'))+`<div class="f2">${fld('Collaboration',sel(c,r,'collab',['Ponctuelle','Récurrente']))}${fld('Facturation périodique',sel(c,r,'cadence',['Mensuelle','Trimestrielle','Semestrielle','Annuelle']))}</div>`+fld('Date de création',inD(c,r,'date'));
+  if(c==='clients')return fld('Nom du client',inT(c,r,'nom'))+fld('Contact (nom, fonction)',inT(c,r,'contact'))+`<div class="f2">${fld('E-mail',inT(c,r,'email'))}${fld('Téléphone',inT(c,r,'tel'))}</div>`+fld('Adresse de facturation',inT(c,r,'adresse'))+fld('SIRET',inT(c,r,'siret'))+fld('Nom de référence (ex. RAV)',inT(c,r,'ref'))+fld('Notes',inT(c,r,'notes'))+`<div class="small" style="margin-top:6px">Le nom de référence numérote automatiquement les nouvelles études de ce client : RAV_1, RAV_2… L’adresse s’applique aux études qui n’en précisent pas.</div>`;
+  if(c==='etudes')return fld('Client',`<input list="cll" ${attr(c,r.id,'client')} value="${esc(r.client)}" autocomplete="off"><datalist id="cll">${D.clients.map(x=>`<option value="${esc(x.nom)}">`).join('')}</datalist>`)+fld('N° d’étude'+(r.num?'':' (automatique : réf. du client_n°)'),inT(c,r,'num'))+fld('Résumé',inT(c,r,'resume'))+fld('Statut de l’étude',sel(c,r,'statut',cf.statuts))+`<div class="f2">${fld('JEH client HT',inN(c,r,'jeh'))}${fld('Montant TTC',inN(c,r,'montant'))}</div>`+fld('Dont frais HT (labo…, hors JEH)',inN(c,r,'frais'))+fld('Adresse de facturation du client',inT(c,r,'adresse'))+fld('Date de création',inD(c,r,'date'));
   if(c==='factures')return fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Type',sel(c,r,'type',F_TYPES,false))}${fld('Montant TTC',inN(c,r,'montant'))}</div><div class="f2">${fld('Date d’émission',inD(c,r,'date'))}${fld('Échéance',inD(c,r,'echeance'))}</div><div class="f2">${fld('État',sel(c,r,'etat',F_ETATS,false))}${fld('Payée le',inD(c,r,'datePaiement'))}</div>`+editeurLignes(r,D)+(r.type==='Solde'?`<label class="small" style="display:flex;gap:8px;align-items:center;margin-top:6px"><input type="checkbox" data-deduire="${r.id}" ${r.deduire===false?'':'checked'}> Déduire les factures précédentes de l’étude</label>`:'')+(r.id?`<button class="b" type="button" data-pdf="${r.id}" style="margin-top:10px">Générer la facture (PDF)</button>`:'');
   return fld('Prénom',`<input list="pl" ${attr(c,r.id,'prenom')} value="${esc(r.prenom)}" autocomplete="off"><datalist id="pl">${persons(D).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`)+fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Date',inD(c,r,'date'))}${fld('Statut',sel(c,{id:r.id,statut:r.stat},'statut',r.stat==='Non effectué'?BV_STAT.concat('Non effectué'):BV_STAT,false))+(r.stat==='Non effectué'?'<div class="small" style="color:var(--warn);margin:-4px 0 8px">Statut retiré : si l’intervention n’a pas eu lieu, supprimez cette ligne.</div>':'')}</div><div class="f2">${fld('Minutes travaillées',inN(c,r,'min'))}${fld('Nb de personnes',inN(c,r,'nb'))}</div>${fld('JEH intervenant HT',inN(c,r,'jeh'))}${fld('Note',inT(c,r,'note'))}`;
 }
@@ -916,7 +916,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.c){
     const col=t.dataset.c,id=t.dataset.id,f=t.dataset.f;let v=t.value;if(t.type==='number')v=v===''?null:Number(v);
     if(col==='clients'&&f==='nom'&&S.clients[id]){const old=S.clients[id].nom;if(old&&ncl(old)!==ncl(v)&&String(v).trim())Object.keys(S.etudes).forEach(i=>{if(ncl(S.etudes[i].client)===ncl(old)){S.etudes[i].client=v;saveRow('etudes',i)}});if(OPENC===ncl(old))OPENC=ncl(v)}
-    if(S[col][id]){S[col][id][f]=v;if(col==='temps'&&f==='statut'){if(v==='Payé'&&!S[col][id].bvDate)S[col][id].bvDate=dstr(TODAY);else if(v!=='Payé')delete S[col][id].bvDate}if(col==='factures'&&f==='etat'&&v==='Payée'&&!S[col][id].datePaiement)S[col][id].datePaiement=dstr(TODAY);saveRow(col,id);if(col==='factures'&&f==='etat'&&ED)openEdit(ED.col,ED.id,ED.isNew)}
+    if(S[col][id]){S[col][id][f]=v;if(col==='etudes'&&f==='client'&&!S.etudes[id].num){const n=numAuto(v,id);if(n)S.etudes[id].num=n}if(col==='temps'&&f==='statut'){if(v==='Payé'&&!S[col][id].bvDate)S[col][id].bvDate=dstr(TODAY);else if(v!=='Payé')delete S[col][id].bvDate}if(col==='factures'&&f==='etat'&&v==='Payée'&&!S[col][id].datePaiement)S[col][id].datePaiement=dstr(TODAY);saveRow(col,id);if(col==='factures'&&f==='etat'&&ED)openEdit(ED.col,ED.id,ED.isNew)}
     render();refreshEdit();
   }else if(t.dataset.lvl!==undefined){
     const n=t.dataset.lvl,k='f_'+n.toLowerCase().replace(/[^a-z0-9]+/g,'_');
@@ -996,7 +996,7 @@ document.addEventListener('click',e=>{
     const a=b.dataset.add;
     let nid;
     if(a==='clients')nid=addRow('clients',{nom:'',contact:'',email:'',tel:'',adresse:'',notes:''});
-    if(a==='etudes')nid=addRow('etudes',{date:dstr(TODAY),client:b.dataset.cl||'',num:'',resume:'',statut:'Faisabilité',facture:'',jeh:null,montant:null,echeance:''});
+    if(a==='etudes')nid=addRow('etudes',{date:dstr(TODAY),client:b.dataset.cl||'',num:b.dataset.cl?numAuto(b.dataset.cl,null):'',resume:'',statut:'Faisabilité',facture:'',jeh:null,montant:null,echeance:''});
     const et=b.dataset.et||'';
     if(a==='factures')nid=addRow('factures',{date:dstr(TODAY),etude:et,type:'Acompte',montant:null,echeance:'',etat:'Émise',datePaiement:''});
     if(a==='temps')nid=addRow('temps',{date:dstr(TODAY),prenom:'',etude:et,note:'',min:null,nb:1,jeh:null,statut:'Pas payé'});
@@ -1122,7 +1122,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=48;
+const VERSION=50;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
