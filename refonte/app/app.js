@@ -69,7 +69,7 @@
       ).join("");
     });
     document.querySelectorAll("[data-page]").forEach(button => {
-      button.addEventListener("click", () => { current = button.dataset.page; etudeOuverte = null; render(); });
+      button.addEventListener("click", () => { current = button.dataset.page; etudeOuverte = null; clientOuvert = null; render(); });
     });
   }
 
