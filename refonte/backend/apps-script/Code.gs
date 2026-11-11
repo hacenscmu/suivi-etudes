@@ -290,6 +290,13 @@ function relation_(I, c, r) {
   if (c === 'etudes' && r.clientId && !fiche_(I, 'clients', r.clientId)) return 'Client lié introuvable';
   if (c === 'factures') {
     if (!r.etudeId || !vivante_(I, 'etudes', r.etudeId)) return 'Étude liée introuvable';
+    var factureDejaDeduite = Object.keys(I.idx).some(function(key) {
+      var e = I.idx[key];
+      return key.indexOf('factures\\u0001') === 0 && key !== 'factures\\u0001' + r.id &&
+        e.o && !e.corrompu && !e.doublon && e.o._deleted !== true &&
+        Array.isArray(e.o.facturesPrecedentesIds) && e.o.facturesPrecedentesIds.indexOf(r.id) >= 0;
+    });
+    if (factureDejaDeduite) return 'Modification refusée : cette facture est déjà déduite d’une facture ultérieure';
     if (r.modeleFacturation === 'lignes') {
       var deduction = 0;
       for (var fi = 0; fi < r.facturesPrecedentesIds.length; fi++) {
@@ -464,6 +471,15 @@ function dependance_(I, c, id) {
         e.o._deleted!==true && e.o[field]===id;
     });
     if (trouve) return 'Suppression refusée : des fiches '+collection+' référencent encore cet élément';
+  }
+  if (c === 'factures') {
+    var factureReferencee = Object.keys(I.idx).some(function(key) {
+      var e = I.idx[key];
+      return key.indexOf('factures\\u0001') === 0 && key !== 'factures\\u0001' + id &&
+        e.o && !e.corrompu && !e.doublon && e.o._deleted !== true &&
+        Array.isArray(e.o.facturesPrecedentesIds) && e.o.facturesPrecedentesIds.indexOf(id) >= 0;
+    });
+    if (factureReferencee) return 'Suppression refusée : une facture ultérieure déduit encore cette facture';
   }
   if (c === 'etudes') {
     var prefixFormation = 'formation\u0001';
