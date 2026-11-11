@@ -149,8 +149,8 @@ function creerClientApiV3({ transport, obtenirToken } = {}) {
       return (await appeler({ action: "changerMonCode" })).data;
     },
 
-    async signalerJEH({ etudeId, date, duree, nb, commentaire = "" } = {}) {
-      return (await appeler({ action: "signalerJEH", etudeId, date, duree, nb, commentaire })).data;
+    async signalerJEH({ numEtude, date, duree, nb, commentaire = "" } = {}) {
+      return (await appeler({ action: "signalerJEH", numEtude, date, duree, nb, commentaire })).data;
     },
 
     async traiterSignalementJEH({ signalementId, decision } = {}) {
