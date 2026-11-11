@@ -771,9 +771,13 @@
         el.addEventListener("input", afficherTotaux);
         el.addEventListener("change", () => {
           const index = Number(el.closest("[data-ligne]").dataset.ligne);
-          const row = lireLignes()[index];
-          if (el.dataset.field === "type") { lignes[index] = { ...row, ...(row.type === "prestation" ? { quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === form.elements.etudeId.value)?.jeh ?? "" } : { montantHt: 0 }) }; rendreLignes(); }
-          else afficherTotaux();
+          if (el.dataset.field === "type") {
+            const designation = el.closest("[data-ligne]").querySelector('[data-field="designation"]').value;
+            lignes[index] = el.value === "prestation"
+              ? { type: "prestation", designation, quantite: 1, prixUnitaireHt: data.etudes.find(e => e.id === form.elements.etudeId.value)?.jeh ?? "" }
+              : { type: "frais", designation, montantHt: 0 };
+            rendreLignes();
+          } else afficherTotaux();
         });
       });
       zone.querySelectorAll("[data-remove]").forEach(btn => btn.addEventListener("click", () => { lignes.splice(Number(btn.dataset.remove), 1); rendreLignes(); }));
