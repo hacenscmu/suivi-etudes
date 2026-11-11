@@ -194,7 +194,7 @@
     return '<div class="stats">' +
       '<div class="stat"><div class="label">JEH travaillées · étudiants</div><strong>' + (d.totalJehTravaillees ?? "—").toLocaleString?.("fr-FR") + '</strong><small>Interventions réalisées uniquement</small></div>' +
       '<div class="stat"><div class="label">Chiffre d’affaires signé HT</div><strong>' + money(d.caSigne) + '</strong><small>' + d.nombreEtudes + " études suivies</small></div>" +
-      '<div class="stat"><div class="label">Déjà encaissé HT</div><strong>' + money(d.encaisse) + '</strong><small>' + percent + " % du CA signé</small></div>' +
+      '<div class="stat"><div class="label">Déjà encaissé HT</div><strong>' + money(d.encaisse) + '</strong><small>' + percent + " % du CA signé</small></div>" +
       '<div class="stat"><div class="label">Reste à encaisser HT</div><strong>' + money(d.resteAEncaisser) + '</strong><small>' + facturesOuvertes.length + " facture(s) non payée(s)</small></div>" +
       "</div>" + heading("Activité", "JEH réellement travaillées · 6 derniers mois", '<button class="ghost action" id="dashboardLayout">Personnaliser</button>') +
       zoneGraphiques +
