@@ -77,7 +77,7 @@ const ok=(nom,condition)=>{if(!condition){console.error('✘ '+nom);process.exit
  const reports=await serveur.lireDonnees();
  const report=Object.values(reports.signalementsJEH||{})[0];
  ok('signalement JEH créé avec identité serveur et durée répartie',!!report&&report.membreId===ID&&report.etudeId==='etude_0002'&&report.numEtude==='HAC-SECRET'&&report.minutesIndividuelles===120&&report.statut==='En attente');
- ok('le salarié ne peut signaler que ses études associées',Object.keys(dernierLoad.signalementsJEH||{}).length===1);
+ ok('le signalement n’ouvre pas l’accès aux autres études',Object.keys(dernierLoad.etudes||{}).join(',')==='etude_0001'&&Object.keys(dernierLoad.signalementsJEH||{}).length===1);
  ok('aucune erreur JavaScript',erreurs.length===0);
  await browser.close();
  if(process.exitCode)process.exit(process.exitCode);
