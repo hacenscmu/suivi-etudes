@@ -126,3 +126,38 @@ test("réglages : config/main créée puis modifiée sur le serveur", async () =
   assert.equal(serveur.lireDonnees().config.main.relance1, 5);
   assert.equal(serveur.lireDonnees().config.main._v, 2);
 });
+
+
+test("suppression logique : une facture isolée est supprimée et tombstonée côté serveur", async () => {
+  const { s, serveur } = monter();
+  await s.demarrer();
+  const r = await s.supprimer("factures", "facture_0001");
+  assert.equal(r.valide, true);
+  assert.equal(r.envoi.restantes, 0);
+  assert.equal(s.lireEtat().factures.some(f => f.id === "facture_0001"), false);
+  assert.equal(serveur.lireDonnees().factures.facture_0001._deleted, true);
+});
+
+test("suppression logique : un client encore lié à une étude est refusé sans écriture", async () => {
+  const { s, serveur } = monter();
+  await s.demarrer();
+  const r = await s.supprimer("clients", "client_0001");
+  assert.equal(r.valide, false);
+  assert.equal(s.lireEtat().clients.some(c => c.id === "client_0001"), true);
+  assert.equal((await s.statut()).enAttente, 0);
+  assert.equal(serveur.lireDonnees().clients.client_0001._deleted, undefined);
+});
+
+test("suppression logique hors ligne : conservée dans la file puis appliquée au retour du réseau", async () => {
+  const m = monter();
+  await m.s.demarrer();
+  m.enLigne.v = false;
+  const r = await m.s.supprimer("factures", "facture_0001");
+  assert.equal(r.valide, true);
+  assert.equal(r.envoi.restantes, 1);
+  assert.equal(m.s.lireEtat().factures.length, 0);
+  m.enLigne.v = true;
+  const sync = await m.s.synchroniser();
+  assert.equal(sync.restantes, 0);
+  assert.equal(m.serveur.lireDonnees().factures.facture_0001._deleted, true);
+});
