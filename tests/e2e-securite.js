@@ -15,7 +15,7 @@ const etude=()=>JSON.parse(rows.find(r=>r[1]==='e1')[2]);
 (async()=>{
   ok('jeton stocké seulement en empreinte',!props.TOKENS.includes(JETON));
   ok('sans code : refusé',appel({action:'loadAll'}).error==='auth'&&appel({action:'loadAll',token:'x'.repeat(40)}).error==='auth');
-  const b=await chromium.launch();const ctx=await b.newContext();const p=await ctx.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));p.on('dialog',d=>d.accept());
+  const b=await chromium.launch();const ctx=await b.newContext();ctx.on('page',pg=>pg.on('dialog',d=>d.accept(d.type()==='prompt'?'doublon':undefined)));const p=await ctx.newPage();const errs=[];p.on('pageerror',e=>errs.push(e.message));
   let horsLigne=false;
   await ctx.route('https://script.google.com/**',async r=>{if(horsLigne)return r.abort();r.fulfill({status:200,contentType:'application/json',body:S.doPost({postData:{contents:r.request().postData()}})})});
   await p.goto('http://localhost:8766/index.html');await p.waitForTimeout(800);
@@ -99,6 +99,14 @@ await p.click('[data-mn="desact"][data-nom="Alex.M"]');await p.waitForTimeout(80
   await p3.click('[data-sig^="ok:"]');await p3.waitForTimeout(2500);
   const lignes=rows.filter(r=>r[0]==='temps').map(r=>JSON.parse(r[2])).filter(x=>x.prenom==='Zoé.B'&&x.min===120);
   ok('« Créer la ligne » : ligne JEH préremplie créée, signalement marqué ajouté',lignes.length===1&&lignes[0].note==='analyse échantillon 3'&&JSON.parse(rows.find(r=>r[0]==='signalements')[2]).statut==='ajoutee');
+  // refus du 2e signalement avec motif
+  await p3.click('#edit .mb.solid');await p3.waitForTimeout(500);await p3.click('[data-sig^="non:"]');await p3.waitForTimeout(1500);
   await p3.close();
+  // retour côté salariée : statuts visibles
+  const p4=await ctx.newPage();await p4.goto('http://localhost:8766/index.html');await p4.evaluate(c=>{localStorage.clear();localStorage.setItem('suivi.url','https://script.google.com/macros/s/TEST/exec');localStorage.setItem('suivi.token',c);localStorage.setItem('suivi.role','salarie');localStorage.setItem('suivi.membre','Zoé.B');localStorage.setItem('suivi.tab','moi')},zoe.code);
+  await p4.reload();await p4.waitForTimeout(2000);const vz=await p4.innerText('#view');
+  ok('salariée : voit « Validé » et « Refusé » avec le motif',vz.includes('Validé')&&vz.includes('Refusé')&&vz.includes('Motif du refus : doublon'));
+  if(process.argv[2])await p4.screenshot({path:process.argv[2]+'-retour.png'});
+  await p4.close();
   ok('aucune erreur JavaScript',errs.length===0||console.log(errs));
   await b.close();console.log(pass+' réussis, '+fail+' échoués');process.exitCode=fail?1:0})();

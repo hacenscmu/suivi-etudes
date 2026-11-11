@@ -775,7 +775,7 @@ function vMoi(D){
   <div class="card"><div class="ftg"><div class="ft acc"><small>À recevoir (prochain BV)</small><b>${eur(r.net)}</b></div><div class="ft"><small>Brut</small><b>${eur(r.brut)}</b></div><div class="ft"><small>JEH à payer</small><b>${f3(r.jeh)}</b></div><div class="ft"><small>Déjà reçu (brut)</small><b>${eur(r.dejaPaye)}</b></div></div>
   ${r.jeh>0&&r.jeh<1?`<div class="eal" style="margin-top:8px">${ic('warn',13)} Moins de 1 JEH : cotisations calculées sur 1 JEH</div>`:''}<div class="small" style="margin-top:8px">${f3(jt)} JEH réalisées en tout · ${nbBV} BV payé${nbBV>1?'s':''}</div></div>
   <div style="margin-top:12px"><button class="bsm" data-mn="signaler">+ Signaler une ligne JEH manquante</button></div>
-  ${Object.values(S.signalements).length?`<h3 style="margin:16px 2px 8px">Mes signalements</h3>${Object.values(S.signalements).sort((a,b)=>String(b.le).localeCompare(String(a.le))).map(g=>`<div class="card lcard sgn">${dayBox(dnum(g.date))}<div class="lm"><b>${g.etude?'Étude '+esc(g.etude):'Étude non précisée'}</b><span class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</span></div><span class="jst ${g.statut==='ajoutee'?'ok':g.statut==='refusee'?'warn':'due'}">${{ajoutee:'Ajoutée',refusee:'Refusée'}[g.statut]||'En attente'}</span></div>`).join('')}`:''}
+  ${Object.values(S.signalements).length?`<h3 style="margin:16px 2px 8px">Mes signalements</h3>${Object.values(S.signalements).sort((a,b)=>String(b.le).localeCompare(String(a.le))).map(g=>`<div class="card lcard sgn">${dayBox(dnum(g.date))}<div class="lm"><b>${g.etude?'Étude '+esc(g.etude):'Étude non précisée'}</b><span class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</span>${g.statut==='refusee'&&g.motif?`<span class="sgm">Motif du refus : ${esc(g.motif)}</span>`:''}</div><div class="sgst"><span class="jst ${g.statut==='ajoutee'?'ok':g.statut==='refusee'?'warn':'due'}">${{ajoutee:'Validé',refusee:'Refusé'}[g.statut]||'En attente'}</span>${g.traite?`<span class="small">le ${sd(dnum(String(g.traite).slice(0,10)))}</span>`:'<span class="small">envoyé le '+sd(dnum(String(g.le||'').slice(0,10)))+'</span>'}</div></div>`).join('')}`:''}
   <h3 style="margin:16px 2px 8px">Mes lignes de JEH</h3>${L.map(ligne).join('')||emptyMsg('Aucune ligne de JEH à votre nom pour le moment.')}
   ${niv.length?`<h3 style="margin:16px 2px 8px">Ma formation</h3><div class="card">${niv.map(([n,v])=>`<div class="stat"><span>Étude ${esc(n)}</span><span>Niveau ${v} · ${['Non formé','Notions','Autonome avec appui','Autonome','Référent'][v]||''}</span></div>`).join('')}</div>`:''}
   <div class="small" style="margin-top:12px">Vous voyez uniquement les données liées à votre nom. Pour une correction, contactez la trésorerie.</div>`;
@@ -852,10 +852,10 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-lact]');if
   if(a==='add'){const ins=document.querySelectorAll('#edit [data-lf="lib"]');const z=ins[ins.length-1];if(z)z.focus()}});
 document.addEventListener('input',e=>{const t=e.target;if(t.id==='q'){FLT[t.dataset.q].q=t.value;const l=$('#lst');if(l)l.innerHTML=({etudes:listEtudes,factures:listFact,temps:listTemps})[t.dataset.q](compute())}});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-sig]');if(!b)return;const [a,id]=b.dataset.sig.split(':'),g=S.signalements[id];if(!g)return;
-  if(a==='non'){if(!confirm('Refuser ce signalement ?'))return;g.statut='refusee';saveRow('signalements',id);render();return}
+  if(a==='non'){const m=prompt('Refuser ce signalement. Motif (facultatif, visible par '+g.par+') :','');if(m===null)return;g.statut='refusee';g.motif=m.trim();g.traite=new Date().toISOString();saveRow('signalements',id);render();return}
   const et=Object.values(S.etudes).find(x=>ncl(x.num)===ncl(g.etude)||ncl(x.code)===ncl(g.etude));
   const nid=addRow('temps',{date:g.date,prenom:g.par,etude:et?et.num:(g.etude||''),note:g.note||'',min:g.min,nb:g.nb||1,jeh:null,statut:'Pas payé'});
-  g.statut='ajoutee';g.ligne=nid;saveRow('signalements',id);openEdit('temps',nid,true)});
+  g.statut='ajoutee';g.ligne=nid;g.traite=new Date().toISOString();saveRow('signalements',id);openEdit('temps',nid,true)});
 document.addEventListener('click',e=>{const g=e.target.closest('[data-pdf]');if(g){e.preventDefault();genererFacture(g.dataset.pdf)}});
 document.addEventListener('click',e=>{const h=e.target.closest('[data-fsort]');if(h){FSORT=FSORT===h.dataset.fsort?null:h.dataset.fsort;render()}});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&(ED||PSEC))closeEdit()});
@@ -995,7 +995,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=20;
+const VERSION=21;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
