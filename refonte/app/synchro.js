@@ -53,6 +53,13 @@ function creerSynchro({ client, stockage, creerOpId }) {
   return Object.freeze({
     lireEtat: () => etat,
     lireConfig: () => config,
+    session: () => client.session(),
+    adminAcces: () => client.adminAcces(),
+    definirRole: options => client.definirRole(options),
+    regenererCode: options => client.regenererCode(options),
+    desactiverAcces: options => client.desactiverAcces(options),
+    reactiverAcces: options => client.reactiverAcces(options),
+    changerMonCode: () => client.changerMonCode(),
     statut: async () => ({ source, enAttente: (await file.inspecter()).length, blocage: dernierBlocage }),
 
     async demarrer() {
