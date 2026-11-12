@@ -20,6 +20,9 @@ const lsGet=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 const lsSet=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
 const sGet=k=>{try{return localStorage.getItem(k)||''}catch(e){return ''}};
 const sSet=(k,v)=>{try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}};
+// Adresse de l'appli Drive (déploiement Apps Script /exec) intégrée : un appareil neuf n'a plus que le nom et le mot de passe à saisir.
+const URL_APPLI='';
+if(URL_APPLI&&!lsGet('suivi.url')&&!lsGet('suivi.cache'))lsSet('suivi.url',URL_APPLI);
 const CONN=()=>({url:lsGet('suivi.url')||'',token:lsGet('suivi.token')||''}); // code d'accès personnel (v16)
 const UNLOCKED=()=>true; // plus de mot de passe dans l’appli
 
