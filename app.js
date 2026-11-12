@@ -337,7 +337,8 @@ const PERSO=!SALARIE&&!!lsGet('suivi.token')&&!!lsGet('suivi.membre')&&lsGet('su
 const PRENOM=(lsGet('suivi.membre')||'').split('.')[0]||'Moi';
 const TABS=SALARIE?[['moi','Moi'],['params','Paramètres']]:[['dash','Tableau de bord']].concat(PERSO?[['moi',PRENOM]]:[],[['etudes','Suivi des études'],['finances','Finances'],['formation','Qualité formation'],['params','Paramètres']]);
 // Page de connexion (plein écran) : demandée tant que l'appareil n'a pas de mot de passe valide.
-let LOGIN=!!lsGet('suivi.url')&&!lsGet('suivi.token');
+// Appareil neuf (ni adresse ni données) : la page de connexion s'affiche directement, avec le champ « adresse de l'appli Drive ».
+let LOGIN=(!!lsGet('suivi.url')&&!lsGet('suivi.token'))||(!lsGet('suivi.url')&&!lsGet('suivi.cache'));
 if(SALARIE&&!['moi','params'].includes(tab))tab='moi';
 if(PERSO&&lsGet('suivi.tab')==='moi')tab='moi';
 const ICO={
@@ -1151,7 +1152,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=51;
+const VERSION=52;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
