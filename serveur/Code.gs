@@ -12,7 +12,7 @@ const TAILLE_MAX = 100000;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sans 0/O, 1/I/L
 
 function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
-function doGet() { return out_({ ok: 'Le script fonctionne.', version: 'securise-5' }); }
+function doGet() { return out_({ ok: 'Le script fonctionne.', version: 'securise-6' }); }
 
 function sha_(s) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)
@@ -45,7 +45,7 @@ function doPost(e) {
   if (!qui) return out_({ error: 'auth' });
   var role = qui === NOM_MEMBRES ? 'membre' : role_(jetons_()[qui]);
   try {
-    if (b.action === 'ping') return out_({ ok: 1, membre: qui, role: role, admin: role === 'membre' });
+    if (b.action === 'ping') { if (typeof b.nom === 'string' && b.nom.trim() && ncl_(b.nom) !== ncl_(qui)) return out_({ error: 'auth' }); return out_({ ok: 1, membre: qui, role: role, admin: role === 'membre' }); }
     if (b.action === 'loadAll') return out_(verrou_(function () { return role === 'membre' ? loadAll_() : vueSalarie_(qui); }));
     if (b.action === 'changerMonCode') return out_(verrou_(function () { return changerMonCode_(b, qui); }));
     if (b.action === 'signaler') return out_(verrou_(function () { return signaler_(b, qui); })); // seule écriture permise à un salarié
@@ -162,8 +162,9 @@ function synchroniserNoms_() {
   noms.forEach(function (n) { var k = ncl_(n); if (k && !connus[k]) { connus[k] = 1; nouveauCode_(String(n).trim(), 'salarie'); ajout++; } });
   return ajout;
 }
-// Statuts des personnes : « salarie » (ses données seulement) ou « aucun » (plus d'accès). Les membres utilisent tous le code commun.
-// On ne supprime personne : on change le statut. (« membre » ne subsiste que pour d'anciens codes personnels.)
+// Statuts des personnes : « membre » (tous les droits), « salarie » (ses données seulement) ou « aucun » (plus d'accès).
+// Chacun a son propre mot de passe (8 caractères au départ, puis choisi par la personne). On ne supprime personne : on change le statut.
+// Le code commun des membres ne sert plus que de code de secours, lisible seulement dans l'éditeur (fonction codeMembres).
 function statutDe_(e) { return !e || e.active !== true ? 'aucun' : role_(e); }
 // Un salarié choisit lui-même son code : il n'est plus conservé en clair, les membres ne le voient plus et ne peuvent pas le changer.
 function changerMonCode_(b, qui) {
@@ -184,16 +185,16 @@ function gererMembres_(b, qui) {
     synchroniserNoms_();
     var t = jetons_(), noms = Object.keys(t).sort(function (a, c) { return a.localeCompare(c); });
     var personnes = noms.map(function (m) { var e = t[m], st = statutDe_(e); return { nom: m, statut: st, code: st !== 'aucun' ? e.code || '' : '', perso: !!e.perso && st !== 'aucun' }; });
-    return { ok: 1, codeMembres: cm.code, personnes: personnes };
+    return { ok: 1, personnes: personnes };
   }
   var t = jetons_(), nom = typeof b.nom === 'string' ? b.nom.trim() : '';
   if (!nom || nom.length > 60 || nom === NOM_MEMBRES) return { error: 'nom' };
-  if (b.action === 'creerCode') { if (t[nom] && t[nom].active) return { error: 'existe' }; return { ok: 1, nom: nom, code: nouveauCode_(nom, 'salarie') }; }
+  if (b.action === 'creerCode') { if (t[nom] && t[nom].active) return { error: 'existe' }; return { ok: 1, nom: nom, code: nouveauCode_(nom, b.statut === 'membre' ? 'membre' : 'salarie') }; }
   if (!t[nom]) return { error: 'inconnu' };
   if (nom === qui) return { error: 'soimeme' };
   var statut = b.action === 'statut' ? b.statut : b.action === 'desactiver' ? 'aucun' : b.action === 'reactiver' ? 'salarie' : null;
   if (b.action === 'reinitialiserCode') return { error: 'interdit' }; // seul le salarié change son code (depuis ses Paramètres)
-  if (['salarie', 'aucun'].indexOf(statut) < 0) return { error: 'action' };
+  if (['membre', 'salarie', 'aucun'].indexOf(statut) < 0) return { error: 'action' };
   if (statut === 'aucun') { t[nom].active = false; delete t[nom].code; t[nom].revoque = new Date().toISOString(); enregistrerJetons_(t); return { ok: 1 }; }
   if (t[nom].active === true && t[nom].code) { t[nom].role = statut; t[nom].change = new Date().toISOString(); enregistrerJetons_(t); return { ok: 1, nom: nom, code: t[nom].code }; }
   return { ok: 1, nom: nom, code: nouveauCode_(nom, statut), nouveau: 1 };

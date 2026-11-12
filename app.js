@@ -332,8 +332,14 @@ const delBtn=(c,id)=>`<button class="x" data-del="${c}:${id}" title="Supprimer l
 /* ---------- vues ---------- */
 // Rôle Salarié : uniquement « Moi » (ses JEH, sa paie, sa formation) et Réglages ; données déjà filtrées par le serveur.
 const SALARIE=lsGet('suivi.role')==='salarie'&&!!lsGet('suivi.token')&&!!lsGet('suivi.url');
-const TABS=SALARIE?[['moi','Moi'],['params','Paramètres']]:[['dash','Tableau de bord'],['etudes','Suivi des études'],['finances','Finances'],['formation','Qualité formation'],['params','Paramètres']];
+// Membre connecté avec son propre mot de passe : un onglet à son nom, juste à droite du tableau de bord.
+const PERSO=!SALARIE&&!!lsGet('suivi.token')&&!!lsGet('suivi.membre')&&lsGet('suivi.membre')!=='Membres';
+const PRENOM=(lsGet('suivi.membre')||'').split('.')[0]||'Moi';
+const TABS=SALARIE?[['moi','Moi'],['params','Paramètres']]:[['dash','Tableau de bord']].concat(PERSO?[['moi',PRENOM]]:[],[['etudes','Suivi des études'],['finances','Finances'],['formation','Qualité formation'],['params','Paramètres']]);
+// Page de connexion (plein écran) : demandée tant que l'appareil n'a pas de mot de passe valide.
+let LOGIN=!!lsGet('suivi.url')&&!lsGet('suivi.token');
 if(SALARIE&&!['moi','params'].includes(tab))tab='moi';
+if(PERSO&&lsGet('suivi.tab')==='moi')tab='moi';
 const ICO={
  trend:'<path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/>',
  sign:'<path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5"/><path d="M9 15l2 2 4-4"/>',
@@ -402,19 +408,39 @@ function quiCour(){return (lsGet('suivi.role')||'membre')+':'+(lsGet('suivi.memb
 function changerIdentite(nouv){if(!lsGet('suivi.token')||quiCour()===nouv)return true;let ob=[];try{ob=JSON.parse(lsGet('suivi.outbox')||'[]')||[]}catch(e){}
   if(ob.length&&!confirm(ob.length+' modification'+(ob.length>1?'s faites':' faite')+' avec l’accès précédent n’'+(ob.length>1?'ont':'a')+' pas encore été envoyée'+(ob.length>1?'s':'')+'. Elle'+(ob.length>1?'s seront effacées':' sera effacée')+' de cet appareil. Continuer ?'))return false;
   lsSet('suivi.outbox','[]');lsSet('suivi.cache','');lsSet('suivi.cacheQui','');return true}
+function loginPage(){const u=lsGet('suivi.url'),eye='<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/><path class="slash" d="M4 4l16 16"/></svg>';
+  return `<form class="login" id="lgf" autocomplete="on" onsubmit="return false"><img class="hac" src="logo.png" alt="HAC" style="width:96px">
+  <h2 style="text-align:center;margin:0 0 6px">Connexion</h2>
+  ${u?'':`<label for="lg_url">Adresse de l’appli Drive (fournie par la trésorerie)</label><input id="lg_url" type="url" inputmode="url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off">`}
+  <label for="lg_nom">Nom</label><input id="lg_nom" name="username" autocomplete="username" placeholder="Prénom.N" value="${esc(lsGet('suivi.membre')&&lsGet('suivi.membre')!=='Membres'?lsGet('suivi.membre'):'')}" autocapitalize="words">
+  <label for="lg_mdp">Mot de passe</label><div class="pw"><input id="lg_mdp" name="password" type="password" autocomplete="current-password"><button type="button" class="eye" data-mn="oeil" aria-label="Afficher le mot de passe">${eye}</button></div>
+  <div class="msg" id="lg_msg" hidden></div><button class="b solid" type="submit" data-mn="login">Se connecter</button>
+  <div class="small" style="text-align:center;margin-top:10px">Une seule fois par appareil. Mot de passe oublié : demandez à un membre de vous en donner un nouveau.</div></form>`}
+async function doLogin(){const m=$('#lg_msg'),say=(t,bad)=>{m.textContent=t;m.className='msg'+(bad?' err':'');m.hidden=false};
+  const u=(($('#lg_url')||{}).value||lsGet('suivi.url')||'').trim(),nom=(($('#lg_nom')||{}).value||'').trim(),mdp=(($('#lg_mdp')||{}).value||'').trim();
+  if(!/^https:\/\/script\.google\.com\//.test(u))return say('L’adresse doit commencer par https://script.google.com/…',1);
+  if(!nom)return say('Saisissez votre nom (Prénom.N).',1);if(!mdp)return say('Saisissez votre mot de passe.',1);
+  say('Connexion…');
+  try{const pg=await fetch(u,{method:'POST',body:JSON.stringify({token:mdp,nom,action:'ping'}),redirect:'follow'}).then(r=>r.json());
+    if(pg&&pg.error==='auth')return say('Nom ou mot de passe incorrect.',1);
+    if(pg&&pg.error)return say('Le serveur n’est pas à jour (Code.gs) : '+pg.error,1);
+    if(!changerIdentite((pg.role||'membre')+':'+(pg.membre||'')))return say('Connexion annulée.',1);
+    lsSet('suivi.url',u);lsSet('suivi.token',mdp);lsSet('suivi.membre',pg.membre||'');lsSet('suivi.admin',pg.admin?'1':'');lsSet('suivi.role',pg.role||'membre');lsSet('suivi.tab',pg.role==='salarie'?'moi':'dash');location.reload()}
+  catch(e){say('Connexion impossible : vérifiez l’adresse et le réseau.',1)}}
 function toastMsg(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
 // Liste des personnes et de leur statut (Membre / Salarié / Sans accès) ; compatible avec l'ancien format du serveur.
 function normMemb(r){r=r||{};const P=r.personnes||[].concat((r.salaries||[]).map(m=>({nom:m.nom,statut:m.actif?'salarie':'aucun',code:m.code||''})),(r.anciens||[]).map(m=>({nom:m.nom,statut:m.actif?'membre':'aucun',code:''})));return {codeMembres:r.codeMembres||'',personnes:P}}
 document.addEventListener('change',async e=>{const sel=e.target.closest&&e.target.closest('select[data-mstat]');if(!sel)return;const nom=sel.dataset.mstat,st=sel.value,lab={membre:'Membre (tous les droits)',salarie:'Salarié (ses données seulement)',aucun:'Sans accès'}[st];
   if(!confirm('Passer '+nom+' en « '+lab+' » ?')){drawSheet();return}
   mmsg('Un instant…');try{await api({action:'statut',nom,statut:st});MEMB=normMemb(await api({action:'membres'}));drawSheet();mmsg(nom+' : '+lab+'.')}catch(x){mmsg(String(x.message)==='action'?'Mettez à jour le Code.gs (version securise-5) pour changer les statuts.':'Impossible pour le moment ('+x.message+').',1);drawSheet()}});
-let codeDemande=false;function demanderCode(){if(codeDemande)return;codeDemande=true;try{openSheet('code')}catch(e){}}
+let codeDemande=false;function demanderCode(){if(codeDemande)return;codeDemande=true;lsSet('suivi.token','');LOGIN=true;try{sheetView=null;drawSheet()}catch(e){}render()}
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
 let HSEL='';
 function render(){
   renderNav();renderStatus();
   const v=$('#view');
   document.body.classList.remove('login');
+  if(LOGIN){document.body.classList.add('login');v.innerHTML=loginPage();return}
   const ready=Object.values(loaded).every(Boolean);
   if(!ready){v.innerHTML='<div class="card">Chargement des données…</div>';return}
   const active=document.activeElement,fk=active&&active.dataset&&active.dataset.c?active.dataset.c+'|'+active.dataset.id+'|'+active.dataset.f:null,scrollY=window.scrollY;
@@ -845,26 +871,29 @@ function paramSecs(D){
   ];
 }
 function vMoi(D){
-  canWrite=false;
-  const moi=lsGet('suivi.membre')||'',R=remun(D),r=R.rows.find(x=>ncl(x.nom)===ncl(moi))||{jeh:0,brut:0,net:0,dejaPaye:0,jehPay:0};
+  const moi=lsGet('suivi.membre')||'';
+  if(SALARIE)canWrite=false;
+  else D=Object.assign({},D,{temps:D.temps.filter(t=>ncl(t.prenom)===ncl(moi))}); // membre : seulement ses propres lignes
+  const SG=Object.values(S.signalements).filter(g=>SALARIE||ncl(g.par)===ncl(moi)),FO=Object.values(S.formation).filter(f=>SALARIE||ncl(f.nom)===ncl(moi));
+  const R=remun(D),r=R.rows.find(x=>ncl(x.nom)===ncl(moi))||{jeh:0,brut:0,net:0,dejaPaye:0,jehPay:0};
   const L=D.temps.slice().sort((a,b)=>(b.d||0)-(a.d||0)),fait=L.filter(t=>t.statut==='Payé'||t.statut==='Pas payé'),jt=fait.reduce((a,t)=>a+num(t.I),0);
   const nbBV=new Set(L.filter(t=>t.stat==='Payé').map(t=>t.bvDate||'h')).size,f3=n=>nf3.format(Math.round(n*1000)/1000);
-  const niv=[];Object.values(S.formation).forEach(f=>Object.keys(f.niveaux||{}).forEach(n=>{if(isNum(f.niveaux[n]))niv.push([n,num(f.niveaux[n])])}));
+  const niv=[];FO.forEach(f=>Object.keys(f.niveaux||{}).forEach(n=>{if(isNum(f.niveaux[n]))niv.push([n,num(f.niveaux[n])])}));
   const ligne=t=>jehCard(t,D).replace(/^<button([^>]*) data-edit="[^"]*"/,'<div$1').replace(/<\/button>$/,'</div>');
   return `<h2>Bonjour ${esc(moi.split('.')[0]||moi)}</h2>
   <div class="card"><div class="ftg"><div class="ft acc"><small>À recevoir (prochain BV)</small><b>${eur(r.net)}</b></div><div class="ft"><small>Brut</small><b>${eur(r.brut)}</b></div><div class="ft"><small>JEH à payer</small><b>${f3(r.jeh)}</b></div><div class="ft"><small>Déjà reçu (brut)</small><b>${eur(r.dejaPaye)}</b></div></div>
   ${r.jeh>0&&r.jeh<1?`<div class="eal" style="margin-top:8px">${ic('warn',13)} Moins de 1 JEH : cotisations calculées sur 1 JEH</div>`:''}<div class="small" style="margin-top:8px">${f3(jt)} JEH réalisées en tout · ${nbBV} BV payé${nbBV>1?'s':''}</div></div>
   <div style="margin-top:12px"><button class="bsm" data-mn="signaler">+ Signaler une ligne JEH manquante</button></div>
-  ${Object.values(S.signalements).length?`<h3 style="margin:16px 2px 8px">Mes signalements</h3>${Object.values(S.signalements).sort((a,b)=>String(b.le).localeCompare(String(a.le))).map(g=>`<div class="card lcard sgn">${dayBox(dnum(g.date))}<div class="lm"><b>${g.etude?'Étude '+esc(g.etude):'Étude non précisée'}</b><span class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</span>${g.statut==='refusee'&&g.motif?`<span class="sgm">Motif du refus : ${esc(g.motif)}</span>`:''}</div><div class="sgst"><span class="jst ${g.statut==='ajoutee'?'ok':g.statut==='refusee'?'warn':'due'}">${{ajoutee:'Validé',refusee:'Refusé'}[g.statut]||'En attente'}</span>${g.traite?`<span class="small">le ${sd(dnum(String(g.traite).slice(0,10)))}</span>`:'<span class="small">envoyé le '+sd(dnum(String(g.le||'').slice(0,10)))+'</span>'}</div></div>`).join('')}`:''}
+  ${SG.length?`<h3 style="margin:16px 2px 8px">Mes signalements</h3>${SG.sort((a,b)=>String(b.le).localeCompare(String(a.le))).map(g=>`<div class="card lcard sgn">${dayBox(dnum(g.date))}<div class="lm"><b>${g.etude?'Étude '+esc(g.etude):'Étude non précisée'}</b><span class="small">${hm(g.min)}${num(g.nb)>1?' à '+num(g.nb)+' personnes':''}${g.note?' · '+esc(g.note):''}</span>${g.statut==='refusee'&&g.motif?`<span class="sgm">Motif du refus : ${esc(g.motif)}</span>`:''}</div><div class="sgst"><span class="jst ${g.statut==='ajoutee'?'ok':g.statut==='refusee'?'warn':'due'}">${{ajoutee:'Validé',refusee:'Refusé'}[g.statut]||'En attente'}</span>${g.traite?`<span class="small">le ${sd(dnum(String(g.traite).slice(0,10)))}</span>`:'<span class="small">envoyé le '+sd(dnum(String(g.le||'').slice(0,10)))+'</span>'}</div></div>`).join('')}`:''}
   <h3 style="margin:16px 2px 8px">Mes lignes de JEH</h3>${L.map(ligne).join('')||emptyMsg('Aucune ligne de JEH à votre nom pour le moment.')}
   ${niv.length?`<h3 style="margin:16px 2px 8px">Ma formation</h3><div class="card">${niv.map(([n,v])=>`<div class="stat"><span>Étude ${esc(n)}</span><span>Niveau ${v} · ${['Non formé','Notions','Autonome avec appui','Autonome','Référent'][v]||''}</span></div>`).join('')}</div>`:''}
-  <div class="small" style="margin-top:12px">Vous voyez uniquement les données liées à votre nom. Pour une correction, contactez la trésorerie.</div>`;
+  <div class="small" style="margin-top:12px">${SALARIE?'Vous voyez uniquement les données liées à votre nom. Pour une correction, contactez la trésorerie.':'Vos propres lignes, telles que les voient les salariés.'}</div>`;
 }
 function vParams(D){
   const u=lsGet('suivi.url'),last=fmtLast(),nb=getBk().length;
   const row=(k,t,sub,attr)=>`<button class="srow" ${attr}><span class="sic">${pic(k)}</span><span class="stx"><b>${t}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`;
-  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${u?row('code','Code d’accès de cet appareil',lsGet('suivi.token')?(lsGet('suivi.membre')?'Connecté : '+lsGet('suivi.membre'):'Enregistré sur cet appareil'):'À saisir','data-mn="code"'):''}${u&&lsGet('suivi.token')&&lsGet('suivi.admin')==='1'?row('users','Membres et codes d’accès','Code des membres et codes des salariés','data-mn="membres"'):''}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
-  if(SALARIE)return `<h2>Paramètres</h2><div class="card slist">${row('code','Code d’accès de cet appareil','Connecté : '+(lsGet('suivi.membre')||''),'data-mn="code"')}${row('code','Changer mon code','Choisissez votre propre code (8 caractères minimum)','data-mn="moncode"')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
+  const top=`<div class="card slist">${row('sync','Synchronisation Drive',u?(last?'Dernière sauvegarde : '+last:'Activée'):'Non activée','data-mn="home"')}${u?row('code','Compte de cet appareil',lsGet('suivi.token')?'Connecté : '+(lsGet('suivi.membre')||'')+' · changer de compte':'À saisir','data-mn="code"'):''}${PERSO?row('code','Changer mon mot de passe','Choisissez votre propre mot de passe (8 caractères minimum)','data-mn="moncode"'):''}${u&&lsGet('suivi.token')&&lsGet('suivi.admin')==='1'?row('users','Membres et mots de passe','Code des membres et codes des salariés','data-mn="membres"'):''}${row('imp','Importer un fichier','Excel, CSV ou sauvegarde .json','data-mn="import"')}${row('exp','Exporter mes données','Fichier .json','data-mn="export"')}${row('rest','Restaurer une sauvegarde',nb+' sauvegarde'+(nb>1?'s':'')+' sur cet appareil','data-mn="restore"')}<div class="srow thrw"><span class="sic">${pic('thm')}</span><span class="stx"><b>Affichage</b></span></div><div class="seg" role="group" aria-label="Affichage">${[['auto','Système'],['light','Clair'],['dark','Sombre']].map(([v,l])=>`<button data-mn="theme" data-v="${v}" aria-pressed="${THEME()===v}">${l}</button>`).join('')}</div></div><div class="msg" id="mm" hidden></div>`;
+  if(SALARIE)return `<h2>Paramètres</h2><div class="card slist">${row('code','Compte de cet appareil','Connecté : '+(lsGet('suivi.membre')||'')+' · changer de compte','data-mn="code"')}${row('code','Changer mon mot de passe','Choisissez votre propre mot de passe (8 caractères minimum)','data-mn="moncode"')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
   return `<h2>Paramètres</h2>${top}<div class="sh" style="margin:16px 2px 6px">Réglages des calculs</div><div class="card slist">${paramSecs(D).map(x=>`<button class="srow" data-param="${x.k}"><span class="sic">${pic(x.k)}</span><span class="stx"><b>${x.t}</b><small>${esc(x.s)}</small></span><span class="chev">›</span></button>`).join('')}</div><div class="small" style="text-align:center;margin-top:14px">Version ${VERSION}</div>`;
 }
 let PSEC=null,DRAG=null;
@@ -1122,7 +1151,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=50;
+const VERSION=51;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
@@ -1268,25 +1297,24 @@ function sheetHTML(){
   const u=lsGet('suivi.url'),last=fmtLast(),bk=getBk();
   const back='<button class="mb ghost" data-mn="home">‹ Retour</button>';
   if(sheetView==='addr')return `<h2>Adresse du script Google</h2><div class="small" style="margin-bottom:10px">À saisir une seule fois : adresse de l’application Web de votre script (elle finit par /exec). Vos données actuelles seront envoyées dans votre Drive si celui-ci est vide.</div><input id="syu" type="url" value="${esc(u||'')}" style="width:100%;margin-bottom:8px" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="off" autocomplete="off"><input id="syt" type="password" value="${esc(lsGet('suivi.token')||'')}" style="width:100%;margin-bottom:8px" placeholder="Code d’accès personnel" autocapitalize="off" autocomplete="off"><div class="msg" id="sym" hidden></div><button class="mb solid" data-mn="syncon">Enregistrer et synchroniser</button>${u?'<button class="mb" data-mn="syncoff">Désactiver sur cet appareil</button>':''}${back}`;
-  if(sheetView==='moncode')return `<div class="shead"><h2>Changer mon code</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div><div class="small" style="margin-bottom:10px">8 caractères minimum. Une fois changé, personne d’autre ne le connaît : les membres ne le voient plus. Gardez-le bien, il vous sera demandé sur un nouvel appareil.</div>
+  if(sheetView==='moncode')return `<div class="shead"><h2>Changer mon mot de passe</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div><div class="small" style="margin-bottom:10px">8 caractères minimum. Une fois changé, personne d’autre ne le connaît. Il vous sera demandé sur un nouvel appareil.</div>
     <div class="fld"><label>Nouveau code</label><input id="mc1" type="password" autocomplete="new-password"></div><div class="fld"><label>Confirmer le nouveau code</label><input id="mc2" type="password" autocomplete="new-password"></div>
     <div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="savemoncode">Enregistrer</button><button class="mb ghost" data-mn="close">Annuler</button>`;
   if(sheetView==='code')return `<h2>Code d’accès personnel</h2><div class="small" style="margin-bottom:10px">Chaque membre a son propre code, donné par la trésorerie. Il est demandé une seule fois sur cet appareil.${lsGet('suivi.membre')?' Connecté en tant que <b>'+esc(lsGet('suivi.membre'))+'</b>.':''}</div><input id="syt2" type="password" style="width:100%;margin-bottom:8px" placeholder="Code d’accès" autocapitalize="off" autocomplete="off"><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="savecode">Valider</button>${lsGet('suivi.token')?'<button class="mb ghost" data-mn="forget">Oublier le code sur cet appareil</button>':''}${back}`;
   if(sheetView==='membres'){
     const adm=lsGet('suivi.admin')==='1',moi=lsGet('suivi.membre')||'';
     if(!adm)return `<div class="shead"><h2>Codes d’accès</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div><div class="small">Seuls les membres gèrent les codes.</div>${back}`;
-    const M=MEMB,ST={membre:'Ancien code membre',salarie:'Salarié',aucun:'Sans accès'},EX={membre:'ancien code personnel, tous les droits',salarie:'voit seulement ses données',aucun:'ne peut plus se connecter'};
-    const ligne=m=>`<div class="mbr${m.statut==='aucun'?' off':''}"><div class="mbrn"><b>${esc(m.nom)}</b><small>${EX[m.statut]}</small>${m.code?`<span class="mcode">${esc(m.code)}</span>`:m.perso?'<small>Code choisi par la personne (non visible)</small>':''}</div>
-      <div class="mbra"><select data-mstat="${esc(m.nom)}" aria-label="Statut de ${esc(m.nom)}">${(m.statut==='membre'?['membre','salarie','aucun']:['salarie','aucun']).map(k=>`<option value="${k}"${k===m.statut?' selected':''}${k==='membre'?' disabled':''}>${ST[k]}</option>`).join('')}</select>${m.code?`<button class="b ghost" data-mn="copiermcode" data-code="${esc(m.code)}">Copier</button>`:''}</div></div>`;
-    return `<div class="shead"><h2>Membres et codes d’accès</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
+    const M=MEMB,ST={membre:'Membre',salarie:'Salarié',aucun:'Sans accès'},EX={membre:'tous les droits',salarie:'voit seulement ses données',aucun:'ne peut plus se connecter'};
+    const ligne=m=>`<div class="mbr${m.statut==='aucun'?' off':''}"><div class="mbrn"><b>${esc(m.nom)}</b><small>${EX[m.statut]}</small>${m.code?`<small>Mot de passe de départ :</small><span class="mcode">${esc(m.code)}</span>`:m.perso?'<small>Mot de passe choisi par la personne (non visible)</small>':''}</div>
+      <div class="mbra"><select data-mstat="${esc(m.nom)}" aria-label="Statut de ${esc(m.nom)}">${['membre','salarie','aucun'].map(k=>`<option value="${k}"${k===m.statut?' selected':''}>${ST[k]}</option>`).join('')}</select>${m.code?`<button class="b ghost" data-mn="copiermcode" data-code="${esc(m.code)}">Copier</button>`:''}</div></div>`;
+    return `<div class="shead"><h2>Membres et mots de passe</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
     ${M===null?'<div class="small">Chargement…</div>':`
-    <div class="cmb"><small>Code des membres · tous les droits</small><div class="cmbr"><span class="codebig">${esc(M.codeMembres||'—')}</span><button class="bsm" data-mn="copiermcode" data-code="${esc(M.codeMembres||'')}">Copier</button>${navigator.share?`<button class="bsm ghost" data-mn="partagermcode" data-code="${esc(M.codeMembres||'')}">Partager</button>`:''}</div><small>Le même pour tous les membres. Il ne change pas.</small></div>
-    <div class="sh" style="margin:14px 2px 6px">Personnes</div><div class="small" style="margin-bottom:6px">Chaque nom saisi dans les JEH ou la formation est ajouté automatiquement comme <b>Salarié</b>, avec son propre code. Chacun peut ensuite choisir son propre code dans ses Paramètres. On ne supprime personne : on passe en « Sans accès ».</div>
+    <div class="sh" style="margin:14px 2px 6px">Personnes</div><div class="small" style="margin-bottom:6px">Chacun a son propre mot de passe, vous y compris. Les noms saisis dans les JEH ou la formation sont ajoutés automatiquement comme <b>Salarié</b>. Donnez le statut <b>Membre</b> aux membres de l’association. Chacun choisit ensuite son mot de passe dans ses Paramètres. On ne supprime personne : on passe en « Sans accès ».</div>
     ${M.personnes.map(ligne).join('')||'<div class="small">Personne pour le moment.</div>'}
     <div style="margin-top:10px"><button class="bsm" data-mn="nouveau">+ Ajouter une personne</button></div>`}
     <div class="msg" id="mm" hidden></div>${back}`;
   }
-  if(sheetView==='nouveau')return `<h2>Ajouter un salarié</h2><div class="small" style="margin-bottom:10px">Son nom tel qu’il est saisi dans les JEH (ex. Alex.M). Un code de 8 caractères lui sera créé. (Les noms saisis dans les JEH sont ajoutés automatiquement.)</div><input id="mnom" style="width:100%;margin-bottom:8px" placeholder="Prénom.N" autocomplete="off"><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="creer">Créer son code</button><button class="mb ghost" data-mn="membres">‹ Retour</button>`;
+  if(sheetView==='nouveau')return `<h2>Ajouter une personne</h2><div class="small" style="margin-bottom:10px">Son nom tel qu’il est saisi dans les JEH (ex. Alex.M). Un mot de passe de départ de 8 caractères lui sera créé. (Les noms saisis dans les JEH sont ajoutés automatiquement.)</div><input id="mnom" style="width:100%;margin-bottom:8px" placeholder="Prénom.N" autocomplete="off"><select id="mstat" style="width:100%;margin-bottom:8px"><option value="membre">Membre (tous les droits)</option><option value="salarie" selected>Salarié (ses données seulement)</option></select><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="creer">Créer son code</button><button class="mb ghost" data-mn="membres">‹ Retour</button>`;
   if(sheetView==='signaler')return `<h2>Signaler une ligne JEH manquante</h2><div class="small" style="margin-bottom:10px">La trésorerie la vérifiera puis l’ajoutera. Votre nom est joint automatiquement.</div>
     <div class="fld"><label>Date du travail</label><input id="sg_date" type="date" value="${dstr(TODAY)}"></div>
     <div class="fld"><label>Étude (n° ou nom)</label><input id="sg_et" list="sg_etl" autocomplete="off"><datalist id="sg_etl">${Object.values(S.etudes).map(e=>`<option value="${esc(e.num)}">${esc(e.resume||'')}</option>`).join('')}</datalist></div>
@@ -1309,6 +1337,9 @@ document.addEventListener('click',e=>{const b=e.target.closest('[data-deldev]');
 document.addEventListener('click',async e=>{
   const b=e.target.closest('[data-mn]');if(!b)return;
   const a=b.dataset.mn;
+  if(a==='oeil'){const i=$('#lg_mdp');if(i){const on=i.type==='password';i.type=on?'text':'password';b.classList.toggle('on',on);b.setAttribute('aria-label',on?'Masquer le mot de passe':'Afficher le mot de passe');i.focus()}return}
+  if(a==='login'){doLogin();return}
+  if(a==='code'){if(!confirm('Changer de compte sur cet appareil ? Vous devrez vous reconnecter.'))return;if(!changerIdentite('?'))return;lsSet('suivi.token','');sheetView=null;drawSheet();LOGIN=true;location.reload();return}
   if(a==='close'){sheetView=null;drawSheet();return}
   if(['home','addr','import','restore','code','nouveau','signaler'].includes(a)){openSheet(a);return}
   if(a==='envoyersig'){const v=id=>(($('#'+id)||{}).value||'').trim(),min=Number(v('sg_min')),nb=Number(v('sg_nb'))||1;
@@ -1323,7 +1354,7 @@ document.addEventListener('click',async e=>{
     if(a==='reinit'&&!confirm('Créer un nouveau code pour '+nom+' ? L’ancien ne marchera plus.'))return;
     mmsg('Un instant…');
     try{const act={creer:'creerCode',reinit:'reinitialiserCode',desact:'desactiver',react:'reactiver'}[a];
-      const r=await api({action:act,nom});
+      const r=await api(a==='creer'?{action:act,nom,statut:(($('#mstat')||{}).value||'salarie')}:{action:act,nom});
       if(a==='desact'){const l=await api({action:'membres'});MEMB=normMemb(l);drawSheet();return}
       const soi=false;
       if(soi)lsSet('suivi.token',r.code);
@@ -1336,9 +1367,9 @@ document.addEventListener('click',async e=>{
   if(a==='partager'){try{await navigator.share({title:'Code d’accès HAC',text:'Ton code d’accès à l’appli HAC : '+CODE.code})}catch(x){}return}
   if(a==='moncode'){openSheet('moncode');return}
   if(a==='savemoncode'){const n1=(($('#mc1')||{}).value||'').trim(),n2=(($('#mc2')||{}).value||'').trim();
-    if(n1.length<8)return mmsg('8 caractères minimum.',1);if(n1!==n2)return mmsg('Les deux codes ne sont pas identiques.',1);
-    mmsg('Un instant…');try{await api({action:'changerMonCode',nouveau:n1});lsSet('suivi.token',n1);mmsg('Code changé. Utilisez-le désormais sur vos autres appareils.')}
-    catch(x){const m=String(x.message);mmsg(m==='pris'?'Ce code n’est pas disponible, choisissez-en un autre.':m==='action'||m==='lecture'?'Fonction pas encore disponible : la trésorerie doit mettre à jour le serveur.':'Impossible pour le moment ('+m+').',1)}return}
+    if(n1.length<8)return mmsg('8 caractères minimum.',1);if(n1!==n2)return mmsg('Les deux mots de passe ne sont pas identiques.',1);
+    mmsg('Un instant…');try{await api({action:'changerMonCode',nouveau:n1});lsSet('suivi.token',n1);mmsg('Mot de passe changé. Vos autres appareils vous le redemanderont.')}
+    catch(x){const m=String(x.message);mmsg(m==='pris'?'Ce mot de passe n’est pas disponible, choisissez-en un autre.':m==='action'||m==='lecture'?'Fonction pas encore disponible : la trésorerie doit mettre à jour le serveur.':'Impossible pour le moment ('+m+').',1)}return}
   if(a==='savecode'){const tok=(($('#syt2')||{}).value||'').trim();if(!tok)return mmsg('Saisissez votre code.',1);
     if(!lsGet('suivi.url')){lsSet('suivi.token',tok);sheetView=null;drawSheet();render();return}
     mmsg('Vérification…');try{const r=await fetch(lsGet('suivi.url'),{method:'POST',body:JSON.stringify({token:tok,action:'ping'}),redirect:'follow'}).then(r=>r.json());
