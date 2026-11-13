@@ -12,7 +12,7 @@ const TAILLE_MAX = 100000;
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'; // sans 0/O, 1/I/L
 
 function out_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
-function doGet() { return out_({ ok: 'Le script fonctionne.', version: 'securise-6' }); }
+function doGet() { return out_({ ok: 'Le script fonctionne.', version: 'securise-7' }); }
 
 function sha_(s) {
   return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)
@@ -51,7 +51,7 @@ function doPost(e) {
     if (b.action === 'signaler') return out_(verrou_(function () { return signaler_(b, qui); })); // seule écriture permise à un salarié
     if (role !== 'membre') return out_({ error: 'lecture' });                      // un salarié ne modifie rien d'autre
     if (b.action === 'save' || b.action === 'delete') return out_(verrou_(function () { return ecrire_(b, qui); }));
-    if (['membres', 'creerCode', 'reinitialiserCode', 'desactiver', 'reactiver', 'statut'].indexOf(b.action) >= 0) return out_(verrou_(function () { return gererMembres_(b, qui); }));
+    if (['membres', 'creerCode', 'reinitialiserCode', 'desactiver', 'reactiver', 'statut', 'renommer', 'supprimer'].indexOf(b.action) >= 0) return out_(verrou_(function () { return gererMembres_(b, qui); }));
     return out_({ error: 'action' });
   } catch (x) {
     console.log('Erreur serveur : ' + (x && x.message));
@@ -153,13 +153,17 @@ function nouveauCode_(m, role) {
   return code;
 }
 // Ajoute automatiquement comme Salariés les noms présents dans les données sans code.
-function synchroniserNoms_() {
-  var tout = loadAll_(), t = jetons_(), connus = {}, ajout = 0;
+// Ajoute automatiquement comme Salariés les noms présents dans les données sans compte.
+// L'appli d'un membre envoie la liste des noms qu'elle connaît (rapide) ; sinon on relit les données (lent).
+// Une personne supprimée n'est jamais recréée automatiquement.
+function synchroniserNoms_(liste) {
+  var t = jetons_(), connus = {}, ajout = 0, noms = [];
   Object.keys(t).forEach(function (m) { connus[ncl_(m)] = 1; });
-  var noms = [];
-  Object.keys(tout.temps || {}).forEach(function (id) { noms.push(tout.temps[id].prenom); });
-  Object.keys(tout.formation || {}).forEach(function (id) { noms.push(tout.formation[id].nom); });
-  noms.forEach(function (n) { var k = ncl_(n); if (k && !connus[k]) { connus[k] = 1; nouveauCode_(String(n).trim(), 'salarie'); ajout++; } });
+  if (Array.isArray(liste)) noms = liste.slice(0, 1000).filter(function (n) { return typeof n === 'string' && n.trim() && n.length <= 60; });
+  else { var tout = loadAll_();
+    Object.keys(tout.temps || {}).forEach(function (id) { noms.push(tout.temps[id].prenom); });
+    Object.keys(tout.formation || {}).forEach(function (id) { noms.push(tout.formation[id].nom); }); }
+  noms.forEach(function (n) { var k = ncl_(n); if (k && k !== ncl_(NOM_MEMBRES) && !connus[k]) { connus[k] = 1; nouveauCode_(String(n).trim(), 'salarie'); ajout++; } });
   return ajout;
 }
 // Statuts des personnes : « membre » (tous les droits), « salarie » (ses données seulement) ou « aucun » (plus d'accès).
@@ -182,16 +186,25 @@ function changerMonCode_(b, qui) {
 function gererMembres_(b, qui) {
   if (b.action === 'membres') {
     var cm = codeMembres_(); if (!cm || !cm.code) { creerCodeMembres_(); cm = codeMembres_(); }
-    synchroniserNoms_();
-    var t = jetons_(), noms = Object.keys(t).sort(function (a, c) { return a.localeCompare(c); });
+    synchroniserNoms_(b.noms);
+    var t = jetons_(), noms = Object.keys(t).filter(function (m) { return !t[m].supprime; }).sort(function (a, c) { return a.localeCompare(c); });
     var personnes = noms.map(function (m) { var e = t[m], st = statutDe_(e); return { nom: m, statut: st, code: st !== 'aucun' ? e.code || '' : '', perso: !!e.perso && st !== 'aucun' }; });
     return { ok: 1, personnes: personnes };
   }
   var t = jetons_(), nom = typeof b.nom === 'string' ? b.nom.trim() : '';
   if (!nom || nom.length > 60 || nom === NOM_MEMBRES) return { error: 'nom' };
-  if (b.action === 'creerCode') { if (t[nom] && t[nom].active) return { error: 'existe' }; return { ok: 1, nom: nom, code: nouveauCode_(nom, b.statut === 'membre' ? 'membre' : 'salarie') }; }
-  if (!t[nom]) return { error: 'inconnu' };
+  if (b.action === 'creerCode') { if (t[nom] && t[nom].active && !t[nom].supprime) return { error: 'existe' }; return { ok: 1, nom: nom, code: nouveauCode_(nom, b.statut === 'membre' ? 'membre' : 'salarie') }; }
+  if (!t[nom] || t[nom].supprime) return { error: 'inconnu' };
   if (nom === qui) return { error: 'soimeme' };
+  if (b.action === 'supprimer') { t[nom] = { supprime: true, active: false, h: '', revoque: new Date().toISOString() }; enregistrerJetons_(t); return { ok: 1 }; }
+  if (b.action === 'renommer') {
+    var nv = typeof b.nouveau === 'string' ? b.nouveau.trim() : '';
+    if (!nv || nv.length > 60 || ncl_(nv) === ncl_(NOM_MEMBRES)) return { error: 'nom' };
+    var deja = Object.keys(t).filter(function (m) { return m !== nom && ncl_(m) === ncl_(nv) && !t[m].supprime; });
+    if (deja.length) return { error: 'existe' };
+    Object.keys(t).forEach(function (m) { if (m !== nom && ncl_(m) === ncl_(nv)) delete t[m]; }); // ancienne fiche supprimée du même nom
+    t[nv] = t[nom]; t[nom] = { supprime: true, active: false, h: '', revoque: new Date().toISOString() }; enregistrerJetons_(t); return { ok: 1, nom: nv };
+  }
   var statut = b.action === 'statut' ? b.statut : b.action === 'desactiver' ? 'aucun' : b.action === 'reactiver' ? 'salarie' : null;
   if (b.action === 'reinitialiserCode') return { error: 'interdit' }; // seul le salarié change son code (depuis ses Paramètres)
   if (['membre', 'salarie', 'aucun'].indexOf(statut) < 0) return { error: 'action' };
