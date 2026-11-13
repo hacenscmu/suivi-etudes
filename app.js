@@ -430,10 +430,17 @@ async function doLogin(){const m=$('#lg_msg'),say=(t,bad)=>{m.textContent=t;m.cl
   catch(e){say('Connexion impossible : vérifiez l’adresse et le réseau.',1)}}
 function toastMsg(t){const d=document.createElement('div');d.className='toast';d.textContent=t;document.body.appendChild(d);setTimeout(()=>d.remove(),3500)}
 // Liste des personnes et de leur statut (Membre / Salarié / Sans accès) ; compatible avec l'ancien format du serveur.
+let MEMB_DER=null,PERS=null;
+function nomsConnus(){const n=new Set();Object.values(S.temps).forEach(t=>{if(t.prenom)n.add(String(t.prenom).trim())});Object.values(S.formation).forEach(f=>{if(f.nom)n.add(String(f.nom).trim())});return [...n]}
+async function rafraichirMemb(){try{const r=await api({action:'membres',noms:nomsConnus()});MEMB=MEMB_DER=normMemb(r)}catch(x){if(!MEMB)MEMB={codeMembres:'',personnes:[]};mmsg(String(x.message)==='admin'?'Réservé aux administrateurs.':'Liste indisponible (réseau ?).',1)}if(sheetView==='membres')drawSheet()}
+// Renommer une personne : ses lignes de JEH, sa formation et ses signalements suivent le nouveau nom.
+function renommerDonnees(a,b){const k=ncl(a);Object.keys(S.temps).forEach(i=>{if(ncl(S.temps[i].prenom)===k){S.temps[i].prenom=b;saveRow('temps',i)}});
+  Object.keys(S.formation).forEach(i=>{if(ncl(S.formation[i].nom)===k){S.formation[i].nom=b;saveRow('formation',i)}});
+  Object.keys(S.signalements).forEach(i=>{if(ncl(S.signalements[i].par)===k){S.signalements[i].par=b;saveRow('signalements',i)}});render()}
 function normMemb(r){r=r||{};const P=r.personnes||[].concat((r.salaries||[]).map(m=>({nom:m.nom,statut:m.actif?'salarie':'aucun',code:m.code||''})),(r.anciens||[]).map(m=>({nom:m.nom,statut:m.actif?'membre':'aucun',code:''})));return {codeMembres:r.codeMembres||'',personnes:P}}
 document.addEventListener('change',async e=>{const sel=e.target.closest&&e.target.closest('select[data-mstat]');if(!sel)return;const nom=sel.dataset.mstat,st=sel.value,lab={membre:'Membre (tous les droits)',salarie:'Salarié (ses données seulement)',aucun:'Sans accès'}[st];
   if(!confirm('Passer '+nom+' en « '+lab+' » ?')){drawSheet();return}
-  mmsg('Un instant…');try{await api({action:'statut',nom,statut:st});MEMB=normMemb(await api({action:'membres'}));drawSheet();mmsg(nom+' : '+lab+'.')}catch(x){mmsg(String(x.message)==='action'?'Mettez à jour le Code.gs (version securise-5) pour changer les statuts.':'Impossible pour le moment ('+x.message+').',1);drawSheet()}});
+  mmsg('Un instant…');try{await api({action:'statut',nom,statut:st});await rafraichirMemb();mmsg(nom+' : '+lab+'.')}catch(x){mmsg(String(x.message)==='action'?'Mettez à jour le Code.gs (version securise-5) pour changer les statuts.':'Impossible pour le moment ('+x.message+').',1);drawSheet()}});
 let codeDemande=false;function demanderCode(){if(codeDemande)return;codeDemande=true;lsSet('suivi.token','');LOGIN=true;try{sheetView=null;drawSheet()}catch(e){}render()}
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
 let HSEL='';
@@ -1152,7 +1159,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=54;
+const VERSION=55;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
@@ -1307,7 +1314,7 @@ function sheetHTML(){
     if(!adm)return `<div class="shead"><h2>Codes d’accès</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div><div class="small">Seuls les membres gèrent les codes.</div>${back}`;
     const M=MEMB,ST={membre:'Membre',salarie:'Salarié',aucun:'Sans accès'},EX={membre:'tous les droits',salarie:'voit seulement ses données',aucun:'ne peut plus se connecter'};
     const ligne=m=>`<div class="mbr${m.statut==='aucun'?' off':''}"><div class="mbrn"><b>${esc(m.nom)}</b><small>${EX[m.statut]}</small>${m.code?`<small>Mot de passe de départ :</small><span class="mcode">${esc(m.code)}</span>`:m.perso?'<small>Mot de passe choisi par la personne (non visible)</small>':''}</div>
-      <div class="mbra"><select data-mstat="${esc(m.nom)}" aria-label="Statut de ${esc(m.nom)}">${['membre','salarie','aucun'].map(k=>`<option value="${k}"${k===m.statut?' selected':''}>${ST[k]}</option>`).join('')}</select>${m.code?`<button class="b ghost" data-mn="copiermcode" data-code="${esc(m.code)}">Copier</button>`:''}</div></div>`;
+      <div class="mbra"><button class="b ghost" data-mn="pers" data-nom="${esc(m.nom)}" data-st="${m.statut}">Modifier</button><select data-mstat="${esc(m.nom)}" aria-label="Statut de ${esc(m.nom)}">${['membre','salarie','aucun'].map(k=>`<option value="${k}"${k===m.statut?' selected':''}>${ST[k]}</option>`).join('')}</select>${m.code?`<button class="b ghost" data-mn="copiermcode" data-code="${esc(m.code)}">Copier</button>`:''}</div></div>`;
     return `<div class="shead"><h2>Membres et mots de passe</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
     ${M===null?'<div class="small">Chargement…</div>':`
     <div class="sh" style="margin:14px 2px 6px">Personnes</div><div class="small" style="margin-bottom:6px">Chacun a son propre mot de passe, vous y compris. Les noms saisis dans les JEH ou la formation sont ajoutés automatiquement comme <b>Salarié</b>. Donnez le statut <b>Membre</b> aux membres de l’association. Chacun choisit ensuite son mot de passe dans ses Paramètres. On ne supprime personne : on passe en « Sans accès ».</div>
@@ -1315,6 +1322,11 @@ function sheetHTML(){
     <div style="margin-top:10px"><button class="bsm" data-mn="nouveau">+ Ajouter une personne</button></div>`}
     <div class="msg" id="mm" hidden></div>${back}`;
   }
+  if(sheetView==='personne'&&PERS)return `<div class="shead"><h2>Modifier ${esc(PERS.nom)}</h2><button class="mx" data-mn="close" aria-label="Fermer">✕</button></div>
+    <div class="fld"><label>Nom (tel qu’il est écrit dans les JEH)</label><input id="pnom" value="${esc(PERS.nom)}" autocomplete="off"></div>
+    <div class="fld"><label>Statut</label><select id="pstat">${[['membre','Membre (tous les droits)'],['salarie','Salarié (ses données seulement)'],['aucun','Sans accès']].map(([k,l])=>`<option value="${k}"${k===PERS.statut?' selected':''}>${l}</option>`).join('')}</select></div>
+    <div class="small" style="margin-bottom:8px">Changer le nom renomme aussi ses lignes de JEH, sa formation et ses signalements.</div>
+    <div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="savepers">Enregistrer</button><button class="mb ghost" data-mn="delpers" style="color:var(--bad)">Supprimer cette personne</button><button class="mb ghost" data-mn="membres">‹ Retour</button>`;
   if(sheetView==='nouveau')return `<h2>Ajouter une personne</h2><div class="small" style="margin-bottom:10px">Son nom tel qu’il est saisi dans les JEH (ex. Alex.M). Un mot de passe de départ de 8 caractères lui sera créé. (Les noms saisis dans les JEH sont ajoutés automatiquement.)</div><input id="mnom" style="width:100%;margin-bottom:8px" placeholder="Prénom.N" autocomplete="off"><select id="mstat" style="width:100%;margin-bottom:8px"><option value="membre">Membre (tous les droits)</option><option value="salarie" selected>Salarié (ses données seulement)</option></select><div class="msg" id="mm" hidden></div><button class="mb solid" data-mn="creer">Créer son code</button><button class="mb ghost" data-mn="membres">‹ Retour</button>`;
   if(sheetView==='signaler')return `<h2>Signaler une ligne JEH manquante</h2><div class="small" style="margin-bottom:10px">La trésorerie la vérifiera puis l’ajoutera. Votre nom est joint automatiquement.</div>
     <div class="fld"><label>Date du travail</label><input id="sg_date" type="date" value="${dstr(TODAY)}"></div>
@@ -1347,7 +1359,18 @@ document.addEventListener('click',async e=>{
     if(!v('sg_date')||!(min>0))return mmsg('Indiquez au moins la date et la durée.',1);
     mmsg('Envoi…');try{await api({action:'signaler',signalement:{date:v('sg_date'),etude:v('sg_et'),min,nb,note:v('sg_note')}});sheetView=null;drawSheet();if(db)await db.sync();render();toastMsg('Signalement envoyé à la trésorerie.')}
     catch(x){mmsg(String(x.message)==='incomplet'?'Indiquez la date et la durée.':'Envoi impossible : vérifiez la connexion.',1)}return}
-  if(a==='membres'){MEMB=null;openSheet('membres');if(lsGet('suivi.admin')==='1'){try{const r=await api({action:'membres'});MEMB=normMemb(r)}catch(x){MEMB={codeMembres:'',personnes:[]};mmsg(String(x.message)==='admin'?'Réservé aux administrateurs.':'Liste indisponible (réseau ?).',1)}drawSheet()}return}
+  // Liste des personnes : la dernière liste connue s'affiche tout de suite, puis elle est rafraîchie (l'appli envoie les noms qu'elle connaît, le serveur n'a plus à relire toutes les données).
+  if(a==='membres'){MEMB=MEMB_DER;openSheet('membres');if(lsGet('suivi.admin')==='1')rafraichirMemb();return}
+  if(a==='pers'){PERS={nom:b.dataset.nom,statut:b.dataset.st};openSheet('personne');return}
+  if(a==='savepers'){const nv=(($('#pnom')||{}).value||'').trim(),st=(($('#pstat')||{}).value||PERS.statut);if(!nv)return mmsg('Saisissez un nom.',1);
+    mmsg('Un instant…');try{let nom=PERS.nom;
+      if(nv!==nom){await api({action:'renommer',nom,nouveau:nv});renommerDonnees(nom,nv);nom=nv}
+      if(st!==PERS.statut)await api({action:'statut',nom,statut:st});
+      await rafraichirMemb();openSheet('membres');toastMsg('Modifications enregistrées.')}
+    catch(x){const m=String(x.message);mmsg(m==='existe'?'Ce nom existe déjà.':m==='soimeme'?'Vous ne pouvez pas modifier votre propre compte ici.':m==='action'?'Mettez à jour le Code.gs (version securise-7).':'Impossible pour le moment ('+m+').',1)}return}
+  if(a==='delpers'){if(!confirm('Supprimer '+PERS.nom+' ? Son mot de passe ne marchera plus. Ses lignes de JEH ne sont pas touchées.'))return;
+    mmsg('Un instant…');try{await api({action:'supprimer',nom:PERS.nom});await rafraichirMemb();openSheet('membres');toastMsg(PERS.nom+' supprimé(e).')}
+    catch(x){const m=String(x.message);mmsg(m==='soimeme'?'Vous ne pouvez pas vous supprimer vous-même.':m==='action'?'Mettez à jour le Code.gs (version securise-7).':'Impossible pour le moment ('+m+').',1)}return}
   if(['creer','reinit','desact','react'].includes(a)){
     const nom=a==='creer'?(($('#mnom')||{}).value||'').trim():b.dataset.nom;
     if(a==='creer'&&!nom)return mmsg('Saisissez le nom du membre.',1);
@@ -1356,10 +1379,7 @@ document.addEventListener('click',async e=>{
     mmsg('Un instant…');
     try{const act={creer:'creerCode',reinit:'reinitialiserCode',desact:'desactiver',react:'reactiver'}[a];
       const r=await api(a==='creer'?{action:act,nom,statut:(($('#mstat')||{}).value||'salarie')}:{action:act,nom});
-      if(a==='desact'){const l=await api({action:'membres'});MEMB=normMemb(l);drawSheet();return}
-      const soi=false;
-      if(soi)lsSet('suivi.token',r.code);
-      CODE={nom:r.nom||r.membre||nom,code:r.code,soi,role:r.role};openSheet('codeaffiche');
+      await rafraichirMemb();openSheet('membres');if(a==='creer')toastMsg(nom+' ajouté(e) : son mot de passe de départ est dans la liste.');
     }catch(x){const m=String(x.message);mmsg(m==='existe'?'Ce membre a déjà un code actif : utilisez « Nouveau code ».':m==='admin'?'Réservé aux administrateurs.':m==='soimeme'?'Vous ne pouvez pas vous désactiver vous-même.':'Action impossible pour le moment (réseau ?).',1)}
     return}
   if(a==='partagermcode'){try{await navigator.share({title:'Code d’accès HAC',text:'Code d’accès à l’appli HAC : '+b.dataset.code})}catch(x){}return}
