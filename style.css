@@ -567,3 +567,7 @@ button.b.ghost:disabled{opacity:.4}
 .enb span{display:block;font-size:10.5px;color:var(--mute);margin-bottom:2px}.enb b{display:block;font-size:24px;font-weight:800;color:var(--ink);letter-spacing:-.5px}
 .ec2 .eh{align-items:center}.ec2 .et{flex:1;min-width:0}.ec2 .et .ecl{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ehn{align-items:center}.ehn .et{flex:1;min-width:0}
+/* v53 : fenêtres ouvertes depuis Paramètres sur toute la largeur de l'écran */
+#sheet{padding:0;align-items:flex-end}
+#sheet .sc{max-width:1180px;border-radius:26px 26px 0 0;max-height:92vh;max-height:92dvh;padding-bottom:calc(18px + env(safe-area-inset-bottom,0px))}
+#edit .sc.prm{max-width:1180px}
