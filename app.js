@@ -444,6 +444,7 @@ document.addEventListener('change',async e=>{const sel=e.target.closest&&e.targe
 let codeDemande=false;function demanderCode(){if(codeDemande)return;codeDemande=true;lsSet('suivi.token','');LOGIN=true;try{sheetView=null;drawSheet()}catch(e){}render()}
 function addBtn(label,act){return `<div class="plus"><button class="b" data-add="${act}">+ ${label}</button></div>`}
 let HSEL='';
+let VUE_ANIM='';
 function render(){
   renderNav();renderStatus();
   const v=$('#view');
@@ -456,6 +457,7 @@ function render(){
   const views={moi:vMoi,dash:vDash,etudes:vEtudes,finances:vFinances,factures:vFactures,temps:vTemps,remun:vRemun,formation:vFormation,params:vParams};
   const scrolls=[...document.querySelectorAll('.tw')].map(e=>e.scrollLeft);
   v.innerHTML=views[tab](D);fitCharts();
+  {const vk=tab+'|'+(lsGet('suivi.fseg')||'')+'|'+(lsGet('suivi.eseg')||'');if(vk!==VUE_ANIM){VUE_ANIM=vk;[...v.querySelectorAll(':scope>.card,:scope>h2,:scope>.dwrap .wgc,:scope>.dwrap .wfull,.ecard,.lcard')].slice(0,14).forEach((c,i)=>{c.style.animationDelay=(i*30)+'ms';c.classList.add('rise')})}}
   const hs=$('#hsel');if(hs)hs.innerHTML=tab==='finances'?HSEL:tab==='dash'?HSEL+(DEDIT?'<button class="pen on" type="button" data-dashed="1" aria-label="Terminer la disposition">Terminé</button>':'<button class="pen" type="button" data-dashed="1" aria-label="Modifier le tableau de bord"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/></svg></button>'):'';
   
   document.querySelectorAll('.tw').forEach((e,i)=>{if(scrolls[i])e.scrollLeft=scrolls[i]});
@@ -824,18 +826,22 @@ function edBody(r,D){
   return fld('Prénom',`<input list="pl" ${attr(c,r.id,'prenom')} value="${esc(r.prenom)}" autocomplete="off"><datalist id="pl">${persons(D).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`)+fld('Étude',selEtude(c,r,'etude',D))+`<div class="f2">${fld('Date',inD(c,r,'date'))}${fld('Statut',sel(c,{id:r.id,statut:r.stat},'statut',r.stat==='Non effectué'?BV_STAT.concat('Non effectué'):BV_STAT,false))+(r.stat==='Non effectué'?'<div class="small" style="color:var(--warn);margin:-4px 0 8px">Statut retiré : si l’intervention n’a pas eu lieu, supprimez cette ligne.</div>':'')}</div><div class="f2">${fld('Minutes travaillées',inN(c,r,'min'))}${fld('Nb de personnes',inN(c,r,'nb'))}</div>${fld('JEH intervenant HT',inN(c,r,'jeh'))}${fld('Note',inT(c,r,'note'))}`;
 }
 const ED_TITLE={clients:['Nouveau client','Fiche client'],etudes:['Nouvelle étude','Modifier l’étude'],factures:['Nouvelle facture','Modifier la facture'],temps:['Nouvelle ligne de temps','Modifier la ligne de temps']};
+// Animations (règles de Pauline, Notion 15/11) : entrée ease-out depuis le bas, sortie 20 % plus courte vers le bas, sans ressort.
+const ANIM_SORTIE=220;
+function animIn(el,wasHidden){clearTimeout(el._t);el.classList.remove('anim-out');if(wasHidden){el.classList.remove('anim-in');void el.offsetWidth;el.classList.add('anim-in')}}
+function animOut(el,fin){if(el.hidden){fin&&fin();return}el.classList.remove('anim-in');el.classList.add('anim-out');clearTimeout(el._t);el._t=setTimeout(()=>{el.hidden=true;el.innerHTML='';el.classList.remove('anim-out');fin&&fin()},ANIM_SORTIE)}
 function openEdit(col,id,isNew){
   ED={col,id,isNew:!!isNew};const D=compute(),r=edRow(D);if(!r){ED=null;return}
-  const el=$('#edit');
+  const el=$('#edit'),wh=el.hidden||el.classList.contains('anim-out');
   el.innerHTML=`<div class="sbg" data-ed="close"></div><div class="sc"><div class="grip"></div><div class="shead"><h2>${ED_TITLE[col][isNew?0:1]}</h2><button class="mx" type="button" data-ed="close" aria-label="Fermer">✕</button></div>${edBody(r,D)}<div class="msg" id="edsum">${edSummary(r,D)}</div><button class="mb solid" type="button" data-ed="close">Terminé</button><button class="mb ghost" type="button" data-eddel="1" style="color:var(--bad)">Supprimer</button></div>`;
-  el.hidden=false;
+  el.hidden=false;animIn(el,wh);
 }
 function refreshEdit(){if(!ED)return;const D=compute(),r=edRow(D),s=$('#edsum');if(r&&s)s.innerHTML=edSummary(r,D)}
 function closeEdit(){
-  if(PSEC){PSEC=null;const el=$('#edit');el.hidden=true;el.innerHTML='';render();return}
+  if(PSEC){PSEC=null;animOut($('#edit'));render();return}
   if(!ED)return;const {col,id,isNew}=ED,r=S[col]&&S[col][id];
   if(isNew&&r){const blank=col==='etudes'?!r.client&&!r.num&&!r.resume&&!isNum(r.montant):col==='factures'?!isNum(r.montant):!r.prenom&&!isNum(r.min);if(blank)del(col,id)}
-  const wasNewEt=isNew&&col==='etudes'&&S.etudes[id];ED=null;const el=$('#edit');el.hidden=true;el.innerHTML='';if(wasNewEt){openRep(id);return}render();
+  const wasNewEt=isNew&&col==='etudes'&&S.etudes[id];ED=null;animOut($('#edit'));if(wasNewEt){openRep(id);return}render();
 }
 function ct(label,path,val,ph){return `<div class="pr"><label>${label}</label><div class="pin"><input type="text" data-cfg="${path}" data-txt="1" value="${esc(val||'')}" placeholder="${esc(ph||'')}"></div></div>`}
 function cf(label,path,val,pct,unit){return `<div class="pr"><label>${label}</label><div class="pin"><input type="number" step="any" inputmode="decimal" data-cfg="${path}" ${pct?'data-pct="1"':''} value="${pct?Math.round(val*1e6)/1e4:esc(val)}"><span>${pct?'%':(unit||'')}</span></div></div>`}
@@ -939,9 +945,9 @@ const endDrag=()=>{if(!DRAG)return;const {k,from,to}=DRAG;DRAG=null;if(from!==to
 document.addEventListener('pointerup',endDrag);document.addEventListener('pointercancel',endDrag);
 function openParam(k){PSEC=k;ED=null;drawParam()}
 function drawParam(){
-  const x=PSEC==='dash'?dashSec():paramSecs(compute()).find(z=>z.k===PSEC);if(!x)return;const el=$('#edit'),sc=el.querySelector('.sc'),y=sc?sc.scrollTop:0;
+  const x=PSEC==='dash'?dashSec():paramSecs(compute()).find(z=>z.k===PSEC);if(!x)return;const el=$('#edit'),sc=el.querySelector('.sc'),y=sc?sc.scrollTop:0,wh=el.hidden||el.classList.contains('anim-out');
   el.innerHTML=`<div class="sbg" data-ed="close"></div><div class="sc prm"><div class="grip"></div><div class="shead"><h2>${x.t}</h2><button class="mx" type="button" data-ed="close" aria-label="Fermer">✕</button></div>${x.b()}<button class="mb solid" type="button" data-ed="close" style="margin-top:16px">Terminé</button></div>`;
-  el.hidden=false;const n=el.querySelector('.sc');if(n)n.scrollTop=y;
+  el.hidden=false;animIn(el,wh);const n=el.querySelector('.sc');if(n)n.scrollTop=y;
 }
 /* ---------- événements ---------- */
 function setPath(o,p,v){const k=p.split('.');let t=o;for(let i=0;i<k.length-1;i++){t[k[i]]=t[k[i]]||{};t=t[k[i]]}t[k[k.length-1]]=v}
@@ -1159,7 +1165,7 @@ applyTheme();
 try{matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme)}catch(e){}
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyTheme()});
 /* ---------- menu : synchro, import, export, sauvegardes ---------- */
-const VERSION=55;
+const VERSION=56;
 const stamp=()=>{try{lsSet('suivi.last',new Date().toISOString());if(window.sheetRefresh)window.sheetRefresh()}catch(e){}};
 const fmtLast=()=>{const t=lsGet('suivi.last');if(!t)return '';const d=new Date(t);if(isNaN(d))return '';return d.toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})};
 const snapData=()=>JSON.parse(JSON.stringify({etudes:S.etudes,factures:S.factures,temps:S.temps,formation:S.formation,clients:S.clients,config:S.cfg||null}));
@@ -1342,7 +1348,7 @@ function sheetHTML(){
   <div class="msg" id="mm" hidden></div>
 `;
 }
-function drawSheet(){const el=$('#sheet');if(!el)return;if(!sheetView){el.hidden=true;el.innerHTML='';return}el.hidden=false;el.innerHTML=`<div class="sbg" data-mn="close"></div><div class="sc" role="dialog" aria-modal="true">${sheetHTML()}</div>`}
+function drawSheet(){const el=$('#sheet');if(!el)return;if(!sheetView){animOut(el);return}const wh=el.hidden||el.classList.contains('anim-out');el.hidden=false;animIn(el,wh);el.innerHTML=`<div class="sbg" data-mn="close"></div><div class="sc" role="dialog" aria-modal="true">${sheetHTML()}</div>`}
 window.sheetRefresh=()=>{if(sheetView==='home')drawSheet()};
 function openSheet(v){sheetView=v;imp=null;drawSheet()}
 const mmsg=(t,bad)=>{const m=$('#mm');if(m){m.textContent=t;m.className='msg'+(bad?' err':'');m.hidden=false}};
